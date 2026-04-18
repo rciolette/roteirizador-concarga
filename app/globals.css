@@ -1,0 +1,32 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+
+:root {
+  --font-sans: 'DM Sans', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  background: #F8F8F6;
+  color: #2C2C2A;
+  height: 100%;
+  overflow: hidden;
+}
+
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #D3D1C7; border-radius: 2px; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes pulse-subtle { 0%,100% { opacity:1; } 50% { opacity:0.6; } }
+
+.animate-spin-slow { animation: spin 1s linear infinite; }
+.animate-fade-in { animation: fadeIn 0.2s ease; }
+.animate-pulse-subtle { animation: pulse-subtle 1.5s ease-in-out infinite; }
