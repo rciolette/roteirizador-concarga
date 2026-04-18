@@ -100,3 +100,81 @@ function DetalheModal({ rota, onClose }: { rota: Rota; onClose: () => void }) {
     </div>
   )
 }
+
+export default function HistoricoPage() {
+  const [diaIdx, setDiaIdx] = useState(0)
+  const [rotaSelecionada, setRotaSelecionada] = useState<Rota | null>(null)
+
+  const dia = HISTORICO_DIAS[diaIdx]
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#F8F8F6' }}>
+      <Topbar title="Histórico" sub="Rotas finalizadas por dia" />
+
+      <div style={{ display: 'flex', gap: 8, padding: '12px 20px 0', overflowX: 'auto' }}>
+        {HISTORICO_DIAS.map((d, i) => (
+          <button
+            key={d.data}
+            onClick={() => setDiaIdx(i)}
+            style={{
+              flexShrink: 0, padding: '6px 14px', borderRadius: 8, fontSize: 12, fontWeight: 500, cursor: 'pointer',
+              border: '0.5px solid',
+              borderColor: i === diaIdx ? '#2C2C2A' : 'rgba(44,44,42,0.15)',
+              background: i === diaIdx ? '#2C2C2A' : '#fff',
+              color: i === diaIdx ? '#fff' : '#2C2C2A',
+            }}
+          >
+            {d.label}
+          </button>
+        ))}
+      </div>
+
+      <div style={{ display: 'flex', gap: 12, padding: '12px 20px' }}>
+        {[
+          { label: 'Rotas', value: dia.rotas },
+          { label: 'NFs', value: dia.nfs },
+          { label: 'Peso', value: formatPeso(dia.peso) },
+        ].map(m => (
+          <Card key={m.label} style={{ flex: 1, padding: '10px 14px' }}>
+            <div style={{ fontSize: 11, color: '#888780' }}>{m.label}</div>
+            <div style={{ fontSize: 20, fontWeight: 600, marginTop: 2 }}>{m.value}</div>
+          </Card>
+        ))}
+      </div>
+
+      <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px 20px' }}>
+        <Card>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+            <thead>
+              <tr style={{ background: '#F8F8F6' }}>
+                {['Rota', 'Motorista', 'Veículo', 'Peso', 'NFs', 'Status'].map(h => (
+                  <th key={h} style={{ textAlign: 'left', padding: '8px 12px', fontSize: 11, color: '#888780', fontWeight: 500, borderBottom: '0.5px solid rgba(44,44,42,0.1)' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {dia.items.map((rota, i) => (
+                <tr
+                  key={rota.id}
+                  onClick={() => setRotaSelecionada(rota)}
+                  style={{ background: i % 2 === 0 ? '#fff' : '#FAFAF8', cursor: 'pointer' }}
+                >
+                  <td style={{ padding: '7px 12px', borderBottom: '0.5px solid rgba(44,44,42,0.06)', fontFamily: 'var(--font-mono)', fontWeight: 500 }}>{rota.codigoRota}</td>
+                  <td style={{ padding: '7px 12px', borderBottom: '0.5px solid rgba(44,44,42,0.06)' }}>{rota.motorista?.nome ?? '—'}</td>
+                  <td style={{ padding: '7px 12px', borderBottom: '0.5px solid rgba(44,44,42,0.06)', color: '#888780' }}>{rota.veiculo?.tipo} {rota.veiculo?.placa}</td>
+                  <td style={{ padding: '7px 12px', borderBottom: '0.5px solid rgba(44,44,42,0.06)', whiteSpace: 'nowrap' }}>{formatPeso(rota.pesoTotal)}</td>
+                  <td style={{ padding: '7px 12px', borderBottom: '0.5px solid rgba(44,44,42,0.06)' }}>{rota.qtdNotas}</td>
+                  <td style={{ padding: '7px 12px', borderBottom: '0.5px solid rgba(44,44,42,0.06)' }}><StatusPill status={rota.status} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Card>
+      </div>
+
+      {rotaSelecionada && (
+        <DetalheModal rota={rotaSelecionada} onClose={() => setRotaSelecionada(null)} />
+      )}
+    </div>
+  )
+}
