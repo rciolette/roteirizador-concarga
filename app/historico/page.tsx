@@ -158,7 +158,7 @@ export default function HistoricoPage() {
         ].map(m => (
           <div key={m.label} className="flex-1 bg-white border border-[0.5px] border-[rgba(44,44,42,0.11)] rounded-lg px-3.5 py-2.5">
             <div className="text-[11px] text-muted">{m.label}</div>
-            <div className="text-xl font-semibold mt-0.5">{m.value}</div>
+            <div className="text-xl font-medium mt-0.5">{m.value}</div>
           </div>
         ))}
       </div>

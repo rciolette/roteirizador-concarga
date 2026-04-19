@@ -72,7 +72,7 @@ export default function Sidebar() {
             </svg>
           </div>
           <div>
-            <div className="text-[13px] font-semibold text-base tracking-[-0.01em]">Concarga</div>
+            <div className="text-[13px] font-medium text-base tracking-[-0.01em]">Concarga</div>
             <div className="text-[9px] text-subtle">Roteirizador v1.0</div>
           </div>
         </div>

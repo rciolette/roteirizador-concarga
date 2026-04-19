@@ -12,7 +12,7 @@ export function Topbar({ title, sub, children }: { title: string; sub?: string; 
   return (
     <div className="h-[46px] bg-white border-b border-[0.5px] border-[rgba(44,44,42,0.1)] flex items-center justify-between px-5 shrink-0 gap-3">
       <div className="min-w-0">
-        <div className="text-[13px] font-semibold tracking-[-0.01em] text-base">{title}</div>
+        <div className="text-[13px] font-medium tracking-[-0.01em] text-base">{title}</div>
         {sub && <div className="text-[10px] text-muted mt-px">{sub}</div>}
       </div>
       <div className="flex items-center gap-2 shrink-0">{children}</div>
@@ -69,7 +69,7 @@ export function Card({ children, style, className }: {
 }) {
   return (
     <div
-      className={cn('bg-white border border-[0.5px] border-[rgba(44,44,42,0.11)] rounded-lg overflow-hidden shadow-[0_1px_3px_rgba(44,44,42,0.04)]', className)}
+      className={cn('bg-white border border-[0.5px] border-[rgba(44,44,42,0.11)] rounded-lg overflow-hidden', className)}
       style={style}
     >
       {children}
@@ -93,7 +93,7 @@ export function MetricCard({ label, value, sub, valueColor }: {
     <div className="bg-cream border border-[0.5px] border-[rgba(44,44,42,0.07)] rounded-lg p-3">
       <div className="text-[10px] text-muted mb-1 uppercase tracking-[0.03em]">{label}</div>
       <div
-        className="text-[22px] font-semibold tracking-[-0.02em] text-base"
+        className="text-[22px] font-medium tracking-[-0.02em] text-base"
         style={valueColor ? { color: valueColor } : undefined}
       >
         {value}
@@ -144,7 +144,7 @@ export function WeightBar({ peso, capacidade }: { peso: number; capacidade: numb
 
   return (
     <div className="min-w-[60px]">
-      <div className={cn('text-xs font-semibold', txtColor)}>{formatPeso(peso)}</div>
+      <div className={cn('text-xs font-medium', txtColor)}>{formatPeso(peso)}</div>
       <div className="text-[10px] text-muted">{pct}% · {formatPeso(capacidade)}</div>
       <div className="h-[3px] bg-cream-hover rounded-full overflow-hidden w-14 mt-1">
         <div
@@ -167,7 +167,7 @@ export function ImportBar({ running, step, progress, result, onClose }: {
   return (
     <div className={cn(
       'animate-fade-in bg-white rounded-lg px-4 py-3 flex items-center gap-3.5',
-      'border border-[0.5px] shadow-[0_1px_3px_rgba(44,44,42,0.04)]',
+      'border border-[0.5px]',
       done ? 'border-success-border' : 'border-[#B5D4F4]',
     )}>
       {!done ? (
@@ -198,7 +198,7 @@ export function ImportBar({ running, step, progress, result, onClose }: {
             { val: result.veiculos,                lbl: 'veículos' },
           ] as const).map(m => (
             <div key={m.lbl} className="text-center">
-              <div className="text-sm font-semibold text-success">{m.val}</div>
+              <div className="text-sm font-medium text-success">{m.val}</div>
               <div className="text-[10px] text-muted">{m.lbl}</div>
             </div>
           ))}
@@ -343,7 +343,7 @@ export function ConfirmDialog({ action, onConfirm, onClose }: {
       className="fixed inset-0 bg-black/35 z-[200] flex items-center justify-center"
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div className="animate-fade-in bg-white rounded-xl border border-[0.5px] border-[rgba(44,44,42,0.15)] w-[420px] max-w-[92vw] shadow-[0_8px_32px_rgba(44,44,42,0.12)]">
+      <div className="animate-fade-in bg-white rounded-xl border border-[0.5px] border-[rgba(44,44,42,0.15)] w-[420px] max-w-[92vw]">
         <div className="px-5 pt-[18px] pb-3.5 border-b border-[0.5px] border-[rgba(44,44,42,0.08)]">
           <div className="flex items-start gap-3">
             <div className={cn('w-8 h-8 rounded-lg shrink-0 flex items-center justify-center', icon.bg)}>
@@ -356,7 +356,7 @@ export function ConfirmDialog({ action, onConfirm, onClose }: {
               </svg>
             </div>
             <div>
-              <div className="text-[13px] font-semibold">{action.title}</div>
+              <div className="text-[13px] font-medium">{action.title}</div>
               {action.description && (
                 <div className="text-[11px] text-muted mt-0.5 leading-relaxed">{action.description}</div>
               )}

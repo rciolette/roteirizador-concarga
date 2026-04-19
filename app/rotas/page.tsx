@@ -45,7 +45,7 @@ function GerarRotasDialog({ onClose, onConfirm }: { onClose: () => void; onConfi
   return (
     <div className="absolute inset-0 bg-black/35 flex items-center justify-center z-50 rounded-lg">
       <div className="animate-fade-in bg-white rounded-xl border border-[0.5px] border-[rgba(44,44,42,0.15)] p-6 w-[440px] max-w-[90vw]">
-        <div className="text-sm font-semibold mb-1">Instrução para o agente de IA</div>
+        <div className="text-sm font-medium mb-1">Instrução para o agente de IA</div>
         <div className="text-[11px] text-muted mb-4">
           Estas informações serão combinadas com as regras fixas e os dados do SIAT.
         </div>
