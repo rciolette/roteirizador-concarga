@@ -2,29 +2,35 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
+function cn(...cls: (string | false | undefined | null)[]) {
+  return cls.filter(Boolean).join(' ')
+}
+
 const navItems = [
   {
     section: 'Principal',
     items: [
-      { href: '/',          label: 'Dashboard',     badge: '3', badgeType: 'danger' as const },
-      { href: '/rotas',     label: 'Rotas do dia',  badge: '5', badgeType: 'warn'   as const },
+      { href: '/',          label: 'Dashboard',        badge: '3', badgeType: 'danger' as const },
+      { href: '/rotas',     label: 'Rotas do dia',     badge: '5', badgeType: 'warn'   as const },
       { href: '/historico', label: 'Histórico' },
-    ]
+    ],
   },
   {
     section: 'Sistema',
     items: [
-      { href: '/acoes',        label: 'Revisão de ações' },
+      { href: '/acoes',         label: 'Revisão de ações' },
       { href: '/configuracoes', label: 'Configurações' },
-    ]
-  }
+    ],
+  },
 ]
 
-const icons: Record<string, React.ReactNode> = {
+const icons: Record<string, ReactNode> = {
   '/': (
     <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-      <rect x="2" y="2" width="5" height="5" rx="1.5"/><rect x="9" y="2" width="5" height="5" rx="1.5"/>
-      <rect x="2" y="9" width="5" height="5" rx="1.5"/><rect x="9" y="9" width="5" height="5" rx="1.5"/>
+      <rect x="2" y="2" width="5" height="5" rx="1.5"/>
+      <rect x="9" y="2" width="5" height="5" rx="1.5"/>
+      <rect x="2" y="9" width="5" height="5" rx="1.5"/>
+      <rect x="9" y="9" width="5" height="5" rx="1.5"/>
     </svg>
   ),
   '/rotas': (
@@ -40,7 +46,6 @@ const icons: Record<string, React.ReactNode> = {
   '/acoes': (
     <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
       <path d="M2 4h12M4 8h8M6 12h4"/>
-      <circle cx="13" cy="8" r="2.5" fill="currentColor" stroke="none" opacity="0.3"/>
     </svg>
   ),
   '/configuracoes': (
@@ -51,45 +56,33 @@ const icons: Record<string, React.ReactNode> = {
   ),
 }
 
+type ReactNode = import('react').ReactNode
+
 export default function Sidebar() {
   const pathname = usePathname()
 
   return (
-    <aside style={{
-      width: 180,
-      flexShrink: 0,
-      background: '#fff',
-      borderRight: '0.5px solid rgba(44,44,42,0.1)',
-      display: 'flex',
-      flexDirection: 'column',
-      height: '100vh',
-    }}>
+    <aside className="w-[172px] shrink-0 bg-white border-r border-[0.5px] border-[rgba(44,44,42,0.1)] flex flex-col h-screen">
       {/* Logo */}
-      <div style={{ padding: '16px 18px 14px', borderBottom: '0.5px solid rgba(44,44,42,0.08)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{
-            width: 26, height: 26, borderRadius: 7,
-            background: '#185FA5', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
+      <div className="px-[18px] pt-4 pb-3.5 border-b border-[0.5px] border-[rgba(44,44,42,0.08)]">
+        <div className="flex items-center gap-2">
+          <div className="w-[26px] h-[26px] rounded-[7px] bg-primary flex items-center justify-center shrink-0">
             <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="#E6F1FB" strokeWidth="1.8">
               <path d="M2 8l4-5 4 5 4-5"/>
             </svg>
           </div>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: '#2C2C2A', letterSpacing: '-0.01em' }}>Concarga</div>
-            <div style={{ fontSize: 9, color: '#B4B2A9', marginTop: 0 }}>Roteirizador v1.0</div>
+            <div className="text-[13px] font-semibold text-base tracking-[-0.01em]">Concarga</div>
+            <div className="text-[9px] text-subtle">Roteirizador v1.0</div>
           </div>
         </div>
       </div>
 
       {/* Nav */}
-      <nav style={{ padding: '10px 8px', flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <nav className="px-2 py-2.5 flex-1 flex flex-col">
         {navItems.map(group => (
-          <div key={group.section} style={{ marginBottom: 4 }}>
-            <div style={{
-              fontSize: 9, color: '#C4C2B9', padding: '8px 10px 4px',
-              letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 500,
-            }}>
+          <div key={group.section} className="mb-1">
+            <div className="text-[9px] text-dim px-2.5 pt-2 pb-1 uppercase tracking-[0.06em] font-medium">
               {group.section}
             </div>
             {group.items.map(item => {
@@ -100,28 +93,25 @@ export default function Sidebar() {
                 <Link
                   key={item.href}
                   href={item.href}
-                  className="nav-link"
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 8,
-                    padding: '7px 10px',
-                    borderRadius: 8,
-                    fontSize: 12,
-                    color: active ? '#2C2C2A' : '#888780',
-                    fontWeight: active ? 500 : 400,
-                    background: active ? '#F1EFE8' : 'transparent',
-                    borderLeft: active ? '2.5px solid #185FA5' : '2.5px solid transparent',
-                  }}
+                  className={cn(
+                    'flex items-center gap-2 px-2.5 py-[7px] rounded-lg text-xs transition-colors duration-100',
+                    'border-l-[2.5px]',
+                    active
+                      ? 'bg-cream text-base font-medium border-primary'
+                      : 'text-muted font-normal border-transparent hover:bg-cream hover:text-base',
+                  )}
                 >
-                  <span style={{ color: active ? '#185FA5' : '#B4B2A9', flexShrink: 0 }}>
+                  <span className={cn('shrink-0', active ? 'text-primary' : 'text-subtle')}>
                     {icons[item.href]}
                   </span>
-                  <span style={{ flex: 1 }}>{item.label}</span>
+                  <span className="flex-1 truncate">{item.label}</span>
                   {item.badge && (
-                    <span style={{
-                      fontSize: 10, padding: '1px 6px', borderRadius: 20, fontWeight: 500,
-                      background: item.badgeType === 'danger' ? '#FCEBEB' : '#FAEEDA',
-                      color: item.badgeType === 'danger' ? '#791F1F' : '#633806',
-                    }}>
+                    <span className={cn(
+                      'text-[10px] px-1.5 py-px rounded-full font-medium shrink-0',
+                      item.badgeType === 'danger'
+                        ? 'bg-danger-bg text-danger'
+                        : 'bg-warn-bg text-warn',
+                    )}>
                       {item.badge}
                     </span>
                   )}
@@ -133,14 +123,9 @@ export default function Sidebar() {
       </nav>
 
       {/* Footer */}
-      <div style={{
-        padding: '12px 18px',
-        borderTop: '0.5px solid rgba(44,44,42,0.08)',
-      }}>
-        <div style={{ fontSize: 10, color: '#B4B2A9', marginBottom: 2 }}>Conectado a</div>
-        <div style={{ fontSize: 11, color: '#5F5E5A', fontFamily: 'var(--font-mono)', fontWeight: 500 }}>
-          siat.dyndns.info
-        </div>
+      <div className="px-[18px] py-3 border-t border-[0.5px] border-[rgba(44,44,42,0.08)]">
+        <div className="text-[10px] text-subtle mb-0.5">Conectado a</div>
+        <div className="text-[11px] text-mid font-mono font-medium">siat.dyndns.info</div>
       </div>
     </aside>
   )
