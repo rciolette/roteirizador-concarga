@@ -1,7 +1,7 @@
 'use client'
 import { useState } from 'react'
-import { Topbar, Card, Btn, StatusPill, CondDot, WeightBar, ImportBar } from '@/components/ui'
-import { MOCK_ROTAS, ROTAS_GERADAS_IA } from '@/lib/data'
+import { Topbar, Card, Btn, StatusPill, CondDot, WeightBar, ImportBar, ConfirmDialog, ConfirmAction } from '@/components/ui'
+import { MOCK_ROTAS, ROTAS_GERADAS_IA, formatPeso } from '@/lib/data'
 import { Rota, RouteStatus } from '@/types'
 import { useImport } from '@/lib/useImport'
 
@@ -92,7 +92,11 @@ function GerarRotasDialog({ onClose, onConfirm }: { onClose: () => void; onConfi
   )
 }
 
-function RouteCard({ rota, onUpdateStatus }: { rota: Rota; onUpdateStatus: (id: string, status: RouteStatus) => void }) {
+function RouteCard({ rota, onUpdateStatus, onAskConfirm }: {
+  rota: Rota
+  onUpdateStatus: (id: string, status: RouteStatus) => void
+  onAskConfirm: (action: ConfirmAction, execute: () => void) => void
+}) {
   const [expanded, setExpanded] = useState(false)
   const [copied, setCopied] = useState(false)
   const capacidade = rota.veiculo?.capacidadeKg || 1500
@@ -221,20 +225,70 @@ function RouteCard({ rota, onUpdateStatus }: { rota: Rota; onUpdateStatus: (id: 
             <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
               {rota.status === 'aguardando' && (
                 <>
-                  <Btn size="sm" variant="danger-soft" onClick={() => onUpdateStatus(rota.id, 'rascunho')}>Rejeitar</Btn>
-                  <Btn size="sm" variant="success" onClick={() => onUpdateStatus(rota.id, 'aprovada')}>Aprovar rota</Btn>
+                  <Btn size="sm" variant="danger-soft" onClick={() => onAskConfirm({
+                    title: `Rejeitar rota ${rota.codigoRota}`,
+                    description: 'A rota voltará para rascunho e deverá ser revisada antes de nova submissão.',
+                    details: [
+                      { label: 'Motorista', value: rota.motorista?.nome ?? '—' },
+                      { label: 'Veículo',   value: `${rota.veiculo?.tipo} · ${rota.veiculo?.placa}` },
+                      { label: 'Peso',      value: formatPeso(rota.pesoTotal) },
+                      { label: 'NFs',       value: `${rota.qtdNotas} notas` },
+                    ],
+                    confirmLabel: 'Rejeitar rota',
+                    confirmVariant: 'danger-soft',
+                  }, () => onUpdateStatus(rota.id, 'rascunho'))}>
+                    Rejeitar
+                  </Btn>
+                  <Btn size="sm" variant="success" onClick={() => onAskConfirm({
+                    title: `Aprovar rota ${rota.codigoRota}`,
+                    description: 'A rota será aprovada e ficará pronta para envio ao motorista.',
+                    details: [
+                      { label: 'Motorista', value: rota.motorista?.nome ?? '—' },
+                      { label: 'Veículo',   value: `${rota.veiculo?.tipo} · ${rota.veiculo?.placa}` },
+                      { label: 'Peso',      value: formatPeso(rota.pesoTotal) },
+                      { label: 'NFs',       value: `${rota.qtdNotas} notas` },
+                    ],
+                    confirmLabel: 'Aprovar rota',
+                    confirmVariant: 'success',
+                  }, () => onUpdateStatus(rota.id, 'aprovada'))}>
+                    Aprovar rota
+                  </Btn>
                 </>
               )}
               {rota.status === 'aprovada' && (
-                <Btn size="sm" variant="primary" onClick={() => onUpdateStatus(rota.id, 'enviada')}>
+                <Btn size="sm" variant="primary" onClick={() => onAskConfirm({
+                  title: 'Enviar rota ao motorista',
+                  description: `Uma mensagem será disparada para ${rota.motorista?.nome} com a sequência de entregas.`,
+                  details: [
+                    { label: 'Motorista', value: rota.motorista?.nome ?? '—' },
+                    { label: 'Telefone',  value: rota.motorista?.telefone ?? '—' },
+                    { label: 'Rota',      value: rota.codigoRota },
+                    { label: 'NFs',       value: rota.nfsConcatenadas ?? `${rota.qtdNotas} notas` },
+                  ],
+                  confirmLabel: 'Confirmar envio',
+                  confirmVariant: 'primary',
+                  warning: 'Modo simulação — nenhuma mensagem real será enviada ao motorista.',
+                }, () => onUpdateStatus(rota.id, 'enviada'))}>
                   <svg style={{ width: 11, height: 11 }} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
                     <path d="M2 8l12-6-6 12V8H2z"/>
                   </svg>
-                  Enviar ao motorista agora
+                  Enviar ao motorista
                 </Btn>
               )}
               {rota.status === 'rascunho' && (
-                <Btn size="sm" variant="warn-soft" onClick={() => onUpdateStatus(rota.id, 'aguardando')}>Submeter para aprovação</Btn>
+                <Btn size="sm" variant="warn-soft" onClick={() => onAskConfirm({
+                  title: `Submeter rota ${rota.codigoRota} para aprovação`,
+                  description: 'A rota passará para status "aguardando" e poderá ser aprovada ou rejeitada.',
+                  details: [
+                    { label: 'Motorista', value: rota.motorista?.nome ?? '—' },
+                    { label: 'Peso',      value: formatPeso(rota.pesoTotal) },
+                    { label: 'NFs',       value: `${rota.qtdNotas} notas` },
+                  ],
+                  confirmLabel: 'Submeter',
+                  confirmVariant: 'primary',
+                }, () => onUpdateStatus(rota.id, 'aguardando'))}>
+                  Submeter para aprovação
+                </Btn>
               )}
             </div>
           </div>
@@ -250,7 +304,12 @@ export default function RotasPage() {
   const [showDialog, setShowDialog] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [toast, setToast] = useState('')
+  const [pendingConfirm, setPendingConfirm] = useState<{ action: ConfirmAction; execute: () => void } | null>(null)
   const imp = useImport()
+
+  function askConfirm(action: ConfirmAction, execute: () => void) {
+    setPendingConfirm({ action, execute })
+  }
 
   const filtered = filter === 'todos' ? routes : routes.filter(r => r.status === filter)
 
@@ -364,7 +423,7 @@ export default function RotasPage() {
         )}
 
         {filtered.map(rota => (
-          <RouteCard key={rota.id} rota={rota} onUpdateStatus={updateRouteStatus} />
+          <RouteCard key={rota.id} rota={rota} onUpdateStatus={updateRouteStatus} onAskConfirm={askConfirm} />
         ))}
 
         {filtered.length === 0 && (
@@ -375,6 +434,14 @@ export default function RotasPage() {
       </div>
 
       {showDialog && <GerarRotasDialog onClose={() => setShowDialog(false)} onConfirm={handleConfirm} />}
+
+      {pendingConfirm && (
+        <ConfirmDialog
+          action={pendingConfirm.action}
+          onConfirm={pendingConfirm.execute}
+          onClose={() => setPendingConfirm(null)}
+        />
+      )}
     </div>
   )
 }

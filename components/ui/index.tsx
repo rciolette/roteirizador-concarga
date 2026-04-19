@@ -364,3 +364,134 @@ export function EmptyState({ message }: { message: string }) {
     </div>
   )
 }
+
+// ── Mock Banner ───────────────────────────────────────────────────────────────
+export function MockBanner() {
+  return (
+    <div style={{
+      background: '#FAEEDA',
+      borderBottom: '0.5px solid #FAC775',
+      padding: '6px 24px',
+      display: 'flex', alignItems: 'center', gap: 8,
+      fontSize: 11, color: '#633806', flexShrink: 0,
+    }}>
+      <span style={{
+        background: '#F6A623', color: '#fff',
+        fontSize: 9, fontWeight: 700, padding: '1px 6px',
+        borderRadius: 4, letterSpacing: '0.05em',
+      }}>SIMULAÇÃO</span>
+      <span>Modo mock ativo — nenhuma ação envia dados reais ao SIAT ou a qualquer sistema externo.</span>
+    </div>
+  )
+}
+
+// ── Confirm Dialog ────────────────────────────────────────────────────────────
+export interface ConfirmAction {
+  title: string
+  description?: string
+  details?: { label: string; value: string }[]
+  confirmLabel?: string
+  confirmVariant?: 'primary' | 'success' | 'danger-soft' | 'warn-soft'
+  warning?: string
+}
+
+export function ConfirmDialog({
+  action, onConfirm, onClose,
+}: {
+  action: ConfirmAction
+  onConfirm: () => void
+  onClose: () => void
+}) {
+  const variant = action.confirmVariant ?? 'primary'
+  const iconColor: Record<string, string> = {
+    primary: '#185FA5', success: '#3B6D11',
+    'danger-soft': '#791F1F', 'warn-soft': '#633806',
+  }
+
+  return (
+    <div
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)',
+        zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div className="animate-fade-in" style={{
+        background: '#fff', borderRadius: 12,
+        border: '0.5px solid rgba(44,44,42,0.15)',
+        width: 420, maxWidth: '92vw',
+        boxShadow: '0 8px 32px rgba(44,44,42,0.12)',
+      }}>
+        {/* Header */}
+        <div style={{ padding: '18px 20px 14px', borderBottom: '0.5px solid rgba(44,44,42,0.08)' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+            <div style={{
+              width: 32, height: 32, borderRadius: 8, flexShrink: 0,
+              background: variant === 'danger-soft' ? '#FCEBEB' : variant === 'warn-soft' ? '#FAEEDA' : '#E6F1FB',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none"
+                stroke={iconColor[variant]} strokeWidth="1.6">
+                {variant === 'danger-soft'
+                  ? <><circle cx="8" cy="8" r="6"/><path d="M8 5v3M8 10.5v.5"/></>
+                  : variant === 'success'
+                  ? <path d="M3 8l3.5 3.5L13 5"/>
+                  : <><circle cx="8" cy="8" r="6"/><path d="M8 7v3M8 5.5v.5"/></>
+                }
+              </svg>
+            </div>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>{action.title}</div>
+              {action.description && (
+                <div style={{ fontSize: 11, color: '#888780', marginTop: 3, lineHeight: 1.5 }}>
+                  {action.description}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Details */}
+        {action.details && action.details.length > 0 && (
+          <div style={{ padding: '12px 20px', borderBottom: '0.5px solid rgba(44,44,42,0.08)' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+              {action.details.map(d => (
+                <div key={d.label} style={{ display: 'flex', gap: 10, fontSize: 12 }}>
+                  <span style={{ color: '#888780', width: 120, flexShrink: 0 }}>{d.label}</span>
+                  <span style={{ fontWeight: 500, color: '#2C2C2A' }}>{d.value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Simulation warning */}
+        <div style={{
+          margin: '12px 20px',
+          background: '#FAEEDA', border: '0.5px solid #FAC775',
+          borderRadius: 8, padding: '8px 12px',
+          display: 'flex', alignItems: 'center', gap: 8,
+          fontSize: 11, color: '#633806',
+        }}>
+          <span style={{
+            background: '#F6A623', color: '#fff', fontSize: 9,
+            fontWeight: 700, padding: '1px 5px', borderRadius: 3,
+            letterSpacing: '0.05em', flexShrink: 0,
+          }}>SIM</span>
+          {action.warning ?? 'Modo simulação — nenhum dado real será alterado.'}
+        </div>
+
+        {/* Actions */}
+        <div style={{
+          padding: '12px 20px 16px',
+          display: 'flex', gap: 8, justifyContent: 'flex-end',
+        }}>
+          <Btn onClick={onClose}>Cancelar</Btn>
+          <Btn variant={variant} onClick={() => { onConfirm(); onClose() }}>
+            {action.confirmLabel ?? 'Confirmar'}
+          </Btn>
+        </div>
+      </div>
+    </div>
+  )
+}
