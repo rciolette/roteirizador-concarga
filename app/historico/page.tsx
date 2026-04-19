@@ -28,12 +28,12 @@ function DetalheModal({ rota, onClose }: { rota: Rota; onClose: () => void }) {
 
   return (
     <div
-      className="fixed inset-0 bg-black/40 z-[100] flex items-center justify-center"
+      className="fixed inset-0 bg-black/55 z-[100] flex items-center justify-center"
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div className="animate-fade-in bg-white rounded-xl border border-[0.5px] border-[rgba(44,44,42,0.15)] w-[600px] max-w-[95vw] max-h-[85vh] flex flex-col shadow-[0_8px_32px_rgba(44,44,42,0.12)]">
+      <div className="animate-fade-in bg-white dark:bg-[#1E1E1C] rounded-xl border border-[0.5px] border-[var(--border-light)] w-[600px] max-w-[95vw] max-h-[85vh] flex flex-col">
         {/* Header */}
-        <div className="px-5 py-4 border-b border-[0.5px] border-[rgba(44,44,42,0.1)] flex items-center justify-between shrink-0">
+        <div className="px-5 py-4 border-b border-[0.5px] border-[var(--border-subtle)] flex items-center justify-between shrink-0">
           <div>
             <div className="text-[13px] font-medium">{rota.codigoRota}</div>
             <div className="text-[11px] text-muted mt-0.5">
@@ -70,7 +70,7 @@ function DetalheModal({ rota, onClose }: { rota: Rota; onClose: () => void }) {
               <thead>
                 <tr className="bg-page">
                   {['Nº NFS', 'Cond', 'Destinatário', 'Município / Bairro', 'Peso', 'Tipo'].map(h => (
-                    <th key={h} className="text-left px-2 py-1.5 text-[10px] text-muted font-medium border-b border-[0.5px] border-[rgba(44,44,42,0.1)]">
+                    <th key={h} className="text-left px-2 py-1.5 text-[10px] text-muted font-medium border-b border-[0.5px] border-[var(--border-subtle)]">
                       {h}
                     </th>
                   ))}
@@ -78,13 +78,13 @@ function DetalheModal({ rota, onClose }: { rota: Rota; onClose: () => void }) {
               </thead>
               <tbody>
                 {rota.notasFiscais.map((nf, i) => (
-                  <tr key={nf.id} className={i % 2 === 0 ? 'bg-white' : 'bg-page'}>
-                    <td className="px-2 py-[5px] border-b border-[0.5px] border-[rgba(44,44,42,0.06)] font-mono">{nf.numnfs}</td>
-                    <td className="px-2 py-[5px] border-b border-[0.5px] border-[rgba(44,44,42,0.06)]"><CondDot cond={nf.cond} label /></td>
-                    <td className="px-2 py-[5px] border-b border-[0.5px] border-[rgba(44,44,42,0.06)] max-w-[160px] truncate">{nf.destinatario}</td>
-                    <td className="px-2 py-[5px] border-b border-[0.5px] border-[rgba(44,44,42,0.06)] text-muted">{nf.municipio} / {nf.bairro}</td>
-                    <td className="px-2 py-[5px] border-b border-[0.5px] border-[rgba(44,44,42,0.06)] whitespace-nowrap">{nf.peso}kg</td>
-                    <td className="px-2 py-[5px] border-b border-[0.5px] border-[rgba(44,44,42,0.06)]">
+                  <tr key={nf.id} className={i % 2 === 0 ? 'bg-white dark:bg-[#1E1E1C]' : 'bg-page'}>
+                    <td className="px-2 py-[5px] border-b border-[0.5px] border-[var(--border-faint)] font-mono">{nf.numnfs}</td>
+                    <td className="px-2 py-[5px] border-b border-[0.5px] border-[var(--border-faint)]"><CondDot cond={nf.cond} label /></td>
+                    <td className="px-2 py-[5px] border-b border-[0.5px] border-[var(--border-faint)] max-w-[160px] truncate">{nf.destinatario}</td>
+                    <td className="px-2 py-[5px] border-b border-[0.5px] border-[var(--border-faint)] text-muted">{nf.municipio} / {nf.bairro}</td>
+                    <td className="px-2 py-[5px] border-b border-[0.5px] border-[var(--border-faint)] whitespace-nowrap">{nf.peso}kg</td>
+                    <td className="px-2 py-[5px] border-b border-[0.5px] border-[var(--border-faint)]">
                       <span className={cn('text-[10px] px-1.5 py-px rounded-full font-medium', TIPO_CLASSES[nf.tipoCliente] ?? TIPO_DEFAULT)}>
                         {nf.tipoCliente}
                       </span>
@@ -99,7 +99,7 @@ function DetalheModal({ rota, onClose }: { rota: Rota; onClose: () => void }) {
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-3 border-t border-[0.5px] border-[rgba(44,44,42,0.1)] flex gap-2 justify-end shrink-0">
+        <div className="px-5 py-3 border-t border-[0.5px] border-[var(--border-subtle)] flex gap-2 justify-end shrink-0">
           {rota.nfsConcatenadas && (
             <Btn size="sm" onClick={copyNFs}>{copied ? '✓ Copiado!' : 'Copiar NFs (;)'}</Btn>
           )}
@@ -141,7 +141,7 @@ export default function HistoricoPage() {
               'transition-colors duration-100',
               i === diaIdx
                 ? 'bg-base text-white border-base'
-                : 'bg-white text-base border-[rgba(44,44,42,0.2)] hover:bg-cream',
+                : 'bg-white dark:bg-[#1E1E1C] text-base border-[var(--border-mid)] hover:bg-cream',
             )}
           >
             {d.label}
@@ -156,7 +156,7 @@ export default function HistoricoPage() {
           { label: 'NFs',    value: dia.nfs },
           { label: 'Peso',   value: formatPeso(dia.peso) },
         ].map(m => (
-          <div key={m.label} className="flex-1 bg-white border border-[0.5px] border-[rgba(44,44,42,0.11)] rounded-lg px-3.5 py-2.5">
+          <div key={m.label} className="flex-1 bg-white dark:bg-[#1E1E1C] border border-[0.5px] border-[var(--border-card)] rounded-lg px-3.5 py-2.5">
             <div className="text-[11px] text-muted">{m.label}</div>
             <div className="text-xl font-medium mt-0.5">{m.value}</div>
           </div>
@@ -170,7 +170,7 @@ export default function HistoricoPage() {
             <thead>
               <tr className="bg-page">
                 {['Rota', 'Motorista', 'Veículo', 'Peso', 'NFs', 'Status'].map(h => (
-                  <th key={h} className="text-left px-3 py-2 text-[11px] text-muted font-medium border-b border-[0.5px] border-[rgba(44,44,42,0.1)]">
+                  <th key={h} className="text-left px-3 py-2 text-[11px] text-muted font-medium border-b border-[0.5px] border-[var(--border-subtle)]">
                     {h}
                   </th>
                 ))}
@@ -183,15 +183,15 @@ export default function HistoricoPage() {
                   onClick={() => setRotaSelecionada(rota)}
                   className={cn(
                     'cursor-pointer transition-colors duration-100',
-                    i % 2 === 0 ? 'bg-white hover:bg-page' : 'bg-page hover:bg-cream',
+                    i % 2 === 0 ? 'bg-white dark:bg-[#1E1E1C] hover:bg-page' : 'bg-page hover:bg-cream',
                   )}
                 >
-                  <td className="px-3 py-[7px] border-b border-[0.5px] border-[rgba(44,44,42,0.06)] font-mono font-medium">{rota.codigoRota}</td>
-                  <td className="px-3 py-[7px] border-b border-[0.5px] border-[rgba(44,44,42,0.06)]">{rota.motorista?.nome ?? '—'}</td>
-                  <td className="px-3 py-[7px] border-b border-[0.5px] border-[rgba(44,44,42,0.06)] text-muted">{rota.veiculo?.tipo} {rota.veiculo?.placa}</td>
-                  <td className="px-3 py-[7px] border-b border-[0.5px] border-[rgba(44,44,42,0.06)] whitespace-nowrap">{formatPeso(rota.pesoTotal)}</td>
-                  <td className="px-3 py-[7px] border-b border-[0.5px] border-[rgba(44,44,42,0.06)]">{rota.qtdNotas}</td>
-                  <td className="px-3 py-[7px] border-b border-[0.5px] border-[rgba(44,44,42,0.06)]"><StatusPill status={rota.status} /></td>
+                  <td className="px-3 py-[7px] border-b border-[0.5px] border-[var(--border-faint)] font-mono font-medium">{rota.codigoRota}</td>
+                  <td className="px-3 py-[7px] border-b border-[0.5px] border-[var(--border-faint)]">{rota.motorista?.nome ?? '—'}</td>
+                  <td className="px-3 py-[7px] border-b border-[0.5px] border-[var(--border-faint)] text-muted">{rota.veiculo?.tipo} {rota.veiculo?.placa}</td>
+                  <td className="px-3 py-[7px] border-b border-[0.5px] border-[var(--border-faint)] whitespace-nowrap">{formatPeso(rota.pesoTotal)}</td>
+                  <td className="px-3 py-[7px] border-b border-[0.5px] border-[var(--border-faint)]">{rota.qtdNotas}</td>
+                  <td className="px-3 py-[7px] border-b border-[0.5px] border-[var(--border-faint)]"><StatusPill status={rota.status} /></td>
                 </tr>
               ))}
             </tbody>

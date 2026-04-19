@@ -21,9 +21,9 @@ const STATUS_FILTERS: { label: string; value: RouteStatus | 'todos' }[] = [
 ]
 
 const TIPO_CLASSES: Record<string, string> = {
-  CD:         'bg-primary-bg text-primary-dark',
-  Rede:       'bg-purple-bg text-purple',
-  Reentrega:  'bg-warn-bg text-warn',
+  CD:        'bg-primary-bg text-primary-dark',
+  Rede:      'bg-purple-bg text-purple',
+  Reentrega: 'bg-warn-bg text-warn',
 }
 const TIPO_DEFAULT = 'bg-cream text-mid'
 
@@ -36,25 +36,24 @@ function GerarRotasDialog({ onClose, onConfirm }: { onClose: () => void; onConfi
   const set = (k: string, v: string) => setForm(p => ({ ...p, [k]: v }))
 
   const inputCls = cn(
-    'w-full border border-[0.5px] border-[rgba(44,44,42,0.2)] rounded-lg bg-page',
+    'w-full border border-[0.5px] border-[var(--border-input)] rounded-lg bg-page',
     'px-[11px] py-[7px] text-xs text-base font-sans resize-y outline-none',
-    'focus:border-primary focus:shadow-[0_0_0_3px_rgba(24,95,165,0.07)]',
-    'transition-[border-color,box-shadow] duration-100',
+    'focus:border-primary transition-colors duration-100',
   )
 
   return (
-    <div className="absolute inset-0 bg-black/35 flex items-center justify-center z-50 rounded-lg">
-      <div className="animate-fade-in bg-white rounded-xl border border-[0.5px] border-[rgba(44,44,42,0.15)] p-6 w-[440px] max-w-[90vw]">
+    <div className="absolute inset-0 bg-black/55 flex items-center justify-center z-50 rounded-lg">
+      <div className="animate-fade-in bg-white dark:bg-[#1E1E1C] rounded-xl border border-[0.5px] border-[var(--border-light)] p-6 w-[440px] max-w-[90vw]">
         <div className="text-sm font-medium mb-1">Instrução para o agente de IA</div>
         <div className="text-[11px] text-muted mb-4">
           Estas informações serão combinadas com as regras fixas e os dados do SIAT.
         </div>
 
         {[
-          { key: 'observacoes',        label: 'Observações do dia',                    ph: 'Ex: Priorizar região Norte, evitar Contagem até 10h...' },
-          { key: 'motoristasAusentes', label: 'Motoristas ausentes hoje',              ph: 'Ex: Douglas B, Rosana' },
-          { key: 'veiculosBloqueados', label: 'Veículos bloqueados / em manutenção',   ph: 'Ex: ABC-1234, XYZ-5678' },
-          { key: 'restricoesExtras',   label: 'Restrições extras',                     ph: 'Ex: Atacadão só recebe até 11h hoje.' },
+          { key: 'observacoes',        label: 'Observações do dia',                  ph: 'Ex: Priorizar região Norte, evitar Contagem até 10h...' },
+          { key: 'motoristasAusentes', label: 'Motoristas ausentes hoje',            ph: 'Ex: Douglas B, Rosana' },
+          { key: 'veiculosBloqueados', label: 'Veículos bloqueados / em manutenção', ph: 'Ex: ABC-1234, XYZ-5678' },
+          { key: 'restricoesExtras',   label: 'Restrições extras',                   ph: 'Ex: Atacadão só recebe até 11h hoje.' },
         ].map(f => (
           <div key={f.key} className="mb-2.5">
             <label className="block text-[11px] text-muted mb-1">{f.label}</label>
@@ -74,10 +73,9 @@ function GerarRotasDialog({ onClose, onConfirm }: { onClose: () => void; onConfi
             value={form.prioridade}
             onChange={e => set('prioridade', e.target.value)}
             className={cn(
-              'w-full h-8 border border-[0.5px] border-[rgba(44,44,42,0.2)] rounded-lg bg-page',
+              'w-full h-8 border border-[0.5px] border-[var(--border-input)] rounded-lg bg-page',
               'px-[11px] text-xs text-base font-sans outline-none cursor-pointer',
-              'focus:border-primary focus:shadow-[0_0_0_3px_rgba(24,95,165,0.07)]',
-              'transition-[border-color,box-shadow] duration-100',
+              'focus:border-primary transition-colors duration-100',
             )}
           >
             <option value="padrao">Padrão (agendados → SAC → varejo → data)</option>
@@ -138,10 +136,10 @@ function RouteCard({ rota, onUpdateStatus, onAskConfirm }: {
 
   return (
     <div className={cn(
-      'bg-white rounded-lg overflow-hidden transition-[border] duration-150',
+      'bg-white dark:bg-[#1E1E1C] rounded-lg overflow-hidden transition-[border] duration-150',
       rota.status === 'aguardando'
         ? 'border border-[1.5px] border-primary'
-        : 'border border-[0.5px] border-[rgba(44,44,42,0.12)]',
+        : 'border border-[0.5px] border-[var(--border-card)]',
     )}>
       {/* Header row */}
       <div
@@ -177,7 +175,7 @@ function RouteCard({ rota, onUpdateStatus, onAskConfirm }: {
 
       {/* Expanded NFs */}
       {expanded && (
-        <div className="animate-fade-in border-t border-[0.5px] border-[rgba(44,44,42,0.08)] bg-page px-3.5 py-3">
+        <div className="animate-fade-in border-t border-[0.5px] border-[var(--border-subtle)] bg-page px-3.5 py-3">
           {rota.notasFiscais.length > 0 ? (
             <table className="w-full border-collapse text-[11px]" style={{ tableLayout: 'fixed' }}>
               <thead>
@@ -185,7 +183,7 @@ function RouteCard({ rota, onUpdateStatus, onAskConfirm }: {
                   {['Nº NFS', 'Cond', 'Destinatário', 'Município', 'Peso', 'Tipo'].map((h, i) => (
                     <th
                       key={h}
-                      className="text-left text-[10px] text-muted font-medium px-1.5 py-1 border-b border-[0.5px] border-[rgba(44,44,42,0.1)]"
+                      className="text-left text-[10px] text-muted font-medium px-1.5 py-1 border-b border-[0.5px] border-[var(--border-subtle)]"
                       style={{ width: i === 0 ? 68 : i === 1 ? 60 : i === 3 ? 90 : i === 4 ? 55 : i === 5 ? 58 : undefined }}
                     >
                       {h}
@@ -196,12 +194,12 @@ function RouteCard({ rota, onUpdateStatus, onAskConfirm }: {
               <tbody>
                 {rota.notasFiscais.map(nf => (
                   <tr key={nf.id}>
-                    <td className="px-1.5 py-1 border-b border-[0.5px] border-[rgba(44,44,42,0.06)] font-mono">{nf.numnfs}</td>
-                    <td className="px-1.5 py-1 border-b border-[0.5px] border-[rgba(44,44,42,0.06)]"><CondDot cond={nf.cond} label /></td>
-                    <td className="px-1.5 py-1 border-b border-[0.5px] border-[rgba(44,44,42,0.06)] truncate">{nf.destinatario}</td>
-                    <td className="px-1.5 py-1 border-b border-[0.5px] border-[rgba(44,44,42,0.06)] truncate">{nf.municipio}</td>
-                    <td className="px-1.5 py-1 border-b border-[0.5px] border-[rgba(44,44,42,0.06)] whitespace-nowrap">{nf.peso}kg</td>
-                    <td className="px-1.5 py-1 border-b border-[0.5px] border-[rgba(44,44,42,0.06)]">
+                    <td className="px-1.5 py-1 border-b border-[0.5px] border-[var(--border-faint)] font-mono">{nf.numnfs}</td>
+                    <td className="px-1.5 py-1 border-b border-[0.5px] border-[var(--border-faint)]"><CondDot cond={nf.cond} label /></td>
+                    <td className="px-1.5 py-1 border-b border-[0.5px] border-[var(--border-faint)] truncate">{nf.destinatario}</td>
+                    <td className="px-1.5 py-1 border-b border-[0.5px] border-[var(--border-faint)] truncate">{nf.municipio}</td>
+                    <td className="px-1.5 py-1 border-b border-[0.5px] border-[var(--border-faint)] whitespace-nowrap">{nf.peso}kg</td>
+                    <td className="px-1.5 py-1 border-b border-[0.5px] border-[var(--border-faint)]">
                       <span className={cn('text-[10px] px-1.5 py-px rounded-full font-medium', TIPO_CLASSES[nf.tipoCliente] ?? TIPO_DEFAULT)}>
                         {nf.tipoCliente}
                       </span>
@@ -219,7 +217,7 @@ function RouteCard({ rota, onUpdateStatus, onAskConfirm }: {
           )}
 
           {/* Actions */}
-          <div className="flex gap-1.5 mt-3 pt-2.5 border-t border-[0.5px] border-[rgba(44,44,42,0.08)] flex-wrap">
+          <div className="flex gap-1.5 mt-3 pt-2.5 border-t border-[0.5px] border-[var(--border-subtle)] flex-wrap">
             <Btn size="sm" onClick={() => rota.linkMaps && window.open(rota.linkMaps, '_blank')} disabled={!rota.linkMaps}>
               <svg className="w-[11px] h-[11px]" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
                 <path d="M8 2C5.8 2 4 3.8 4 6c0 3.3 4 8 4 8s4-4.7 4-8c0-2.2-1.8-4-4-4z"/>
@@ -320,10 +318,10 @@ export default function RotasPage() {
     ))
     if (rota) {
       const msgs: Partial<Record<RouteStatus, string>> = {
-        aprovada:  `✓ Rota ${rota.codigoRota} aprovada`,
-        rascunho:  `Rota ${rota.codigoRota} rejeitada — voltou para rascunho`,
-        enviada:   `✓ Rota ${rota.codigoRota} enviada ao motorista`,
-        aguardando:`Rota ${rota.codigoRota} submetida para aprovação`,
+        aprovada:   `✓ Rota ${rota.codigoRota} aprovada`,
+        rascunho:   `Rota ${rota.codigoRota} rejeitada — voltou para rascunho`,
+        enviada:    `✓ Rota ${rota.codigoRota} enviada ao motorista`,
+        aguardando: `Rota ${rota.codigoRota} submetida para aprovação`,
       }
       showToast(msgs[status] || '')
     }
@@ -334,7 +332,7 @@ export default function RotasPage() {
     setGenerating(true)
     setTimeout(() => {
       setGenerating(false)
-      const now  = new Date().toISOString()
+      const now   = new Date().toISOString()
       const novas = ROTAS_GERADAS_IA.map(r => ({ ...r, createdAt: now }))
       setRoutes(prev => {
         const ids = new Set(prev.map(r => r.id))
@@ -363,10 +361,7 @@ export default function RotasPage() {
         <select
           value={filter}
           onChange={e => setFilter(e.target.value as RouteStatus | 'todos')}
-          className={cn(
-            'h-7 border border-[0.5px] border-[rgba(44,44,42,0.2)] rounded-lg bg-white',
-            'px-2 text-xs text-base font-sans outline-none cursor-pointer',
-          )}
+          className="h-7 border border-[0.5px] border-[var(--border-input)] rounded-lg bg-page px-2 text-xs text-base font-sans outline-none cursor-pointer"
         >
           {STATUS_FILTERS.map(f => (
             <option key={f.value} value={f.value}>
@@ -392,8 +387,7 @@ export default function RotasPage() {
 
         {toast && (
           <div className={cn(
-            'animate-fade-in rounded-lg px-4 py-2.5 text-xs font-medium',
-            'border border-[0.5px]',
+            'animate-fade-in rounded-lg px-4 py-2.5 text-xs font-medium border border-[0.5px]',
             toastOk
               ? 'bg-success-bg border-success-border text-success-dark'
               : 'bg-warn-bg border-warn-border text-warn',
@@ -403,7 +397,7 @@ export default function RotasPage() {
         )}
 
         {generating && (
-          <div className="animate-fade-in bg-primary-bg border border-[0.5px] border-[#B5D4F4] rounded-lg px-4 py-3 flex items-center gap-3">
+          <div className="animate-fade-in bg-primary-bg border border-[0.5px] border-[#B5D4F4] dark:border-[#1A3A5C] rounded-lg px-4 py-3 flex items-center gap-3">
             <svg className="w-4 h-4 text-primary animate-spin-slow" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M8 2a6 6 0 1 0 6 6" strokeLinecap="round"/>
             </svg>

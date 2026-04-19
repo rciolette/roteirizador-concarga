@@ -10,7 +10,7 @@ function cn(...cls: (string | false | undefined | null)[]) {
 // ── Topbar ───────────────────────────────────────────────────────────────────
 export function Topbar({ title, sub, children }: { title: string; sub?: string; children?: ReactNode }) {
   return (
-    <div className="h-[46px] bg-white border-b border-[0.5px] border-[rgba(44,44,42,0.1)] flex items-center justify-between px-5 shrink-0 gap-3">
+    <div className="h-[46px] bg-white dark:bg-[#1E1E1C] border-b border-[0.5px] border-[var(--border-subtle)] flex items-center justify-between px-5 shrink-0 gap-3">
       <div className="min-w-0">
         <div className="text-[13px] font-medium tracking-[-0.01em] text-base">{title}</div>
         {sub && <div className="text-[10px] text-muted mt-px">{sub}</div>}
@@ -22,14 +22,14 @@ export function Topbar({ title, sub, children }: { title: string; sub?: string; 
 
 // ── Divider ───────────────────────────────────────────────────────────────────
 export function Divider() {
-  return <div className="h-px bg-[rgba(44,44,42,0.08)]" />
+  return <div className="h-px bg-[var(--border-subtle)]" />
 }
 
 // ── Button ───────────────────────────────────────────────────────────────────
 type BtnVariant = 'default' | 'primary' | 'success' | 'teal' | 'danger-soft' | 'warn-soft'
 
 const BV: Record<BtnVariant, string> = {
-  'default':     'bg-white text-base border-[rgba(44,44,42,0.25)]',
+  'default':     'bg-white dark:bg-[#1E1E1C] text-base border-[var(--border-btn)]',
   'primary':     'bg-primary text-primary-bg border-primary',
   'success':     'bg-success text-success-bg border-success',
   'teal':        'bg-teal text-teal-bg border-teal',
@@ -69,7 +69,7 @@ export function Card({ children, style, className }: {
 }) {
   return (
     <div
-      className={cn('bg-white border border-[0.5px] border-[rgba(44,44,42,0.11)] rounded-lg overflow-hidden', className)}
+      className={cn('bg-white dark:bg-[#1E1E1C] border border-[0.5px] border-[var(--border-card)] rounded-lg overflow-hidden', className)}
       style={style}
     >
       {children}
@@ -79,7 +79,7 @@ export function Card({ children, style, className }: {
 
 export function CardHeader({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <div className={cn('flex items-center justify-between px-4 py-[10px] border-b border-[0.5px] border-[rgba(44,44,42,0.08)]', className)}>
+    <div className={cn('flex items-center justify-between px-4 py-[10px] border-b border-[0.5px] border-[var(--border-subtle)]', className)}>
       {children}
     </div>
   )
@@ -90,7 +90,7 @@ export function MetricCard({ label, value, sub, valueColor }: {
   label: string; value: string | number; sub?: string; valueColor?: string
 }) {
   return (
-    <div className="bg-cream border border-[0.5px] border-[rgba(44,44,42,0.07)] rounded-lg p-3">
+    <div className="bg-cream border border-[0.5px] border-[var(--border-subtle)] rounded-lg p-3">
       <div className="text-[10px] text-muted mb-1 uppercase tracking-[0.03em]">{label}</div>
       <div
         className="text-[22px] font-medium tracking-[-0.02em] text-base"
@@ -122,8 +122,8 @@ export function StatusPill({ status }: { status: RouteStatus }) {
 }
 
 // ── Cond Dot ─────────────────────────────────────────────────────────────────
-const COND_DOT: Record<CondStatus, string>   = { ok: 'bg-cond-ok', laranja: 'bg-cond-warn', vermelho: 'bg-cond-err' }
-const COND_LBL: Record<CondStatus, string>   = { ok: 'Ok', laranja: 'Laran.', vermelho: 'Verm.' }
+const COND_DOT: Record<CondStatus, string> = { ok: 'bg-cond-ok', laranja: 'bg-cond-warn', vermelho: 'bg-cond-err' }
+const COND_LBL: Record<CondStatus, string> = { ok: 'Ok', laranja: 'Laran.', vermelho: 'Verm.' }
 
 export function CondDot({ cond, label }: { cond: CondStatus; label?: boolean }) {
   return (
@@ -166,9 +166,9 @@ export function ImportBar({ running, step, progress, result, onClose }: {
 
   return (
     <div className={cn(
-      'animate-fade-in bg-white rounded-lg px-4 py-3 flex items-center gap-3.5',
+      'animate-fade-in bg-white dark:bg-[#1E1E1C] rounded-lg px-4 py-3 flex items-center gap-3.5',
       'border border-[0.5px]',
-      done ? 'border-success-border' : 'border-[#B5D4F4]',
+      done ? 'border-success-border' : 'border-[#B5D4F4] dark:border-[#1A3A5C]',
     )}>
       {!done ? (
         <svg className="w-[18px] h-[18px] text-primary shrink-0 animate-spin-slow" viewBox="0 0 24 24" fill="none">
@@ -193,9 +193,9 @@ export function ImportBar({ running, step, progress, result, onClose }: {
       {result && (
         <div className="flex gap-5 shrink-0">
           {([
-            { val: result.nfs,                     lbl: 'NFs' },
-            { val: formatPeso(result.peso * 1000),  lbl: 'peso' },
-            { val: result.veiculos,                lbl: 'veículos' },
+            { val: result.nfs,                    lbl: 'NFs' },
+            { val: formatPeso(result.peso * 1000), lbl: 'peso' },
+            { val: result.veiculos,               lbl: 'veículos' },
           ] as const).map(m => (
             <div key={m.lbl} className="text-center">
               <div className="text-sm font-medium text-success">{m.val}</div>
@@ -222,7 +222,7 @@ export function FieldRow({ label, children }: { label: string; children: ReactNo
   return (
     <div className="flex items-center gap-3">
       <span className="text-[11px] text-muted w-[130px] shrink-0">{label}</span>
-      <div className="flex-1 min-w-0">{children}</div>
+      <div className="flex-1 min-w-0 flex items-center gap-2">{children}</div>
     </div>
   )
 }
@@ -241,9 +241,9 @@ export function TextInput({ value, onChange, placeholder, mono, type, style, dis
       disabled={disabled}
       style={style}
       className={cn(
-        'w-full h-8 border border-[0.5px] border-[rgba(44,44,42,0.2)] rounded-lg bg-page px-[11px] text-base',
-        'outline-none transition-[border-color,box-shadow] duration-100',
-        'focus:border-primary focus:shadow-[0_0_0_3px_rgba(24,95,165,0.07)]',
+        'w-full h-8 border border-[0.5px] border-[var(--border-input)] rounded-lg bg-page px-[11px] text-base',
+        'outline-none transition-[border-color] duration-100',
+        'focus:border-primary focus:bg-white dark:focus:bg-cream',
         'disabled:opacity-50 disabled:cursor-not-allowed',
         mono ? 'font-mono text-[11px]' : 'font-sans text-xs',
       )}
@@ -263,10 +263,10 @@ export function TextArea({ value, onChange, placeholder, mono, rows }: {
       placeholder={placeholder}
       rows={rows || 4}
       className={cn(
-        'w-full border border-[0.5px] border-[rgba(44,44,42,0.2)] rounded-lg bg-page px-[11px] py-2 text-base',
+        'w-full border border-[0.5px] border-[var(--border-input)] rounded-lg bg-page px-[11px] py-2 text-base',
         'leading-relaxed resize-y outline-none',
-        'transition-[border-color,box-shadow] duration-100',
-        'focus:border-primary focus:shadow-[0_0_0_3px_rgba(24,95,165,0.07)]',
+        'transition-[border-color] duration-100',
+        'focus:border-primary focus:bg-white dark:focus:bg-cream',
         mono ? 'font-mono text-[10px]' : 'font-sans text-xs',
       )}
     />
@@ -282,10 +282,10 @@ export function Select({ value, onChange, children, className }: {
       value={value}
       onChange={e => onChange(e.target.value)}
       className={cn(
-        'w-full h-8 border border-[0.5px] border-[rgba(44,44,42,0.2)] rounded-lg bg-page px-[11px]',
+        'w-full h-8 border border-[0.5px] border-[var(--border-input)] rounded-lg bg-page px-[11px]',
         'text-xs text-base font-sans outline-none cursor-pointer',
-        'transition-[border-color,box-shadow] duration-100',
-        'focus:border-primary focus:shadow-[0_0_0_3px_rgba(24,95,165,0.07)]',
+        'transition-[border-color] duration-100',
+        'focus:border-primary',
         className,
       )}
     >
@@ -340,11 +340,11 @@ export function ConfirmDialog({ action, onConfirm, onClose }: {
 
   return (
     <div
-      className="fixed inset-0 bg-black/35 z-[200] flex items-center justify-center"
+      className="fixed inset-0 bg-black/55 z-[200] flex items-center justify-center"
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div className="animate-fade-in bg-white rounded-xl border border-[0.5px] border-[rgba(44,44,42,0.15)] w-[420px] max-w-[92vw]">
-        <div className="px-5 pt-[18px] pb-3.5 border-b border-[0.5px] border-[rgba(44,44,42,0.08)]">
+      <div className="animate-fade-in bg-white dark:bg-[#1E1E1C] rounded-xl border border-[0.5px] border-[var(--border-light)] w-[420px] max-w-[92vw]">
+        <div className="px-5 pt-[18px] pb-3.5 border-b border-[0.5px] border-[var(--border-subtle)]">
           <div className="flex items-start gap-3">
             <div className={cn('w-8 h-8 rounded-lg shrink-0 flex items-center justify-center', icon.bg)}>
               <svg className={cn('w-[15px] h-[15px]', icon.stroke)} viewBox="0 0 16 16" fill="none" strokeWidth="1.6">
@@ -365,7 +365,7 @@ export function ConfirmDialog({ action, onConfirm, onClose }: {
         </div>
 
         {action.details && action.details.length > 0 && (
-          <div className="px-5 py-3 border-b border-[0.5px] border-[rgba(44,44,42,0.08)] flex flex-col gap-[7px]">
+          <div className="px-5 py-3 border-b border-[0.5px] border-[var(--border-subtle)] flex flex-col gap-[7px]">
             {action.details.map(d => (
               <div key={d.label} className="flex gap-2.5 text-xs">
                 <span className="text-muted w-[120px] shrink-0">{d.label}</span>

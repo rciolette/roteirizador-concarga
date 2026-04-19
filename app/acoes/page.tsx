@@ -163,19 +163,11 @@ export default function AcoesPage() {
             <span className="text-[11px] text-muted">revise os detalhes antes de aprovar</span>
           </CardHeader>
           {aguardando.length === 0 ? (
-            <div className="px-4 py-6 text-xs text-subtle text-center">
-              Nenhuma rota aguardando aprovação.
-            </div>
+            <div className="px-4 py-6 text-xs text-subtle text-center">Nenhuma rota aguardando aprovação.</div>
           ) : (
             <div className="flex flex-col">
               {aguardando.map((rota, i) => (
-                <div
-                  key={rota.id}
-                  className={cn(
-                    'flex items-center gap-3.5 px-4 py-3',
-                    i < aguardando.length - 1 && 'border-b border-[0.5px] border-[rgba(44,44,42,0.07)]',
-                  )}
-                >
+                <div key={rota.id} className={cn('flex items-center gap-3.5 px-4 py-3', i < aguardando.length - 1 && 'border-b border-[0.5px] border-[var(--border-faint)]')}>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <span className="text-xs font-medium font-mono">{rota.codigoRota}</span>
@@ -209,19 +201,11 @@ export default function AcoesPage() {
             <span className="text-[11px] text-muted">confirme antes de disparar ao motorista</span>
           </CardHeader>
           {aprovadas.length === 0 ? (
-            <div className="px-4 py-6 text-xs text-subtle text-center">
-              Nenhuma rota aprovada aguardando envio.
-            </div>
+            <div className="px-4 py-6 text-xs text-subtle text-center">Nenhuma rota aprovada aguardando envio.</div>
           ) : (
             <div className="flex flex-col">
               {aprovadas.map((rota, i) => (
-                <div
-                  key={rota.id}
-                  className={cn(
-                    'flex items-center gap-3.5 px-4 py-3',
-                    i < aprovadas.length - 1 && 'border-b border-[0.5px] border-[rgba(44,44,42,0.07)]',
-                  )}
-                >
+                <div key={rota.id} className={cn('flex items-center gap-3.5 px-4 py-3', i < aprovadas.length - 1 && 'border-b border-[0.5px] border-[var(--border-faint)]')}>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <span className="text-xs font-medium font-mono">{rota.codigoRota}</span>
@@ -252,22 +236,14 @@ export default function AcoesPage() {
             </CardHeader>
             <div className="flex flex-col">
               {enviadas.map((rota, i) => (
-                <div
-                  key={rota.id}
-                  className={cn(
-                    'flex items-center gap-3.5 px-4 py-2.5',
-                    i < enviadas.length - 1 && 'border-b border-[0.5px] border-[rgba(44,44,42,0.07)]',
-                  )}
-                >
+                <div key={rota.id} className={cn('flex items-center gap-3.5 px-4 py-2.5', i < enviadas.length - 1 && 'border-b border-[0.5px] border-[var(--border-faint)]')}>
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-medium font-mono">{rota.codigoRota}</span>
                       <StatusPill status="enviada" />
                     </div>
                     <div className="text-[11px] text-muted mt-0.5">
-                      {rota.motorista?.nome} · {rota.enviadoEm
-                        ? new Date(rota.enviadoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-                        : '—'}
+                      {rota.motorista?.nome} · {rota.enviadoEm ? new Date(rota.enviadoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '—'}
                     </div>
                   </div>
                 </div>
@@ -285,13 +261,7 @@ export default function AcoesPage() {
             </CardHeader>
             <div className="flex flex-col">
               {log.map((entry, i) => (
-                <div
-                  key={entry.id}
-                  className={cn(
-                    'flex items-center gap-2.5 px-4 py-2.5',
-                    i < log.length - 1 && 'border-b border-[0.5px] border-[rgba(44,44,42,0.06)]',
-                  )}
-                >
+                <div key={entry.id} className={cn('flex items-center gap-2.5 px-4 py-2.5', i < log.length - 1 && 'border-b border-[0.5px] border-[var(--border-faint)]')}>
                   <span className={cn('text-[10px] font-medium px-2 py-px rounded-full whitespace-nowrap shrink-0', TIPO_PILL[entry.tipo])}>
                     {TIPO_LABELS[entry.tipo]}
                   </span>
@@ -302,15 +272,10 @@ export default function AcoesPage() {
             </div>
           </Card>
         )}
-
       </div>
 
       {confirm && (
-        <ConfirmDialog
-          action={confirm.action}
-          onConfirm={confirm.execute}
-          onClose={() => setConfirm(null)}
-        />
+        <ConfirmDialog action={confirm.action} onConfirm={confirm.execute} onClose={() => setConfirm(null)} />
       )}
     </div>
   )

@@ -21,9 +21,9 @@ const PRIORIDADES = [
 ]
 
 const inputCls = [
-  'w-full h-8 border border-[0.5px] border-[rgba(44,44,42,0.2)] rounded-lg',
+  'w-full h-8 border border-[0.5px] border-[var(--border-input)] rounded-lg',
   'bg-page px-3 text-xs text-base outline-none',
-  'focus:border-primary focus:bg-white transition-colors',
+  'focus:border-primary dark:focus:bg-cream transition-colors',
 ].join(' ')
 
 const monoInputCls = inputCls + ' font-mono text-[11px]'
@@ -142,7 +142,7 @@ export default function ConfiguracoesPage() {
               value={cfg.sql.script}
               onChange={e => setSql('script', e.target.value)}
               rows={10}
-              className="w-full border border-[0.5px] border-[rgba(44,44,42,0.2)] rounded-lg bg-page px-3 py-2 text-[10px] text-base leading-relaxed font-mono resize-y outline-none focus:border-primary focus:bg-white transition-colors min-h-[160px]"
+              className="w-full border border-[0.5px] border-[var(--border-input)] rounded-lg bg-page px-3 py-2 text-[10px] text-base leading-relaxed font-mono resize-y outline-none focus:border-primary dark:focus:bg-cream transition-colors min-h-[160px]"
             />
           </div>
         </Card>
@@ -178,19 +178,19 @@ export default function ConfiguracoesPage() {
             <table className="w-full border-collapse text-[11px]">
               <thead>
                 <tr className="bg-page">
-                  <th className="text-left px-4 py-2 text-[10px] text-muted font-medium border-b border-[0.5px] border-[rgba(44,44,42,0.08)] uppercase tracking-wide">
+                  <th className="text-left px-4 py-2 text-[10px] text-muted font-medium border-b border-[0.5px] border-[var(--border-subtle)] uppercase tracking-wide">
                     Rota / Tipo
                   </th>
                   {DIAS_LABELS.map(d => (
-                    <th key={d} className="px-3 py-2 text-[10px] text-muted font-medium border-b border-[0.5px] border-[rgba(44,44,42,0.08)] text-center uppercase tracking-wide">
+                    <th key={d} className="px-3 py-2 text-[10px] text-muted font-medium border-b border-[0.5px] border-[var(--border-subtle)] text-center uppercase tracking-wide">
                       {d}
                     </th>
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[rgba(44,44,42,0.06)]">
+              <tbody className="divide-y divide-[var(--border-faint)]">
                 {cfg.grades.map((g, i) => (
-                  <tr key={g.id} className={cn('transition-colors', i % 2 === 0 ? 'bg-white hover:bg-page' : 'bg-page hover:bg-cream')}>
+                  <tr key={g.id} className={cn('transition-colors', i % 2 === 0 ? 'bg-white dark:bg-[#1E1E1C] hover:bg-page' : 'bg-page hover:bg-cream')}>
                     <td className="px-4 py-2.5 text-xs text-base">{g.nome}</td>
                     {DIAS.map(d => (
                       <td key={d} className="px-3 py-2.5 text-center">
@@ -218,7 +218,7 @@ export default function ConfiguracoesPage() {
           <div className="px-4 py-3.5">
             <ol className="flex flex-col gap-2">
               {PRIORIDADES.map((p, i) => (
-                <li key={i} className="flex items-center gap-3 px-3 py-2.5 bg-page border border-[0.5px] border-[rgba(44,44,42,0.1)] rounded-lg text-xs text-base">
+                <li key={i} className="flex items-center gap-3 px-3 py-2.5 bg-page border border-[0.5px] border-[var(--border-card)] rounded-lg text-xs text-base">
                   <span className="w-5 h-5 rounded-full bg-primary text-primary-bg text-[10px] font-medium flex items-center justify-center shrink-0">
                     {i + 1}
                   </span>
@@ -241,13 +241,13 @@ export default function ConfiguracoesPage() {
                 { label: 'Truck',   key: 'truck'       as const },
                 { label: 'Carreta', key: 'carreta'     as const },
               ].map(f => (
-                <div key={f.key} className="bg-page border border-[0.5px] border-[rgba(44,44,42,0.1)] rounded-lg p-3">
+                <div key={f.key} className="bg-page border border-[0.5px] border-[var(--border-card)] rounded-lg p-3">
                   <Label>{f.label}</Label>
                   <input
                     type="number"
                     value={cfg.pesos[f.key]}
                     onChange={e => setPeso(f.key, e.target.value)}
-                    className="w-full border-b border-[rgba(44,44,42,0.2)] bg-transparent text-xs text-base outline-none py-1 focus:border-primary transition-colors"
+                    className="w-full border-b border-[var(--border-input)] bg-transparent text-xs text-base outline-none py-1 focus:border-primary transition-colors"
                   />
                   <span className="text-[10px] text-muted mt-1 block">kg máx.</span>
                 </div>
@@ -269,7 +269,7 @@ export default function ConfiguracoesPage() {
               value={cfg.instrucaoGlobal}
               onChange={e => setCfg(p => ({ ...p, instrucaoGlobal: e.target.value }))}
               rows={5}
-              className="w-full border border-[0.5px] border-[rgba(44,44,42,0.2)] rounded-lg bg-page px-3 py-2 text-xs text-base leading-relaxed resize-y outline-none focus:border-primary focus:bg-white transition-colors"
+              className="w-full border border-[0.5px] border-[var(--border-input)] rounded-lg bg-page px-3 py-2 text-xs text-base leading-relaxed resize-y outline-none focus:border-primary dark:focus:bg-cream transition-colors"
             />
           </div>
         </Card>
@@ -296,7 +296,7 @@ export default function ConfiguracoesPage() {
                   onChange={e => updateInstrucaoRota(ir.id, 'instrucao', e.target.value)}
                   placeholder="Instrução específica para esta rota..."
                   rows={2}
-                  className="flex-1 border border-[0.5px] border-[rgba(44,44,42,0.2)] rounded-lg bg-page px-3 py-1.5 text-xs text-base outline-none focus:border-primary focus:bg-white transition-colors resize-y min-h-[60px]"
+                  className="flex-1 border border-[0.5px] border-[var(--border-input)] rounded-lg bg-page px-3 py-1.5 text-xs text-base outline-none focus:border-primary dark:focus:bg-cream transition-colors resize-y min-h-[60px]"
                 />
                 <button
                   onClick={() => removeInstrucaoRota(ir.id)}

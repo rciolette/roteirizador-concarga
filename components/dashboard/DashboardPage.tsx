@@ -68,7 +68,7 @@ export default function DashboardPage() {
             ].map((a, i) => (
               <div
                 key={i}
-                className="flex items-center gap-2.5 px-3.5 py-2 text-xs border-b border-[0.5px] border-[rgba(44,44,42,0.07)] last:border-0"
+                className="flex items-center gap-2.5 px-3.5 py-2 text-xs border-b border-[0.5px] border-[var(--border-faint)] last:border-0"
               >
                 <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${a.color}`} />
                 <span className="flex-1">{a.text}</span>
@@ -89,7 +89,7 @@ export default function DashboardPage() {
             ].map((s, i, arr) => (
               <div
                 key={i}
-                className={`flex items-center gap-2.5 px-3.5 py-2 text-xs ${i < arr.length - 1 ? 'border-b border-[0.5px] border-[rgba(44,44,42,0.07)]' : ''}`}
+                className={`flex items-center gap-2.5 px-3.5 py-2 text-xs ${i < arr.length - 1 ? 'border-b border-[0.5px] border-[var(--border-faint)]' : ''}`}
               >
                 <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${s.dot}`} />
                 <span className="flex-1">{s.label}</span>
@@ -109,7 +109,7 @@ export default function DashboardPage() {
             {m.porTipoCliente.map((t, i, arr) => (
               <div
                 key={t.tipo}
-                className={`px-3.5 py-2.5 ${i < arr.length - 1 ? 'border-r border-[0.5px] border-[rgba(44,44,42,0.07)]' : ''}`}
+                className={`px-3.5 py-2.5 ${i < arr.length - 1 ? 'border-r border-[0.5px] border-[var(--border-faint)]' : ''}`}
               >
                 <div className="text-[10px] text-muted mb-1">{t.tipo}</div>
                 <div className={`text-[18px] font-medium ${t.tipo === 'Reentrega' ? 'text-warn-mid' : 'text-base'}`}>

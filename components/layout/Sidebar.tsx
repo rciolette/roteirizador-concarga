@@ -1,6 +1,7 @@
 'use client'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { ThemeToggle } from '@/components/ui/ThemeToggle'
 
 function cn(...cls: (string | false | undefined | null)[]) {
   return cls.filter(Boolean).join(' ')
@@ -62,9 +63,9 @@ export default function Sidebar() {
   const pathname = usePathname()
 
   return (
-    <aside className="w-[172px] shrink-0 bg-white border-r border-[0.5px] border-[rgba(44,44,42,0.1)] flex flex-col h-screen">
+    <aside className="w-[172px] shrink-0 bg-white dark:bg-[#1E1E1C] border-r border-[0.5px] border-[var(--border-subtle)] flex flex-col h-screen">
       {/* Logo */}
-      <div className="px-[18px] pt-4 pb-3.5 border-b border-[0.5px] border-[rgba(44,44,42,0.08)]">
+      <div className="px-[18px] pt-4 pb-3.5 border-b border-[0.5px] border-[var(--border-subtle)]">
         <div className="flex items-center gap-2">
           <div className="w-[26px] h-[26px] rounded-[7px] bg-primary flex items-center justify-center shrink-0">
             <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="#E6F1FB" strokeWidth="1.8">
@@ -123,7 +124,11 @@ export default function Sidebar() {
       </nav>
 
       {/* Footer */}
-      <div className="px-[18px] py-3 border-t border-[0.5px] border-[rgba(44,44,42,0.08)]">
+      <div className="px-[18px] py-3 border-t border-[0.5px] border-[var(--border-subtle)]">
+        <div className="flex items-center justify-between mb-1.5">
+          <div className="text-[10px] text-subtle">Tema</div>
+          <ThemeToggle />
+        </div>
         <div className="text-[10px] text-subtle mb-0.5">Conectado a</div>
         <div className="text-[11px] text-mid font-mono font-medium">siat.dyndns.info</div>
       </div>
