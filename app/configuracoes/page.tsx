@@ -65,16 +65,19 @@ export default function ConfiguracoesPage() {
   }
 
   return (
-    <>
-      <Topbar title="Configurações" sub="Conexão, regras, frota e instruções da IA">
-        <ImportarSIATButton onClick={imp.runImport} running={imp.running} label="Testar e importar SIAT" />
-        <Btn variant="primary" onClick={handleSave}>
-          {saved ? '✓ Salvo!' : 'Salvar configurações'}
-        </Btn>
-      </Topbar>
+    <div>
+      {/* Topbar fica sticky enquanto o main rola */}
+      <div className="sticky top-0 z-10">
+        <Topbar title="Configurações" sub="Conexão, regras, frota e instruções da IA">
+          <ImportarSIATButton onClick={imp.runImport} running={imp.running} label="Testar e importar SIAT" />
+          <Btn variant="primary" onClick={handleSave}>
+            {saved ? '✓ Salvo!' : 'Salvar configurações'}
+          </Btn>
+        </Topbar>
+      </div>
 
-      <div className="flex-1 overflow-y-auto">
-      <div className="px-5 py-5 flex flex-col gap-6">
+      {/* Conteúdo em bloco normal — cresce com o conteúdo, main scrolla */}
+      <div className="px-5 py-5 flex flex-col gap-6 pb-20">
         <ImportBar running={imp.running} step={imp.step} progress={imp.progress} result={imp.result} onClose={imp.reset} />
 
         {/* ── Conexão SQL ── */}
@@ -86,7 +89,7 @@ export default function ConfiguracoesPage() {
               <Btn size="sm" onClick={imp.runImport} disabled={imp.running}>Testar conexão</Btn>
             </div>
           </CardHeader>
-          <div className="px-4 py-3.5 flex flex-col gap-3">
+          <div className="px-4 py-4 flex flex-col gap-3">
             <div className="grid grid-cols-[1fr_120px] gap-3">
               <div>
                 <Label>Host</Label>
@@ -120,15 +123,15 @@ export default function ConfiguracoesPage() {
             <span className="text-xs font-medium">Script SQL — query de importação</span>
             <Btn size="sm" onClick={imp.runImport} disabled={imp.running}>Executar agora</Btn>
           </CardHeader>
-          <div className="px-4 py-3.5">
-            <TextArea mono rows={10} value={cfg.sql.script} onChange={v => setSql('script', v)} />
+          <div className="px-4 py-4">
+            <TextArea mono rows={12} className="min-h-[200px]" value={cfg.sql.script} onChange={v => setSql('script', v)} />
           </div>
         </Card>
 
         {/* ── Horários ── */}
         <Card>
           <CardHeader><span className="text-xs font-medium">Horários de operação</span></CardHeader>
-          <div className="px-4 py-3.5">
+          <div className="px-4 py-4">
             <div className="flex gap-6 flex-wrap">
               {[
                 { label: 'Início roteirização', key: 'inicioRoteirizacao' as const },
@@ -188,7 +191,7 @@ export default function ConfiguracoesPage() {
             <span className="text-xs font-medium">Prioridades de roteirização</span>
             <span className="text-[11px] text-muted">ordem de alocação</span>
           </CardHeader>
-          <div className="px-4 py-3.5">
+          <div className="px-4 py-4">
             <ol className="flex flex-col gap-2">
               {PRIORIDADES.map((p, i) => (
                 <li key={i} className="flex items-center gap-3 px-3 py-2.5 bg-page border border-[0.5px] border-[var(--border-card)] rounded-lg text-xs text-base">
@@ -205,7 +208,7 @@ export default function ConfiguracoesPage() {
         {/* ── Pesos ── */}
         <Card>
           <CardHeader><span className="text-xs font-medium">Parâmetros de peso por tipo de veículo</span></CardHeader>
-          <div className="px-4 py-3.5">
+          <div className="px-4 py-4">
             <div className="grid grid-cols-5 gap-3">
               {[
                 { label: 'Fiorino', key: 'fiorino'     as const },
@@ -234,11 +237,11 @@ export default function ConfiguracoesPage() {
           <CardHeader>
             <span className="text-xs font-medium">Instruções globais para o agente de IA</span>
           </CardHeader>
-          <div className="px-4 py-3.5">
+          <div className="px-4 py-4">
             <p className="text-[11px] text-muted mb-2.5">
               Este texto é inserido fixo no system prompt toda vez que o agente gera rotas.
             </p>
-            <TextArea rows={5} value={cfg.instrucaoGlobal} onChange={v => setCfg(p => ({ ...p, instrucaoGlobal: v }))} />
+            <TextArea rows={6} value={cfg.instrucaoGlobal} onChange={v => setCfg(p => ({ ...p, instrucaoGlobal: v }))} />
           </div>
         </Card>
 
@@ -248,7 +251,7 @@ export default function ConfiguracoesPage() {
             <span className="text-xs font-medium">Instruções por rota específica</span>
             <Btn size="sm" onClick={addInstrucaoRota}>+ Adicionar rota</Btn>
           </CardHeader>
-          <div className="px-4 py-3.5 flex flex-col gap-2.5">
+          <div className="px-4 py-4 flex flex-col gap-2.5">
             {cfg.instrucoesPorRota.map(ir => (
               <div key={ir.id} className="flex gap-2 items-start">
                 <div className="w-[140px] shrink-0">
@@ -282,7 +285,6 @@ export default function ConfiguracoesPage() {
         </Card>
 
       </div>
-      </div>
-    </>
+    </div>
   )
 }

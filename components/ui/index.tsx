@@ -248,9 +248,9 @@ export function TextInput({ value, onChange, placeholder, mono, type, style, dis
 }
 
 // ── Text Area ─────────────────────────────────────────────────────────────────
-export function TextArea({ value, onChange, placeholder, mono, rows }: {
+export function TextArea({ value, onChange, placeholder, mono, rows, className }: {
   value: string; onChange?: (v: string) => void; placeholder?: string;
-  mono?: boolean; rows?: number
+  mono?: boolean; rows?: number; className?: string
 }) {
   return (
     <textarea
@@ -264,6 +264,7 @@ export function TextArea({ value, onChange, placeholder, mono, rows }: {
         'transition-[border-color] duration-100',
         'focus:border-primary focus:bg-white dark:focus:bg-cream',
         mono ? 'font-mono text-[10px]' : 'font-sans text-xs',
+        className,
       )}
     />
   )
