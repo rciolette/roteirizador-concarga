@@ -110,7 +110,7 @@ export default function AprovacoesPage() {
   const enviadas   = rotas.filter(r => r.status === 'enviada')
 
   return (
-    <div className="flex flex-col h-screen bg-page">
+    <div className="flex flex-col h-full min-h-0 bg-page">
       <Topbar title="Aprovações" sub="Confirme cada operação antes de executar" />
 
       <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-3">

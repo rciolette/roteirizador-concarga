@@ -88,7 +88,7 @@ export default function HistoricoPage() {
   const dia = HISTORICO_DIAS[diaIdx]
 
   return (
-    <div className="flex flex-col h-screen bg-page">
+    <div className="flex flex-col h-full min-h-0 bg-page">
       <Topbar title="Histórico" sub="Rotas finalizadas por dia" />
 
       {/* Filtros de data */}
