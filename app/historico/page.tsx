@@ -1,30 +1,15 @@
 'use client'
 import { useState } from 'react'
-import { Topbar, Card, StatusPill, Btn, CondDot } from '@/components/ui'
-import { HISTORICO_DIAS, formatPeso } from '@/lib/data'
+import { Topbar, Card, StatusPill, Btn } from '@/components/ui'
+import { NotasFiscaisTable } from '@/components/ui/NotasFiscaisTable'
+import { HISTORICO_DIAS } from '@/lib/data'
+import { cn, formatPeso } from '@/lib/utils'
+import { useCopyToClipboard } from '@/lib/hooks'
 import { Rota } from '@/types'
-
-function cn(...cls: (string | false | undefined | null)[]) {
-  return cls.filter(Boolean).join(' ')
-}
-
-const TIPO_CLASSES: Record<string, string> = {
-  CD:        'bg-primary-bg text-primary-dark',
-  Rede:      'bg-purple-bg text-purple',
-  Reentrega: 'bg-warn-bg text-warn',
-}
-const TIPO_DEFAULT = 'bg-cream text-mid'
 
 // ── Detalhe Modal ─────────────────────────────────────────────────────────────
 function DetalheModal({ rota, onClose }: { rota: Rota; onClose: () => void }) {
-  const [copied, setCopied] = useState(false)
-
-  function copyNFs() {
-    if (!rota.nfsConcatenadas) return
-    navigator.clipboard.writeText(rota.nfsConcatenadas).catch(() => {})
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
+  const { copied, copy } = useCopyToClipboard()
 
   return (
     <div
@@ -66,33 +51,7 @@ function DetalheModal({ rota, onClose }: { rota: Rota; onClose: () => void }) {
           )}
 
           {rota.notasFiscais.length > 0 ? (
-            <table className="w-full border-collapse text-[11px]">
-              <thead>
-                <tr className="bg-page">
-                  {['Nº NFS', 'Cond', 'Destinatário', 'Município / Bairro', 'Peso', 'Tipo'].map(h => (
-                    <th key={h} className="text-left px-2 py-1.5 text-[10px] text-muted font-medium border-b border-[0.5px] border-[var(--border-subtle)]">
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {rota.notasFiscais.map((nf, i) => (
-                  <tr key={nf.id} className={i % 2 === 0 ? 'bg-white dark:bg-[#1E1E1C]' : 'bg-page'}>
-                    <td className="px-2 py-[5px] border-b border-[0.5px] border-[var(--border-faint)] font-mono">{nf.numnfs}</td>
-                    <td className="px-2 py-[5px] border-b border-[0.5px] border-[var(--border-faint)]"><CondDot cond={nf.cond} label /></td>
-                    <td className="px-2 py-[5px] border-b border-[0.5px] border-[var(--border-faint)] max-w-[160px] truncate">{nf.destinatario}</td>
-                    <td className="px-2 py-[5px] border-b border-[0.5px] border-[var(--border-faint)] text-muted">{nf.municipio} / {nf.bairro}</td>
-                    <td className="px-2 py-[5px] border-b border-[0.5px] border-[var(--border-faint)] whitespace-nowrap">{nf.peso}kg</td>
-                    <td className="px-2 py-[5px] border-b border-[0.5px] border-[var(--border-faint)]">
-                      <span className={cn('text-[10px] px-1.5 py-px rounded-full font-medium', TIPO_CLASSES[nf.tipoCliente] ?? TIPO_DEFAULT)}>
-                        {nf.tipoCliente}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <NotasFiscaisTable notas={rota.notasFiscais} />
           ) : (
             <p className="text-xs text-muted text-center py-6">Detalhes das NFs não disponíveis para este registro.</p>
           )}
@@ -101,7 +60,9 @@ function DetalheModal({ rota, onClose }: { rota: Rota; onClose: () => void }) {
         {/* Footer */}
         <div className="px-5 py-3 border-t border-[0.5px] border-[var(--border-subtle)] flex gap-2 justify-end shrink-0">
           {rota.nfsConcatenadas && (
-            <Btn size="sm" onClick={copyNFs}>{copied ? '✓ Copiado!' : 'Copiar NFs (;)'}</Btn>
+            <Btn size="sm" onClick={() => copy(rota.nfsConcatenadas!)}>
+              {copied ? '✓ Copiado!' : 'Copiar NFs (;)'}
+            </Btn>
           )}
           {rota.linkMaps && (
             <Btn size="sm" onClick={() => window.open(rota.linkMaps, '_blank')}>

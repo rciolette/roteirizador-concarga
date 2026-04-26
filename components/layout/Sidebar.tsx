@@ -2,10 +2,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
-
-function cn(...cls: (string | false | undefined | null)[]) {
-  return cls.filter(Boolean).join(' ')
-}
+import { cn } from '@/lib/utils'
 
 const navItems = [
   {
@@ -19,7 +16,7 @@ const navItems = [
   {
     section: 'Sistema',
     items: [
-      { href: '/acoes',         label: 'Revisão de ações' },
+      { href: '/rotas/acoes',    label: 'Aprovações' },
       { href: '/configuracoes', label: 'Configurações' },
     ],
   },
@@ -44,7 +41,7 @@ const icons: Record<string, ReactNode> = {
       <circle cx="8" cy="8" r="6"/><path d="M8 5v3l2.5 2"/>
     </svg>
   ),
-  '/acoes': (
+  '/rotas/acoes': (
     <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
       <path d="M2 4h12M4 8h8M6 12h4"/>
     </svg>

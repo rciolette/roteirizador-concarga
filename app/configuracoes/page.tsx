@@ -1,13 +1,11 @@
 'use client'
 import { useState } from 'react'
-import { Topbar, Card, CardHeader, Btn, ImportBar } from '@/components/ui'
+import { Topbar, Card, CardHeader, Btn, ImportBar, TextInput, TextArea } from '@/components/ui'
+import { ImportarSIATButton } from '@/components/ui/ImportarSIATButton'
 import { DEFAULT_CONFIG } from '@/lib/data'
 import { AppConfig, InstrucaoRota } from '@/types'
-import { useImport } from '@/lib/useImport'
-
-function cn(...cls: (string | false | undefined | null)[]) {
-  return cls.filter(Boolean).join(' ')
-}
+import { useImport } from '@/lib/hooks'
+import { cn } from '@/lib/utils'
 
 const DIAS = ['seg', 'ter', 'qua', 'qui', 'sex', 'sab'] as const
 const DIAS_LABELS = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
@@ -19,14 +17,6 @@ const PRIORIDADES = [
   'Clientes COND Laranja',
   'Varejo por data de chegada',
 ]
-
-const inputCls = [
-  'w-full h-8 border border-[0.5px] border-[var(--border-input)] rounded-lg',
-  'bg-page px-3 text-xs text-base outline-none',
-  'focus:border-primary dark:focus:bg-cream transition-colors',
-].join(' ')
-
-const monoInputCls = inputCls + ' font-mono text-[11px]'
 
 function Label({ children }: { children: React.ReactNode }) {
   return <label className="block text-[11px] text-muted mb-1">{children}</label>
@@ -77,12 +67,7 @@ export default function ConfiguracoesPage() {
   return (
     <>
       <Topbar title="Configurações" sub="Conexão, regras, frota e instruções da IA">
-        <Btn variant="teal" onClick={imp.runImport} disabled={imp.running}>
-          <svg className="w-[13px] h-[13px]" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <path d="M8 2v8M5 7l3 3 3-3M3 13h10" />
-          </svg>
-          {imp.running ? 'Importando...' : 'Testar e importar SIAT'}
-        </Btn>
+        <ImportarSIATButton onClick={imp.runImport} running={imp.running} label="Testar e importar SIAT" />
         <Btn variant="primary" onClick={handleSave}>
           {saved ? '✓ Salvo!' : 'Salvar configurações'}
         </Btn>
@@ -101,32 +86,29 @@ export default function ConfiguracoesPage() {
             </div>
           </CardHeader>
           <div className="px-4 py-3.5 flex flex-col gap-3">
-            {/* Host + Porta */}
             <div className="grid grid-cols-[1fr_120px] gap-3">
               <div>
                 <Label>Host</Label>
-                <input type="text" value={cfg.sql.host} onChange={e => setSql('host', e.target.value)} className={monoInputCls} />
+                <TextInput mono value={cfg.sql.host} onChange={v => setSql('host', v)} />
               </div>
               <div>
                 <Label>Porta</Label>
-                <input type="text" value={cfg.sql.port} onChange={e => setSql('port', e.target.value)} className={monoInputCls} />
+                <TextInput mono value={cfg.sql.port} onChange={v => setSql('port', v)} />
               </div>
             </div>
-            {/* Banco + Usuário */}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>Banco de dados</Label>
-                <input type="text" value={cfg.sql.database} onChange={e => setSql('database', e.target.value)} className={monoInputCls} />
+                <TextInput mono value={cfg.sql.database} onChange={v => setSql('database', v)} />
               </div>
               <div>
                 <Label>Usuário</Label>
-                <input type="text" value={cfg.sql.user} onChange={e => setSql('user', e.target.value)} className={monoInputCls} />
+                <TextInput mono value={cfg.sql.user} onChange={v => setSql('user', v)} />
               </div>
             </div>
-            {/* Senha */}
             <div className="max-w-xs">
               <Label>Senha</Label>
-              <input type="password" value={cfg.sql.password} onChange={e => setSql('password', e.target.value)} className={monoInputCls} />
+              <TextInput mono type="password" value={cfg.sql.password} onChange={v => setSql('password', v)} />
             </div>
           </div>
         </Card>
@@ -138,12 +120,7 @@ export default function ConfiguracoesPage() {
             <Btn size="sm" onClick={imp.runImport} disabled={imp.running}>Executar agora</Btn>
           </CardHeader>
           <div className="px-4 py-3.5">
-            <textarea
-              value={cfg.sql.script}
-              onChange={e => setSql('script', e.target.value)}
-              rows={10}
-              className="w-full border border-[0.5px] border-[var(--border-input)] rounded-lg bg-page px-3 py-2 text-[10px] text-base leading-relaxed font-mono resize-y outline-none focus:border-primary dark:focus:bg-cream transition-colors min-h-[160px]"
-            />
+            <TextArea mono rows={10} value={cfg.sql.script} onChange={v => setSql('script', v)} />
           </div>
         </Card>
 
@@ -159,12 +136,7 @@ export default function ConfiguracoesPage() {
               ].map(f => (
                 <div key={f.key}>
                   <Label>{f.label}</Label>
-                  <input
-                    type="time"
-                    value={cfg.operacao[f.key]}
-                    onChange={e => setOp(f.key, e.target.value)}
-                    className={cn(inputCls, 'w-[120px]')}
-                  />
+                  <TextInput type="time" value={cfg.operacao[f.key]} onChange={v => setOp(f.key, v)} style={{ width: 120 }} />
                 </div>
               ))}
             </div>
@@ -265,12 +237,7 @@ export default function ConfiguracoesPage() {
             <p className="text-[11px] text-muted mb-2.5">
               Este texto é inserido fixo no system prompt toda vez que o agente gera rotas.
             </p>
-            <textarea
-              value={cfg.instrucaoGlobal}
-              onChange={e => setCfg(p => ({ ...p, instrucaoGlobal: e.target.value }))}
-              rows={5}
-              className="w-full border border-[0.5px] border-[var(--border-input)] rounded-lg bg-page px-3 py-2 text-xs text-base leading-relaxed resize-y outline-none focus:border-primary dark:focus:bg-cream transition-colors"
-            />
+            <TextArea rows={5} value={cfg.instrucaoGlobal} onChange={v => setCfg(p => ({ ...p, instrucaoGlobal: v }))} />
           </div>
         </Card>
 
@@ -284,20 +251,21 @@ export default function ConfiguracoesPage() {
             {cfg.instrucoesPorRota.map(ir => (
               <div key={ir.id} className="flex gap-2 items-start">
                 <div className="w-[140px] shrink-0">
-                  <input
+                  <TextInput
+                    mono
                     value={ir.codigoRota}
-                    onChange={e => updateInstrucaoRota(ir.id, 'codigoRota', e.target.value)}
+                    onChange={v => updateInstrucaoRota(ir.id, 'codigoRota', v)}
                     placeholder="Código da rota"
-                    className={monoInputCls + ' w-full'}
                   />
                 </div>
-                <textarea
-                  value={ir.instrucao}
-                  onChange={e => updateInstrucaoRota(ir.id, 'instrucao', e.target.value)}
-                  placeholder="Instrução específica para esta rota..."
-                  rows={2}
-                  className="flex-1 border border-[0.5px] border-[var(--border-input)] rounded-lg bg-page px-3 py-1.5 text-xs text-base outline-none focus:border-primary dark:focus:bg-cream transition-colors resize-y min-h-[60px]"
-                />
+                <div className="flex-1">
+                  <TextArea
+                    rows={2}
+                    value={ir.instrucao}
+                    onChange={v => updateInstrucaoRota(ir.id, 'instrucao', v)}
+                    placeholder="Instrução específica para esta rota..."
+                  />
+                </div>
                 <button
                   onClick={() => removeInstrucaoRota(ir.id)}
                   className="mt-1 bg-transparent border-none cursor-pointer text-muted text-xl leading-none px-1 hover:text-danger transition-colors shrink-0"

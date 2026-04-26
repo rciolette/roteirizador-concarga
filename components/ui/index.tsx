@@ -1,11 +1,7 @@
 'use client'
 import type { ReactNode, CSSProperties } from 'react'
 import { RouteStatus, CondStatus } from '@/types'
-import { formatPeso } from '@/lib/data'
-
-function cn(...cls: (string | false | undefined | null)[]) {
-  return cls.filter(Boolean).join(' ')
-}
+import { cn, formatPeso } from '@/lib/utils'
 
 // ── Topbar ───────────────────────────────────────────────────────────────────
 export function Topbar({ title, sub, children }: { title: string; sub?: string; children?: ReactNode }) {

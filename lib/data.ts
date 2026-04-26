@@ -1,26 +1,5 @@
 import { Rota, DashboardMetrics, NotaFiscal, Veiculo, Motorista, AppConfig } from '@/types'
 
-export function cn(...classes: (string | undefined | null | false)[]): string {
-  return classes.filter(Boolean).join(' ')
-}
-
-export function formatPeso(kg: number): string {
-  if (kg >= 1000) return `${(kg / 1000).toFixed(1)}t`
-  return `${kg}kg`
-}
-
-export function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
-}
-
-export function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('pt-BR')
-}
-
-export function getPesoPercent(peso: number, capacidade: number): number {
-  return Math.round((peso / capacidade) * 100)
-}
-
 export const MOCK_VEICULOS: Veiculo[] = [
   { id: 'v1', placa: 'ABC-1234', modelo: 'Ford Cargo', tipo: 'Truck', capacidadeKg: 6000, sigla: 'LT1', status: 'disponivel', regiaoPreferencial: 'Barreiro' },
   { id: 'v2', placa: 'DEF-5678', modelo: 'VW Delivery', tipo: 'VUC', capacidadeKg: 1500, sigla: 'ED', status: 'disponivel', regiaoPreferencial: 'Leste' },

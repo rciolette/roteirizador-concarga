@@ -1,15 +1,37 @@
 'use client'
 import { useState } from 'react'
 import {
-  Topbar, Card, Btn, StatusPill, CondDot, WeightBar,
-  ImportBar, ConfirmDialog, ConfirmAction,
+  Topbar, Card, CardHeader, Btn, StatusPill, WeightBar,
+  ImportBar, ConfirmDialog, ConfirmAction, TextArea, Select,
 } from '@/components/ui'
-import { MOCK_ROTAS, ROTAS_GERADAS_IA, formatPeso } from '@/lib/data'
+import { NotasFiscaisTable } from '@/components/ui/NotasFiscaisTable'
+import { ImportarSIATButton } from '@/components/ui/ImportarSIATButton'
+import { MOCK_ROTAS, ROTAS_GERADAS_IA } from '@/lib/data'
+import { cn, formatPeso } from '@/lib/utils'
+import { useCopyToClipboard, useImport } from '@/lib/hooks'
 import { Rota, RouteStatus } from '@/types'
-import { useImport } from '@/lib/useImport'
 
-function cn(...cls: (string | false | undefined | null)[]) {
-  return cls.filter(Boolean).join(' ')
+// ── Log de sessão ─────────────────────────────────────────────────────────────
+type LogEntry = {
+  id: string
+  ts: string
+  tipo: 'aprovacao' | 'rejeicao' | 'envio' | 'geracao'
+  rota: string
+  descricao: string
+}
+
+const TIPO_LABELS: Record<LogEntry['tipo'], string> = {
+  aprovacao: 'Aprovação de rota',
+  rejeicao:  'Rejeição de rota',
+  envio:     'Envio ao motorista',
+  geracao:   'Geração por IA',
+}
+
+const TIPO_PILL: Record<LogEntry['tipo'], string> = {
+  aprovacao: 'bg-success-bg text-success-dark',
+  rejeicao:  'bg-danger-bg text-danger',
+  envio:     'bg-primary-bg text-primary-dark',
+  geracao:   'bg-purple-bg text-purple',
 }
 
 const STATUS_FILTERS: { label: string; value: RouteStatus | 'todos' }[] = [
@@ -20,13 +42,6 @@ const STATUS_FILTERS: { label: string; value: RouteStatus | 'todos' }[] = [
   { label: 'Rascunho',   value: 'rascunho' },
 ]
 
-const TIPO_CLASSES: Record<string, string> = {
-  CD:        'bg-primary-bg text-primary-dark',
-  Rede:      'bg-purple-bg text-purple',
-  Reentrega: 'bg-warn-bg text-warn',
-}
-const TIPO_DEFAULT = 'bg-cream text-mid'
-
 // ── Gerar Rotas Dialog ────────────────────────────────────────────────────────
 function GerarRotasDialog({ onClose, onConfirm }: { onClose: () => void; onConfirm: () => void }) {
   const [form, setForm] = useState({
@@ -34,12 +49,6 @@ function GerarRotasDialog({ onClose, onConfirm }: { onClose: () => void; onConfi
     restricoesExtras: '', prioridade: 'padrao',
   })
   const set = (k: string, v: string) => setForm(p => ({ ...p, [k]: v }))
-
-  const inputCls = cn(
-    'w-full border border-[0.5px] border-[var(--border-input)] rounded-lg bg-page',
-    'px-[11px] py-[7px] text-xs text-base font-sans resize-y outline-none',
-    'focus:border-primary transition-colors duration-100',
-  )
 
   return (
     <div className="absolute inset-0 bg-black/55 flex items-center justify-center z-50 rounded-lg">
@@ -57,32 +66,23 @@ function GerarRotasDialog({ onClose, onConfirm }: { onClose: () => void; onConfi
         ].map(f => (
           <div key={f.key} className="mb-2.5">
             <label className="block text-[11px] text-muted mb-1">{f.label}</label>
-            <textarea
+            <TextArea
               value={(form as Record<string, string>)[f.key]}
-              onChange={e => set(f.key, e.target.value)}
+              onChange={v => set(f.key, v)}
               placeholder={f.ph}
               rows={2}
-              className={inputCls}
             />
           </div>
         ))}
 
         <div className="mb-2.5">
           <label className="block text-[11px] text-muted mb-1">Prioridade especial</label>
-          <select
-            value={form.prioridade}
-            onChange={e => set('prioridade', e.target.value)}
-            className={cn(
-              'w-full h-8 border border-[0.5px] border-[var(--border-input)] rounded-lg bg-page',
-              'px-[11px] text-xs text-base font-sans outline-none cursor-pointer',
-              'focus:border-primary transition-colors duration-100',
-            )}
-          >
+          <Select value={form.prioridade} onChange={v => set('prioridade', v)}>
             <option value="padrao">Padrão (agendados → SAC → varejo → data)</option>
             <option value="vermelho">Forçar prioridade Vermelho primeiro</option>
             <option value="menos-veiculos">Priorizar menor número de veículos</option>
             <option value="menor-distancia">Priorizar menor distância total</option>
-          </select>
+          </Select>
         </div>
 
         <div className="flex gap-2 justify-end mt-4">
@@ -114,24 +114,20 @@ function RouteCard({ rota, onUpdateStatus, onAskConfirm }: {
   onAskConfirm: (action: ConfirmAction, execute: () => void) => void
 }) {
   const [expanded, setExpanded] = useState(false)
-  const [copied,   setCopied]   = useState(false)
+  const { copied, copy } = useCopyToClipboard()
   const capacidade = rota.veiculo?.capacidadeKg || 1500
-
-  function copyNFs() {
-    if (!rota.nfsConcatenadas) return
-    navigator.clipboard.writeText(rota.nfsConcatenadas).catch(() => {})
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
 
   const avatarCls = AVATAR_CLS[rota.id.charCodeAt(1) % 5]
   const initials  = rota.motorista?.sigla || '??'
 
   const detalhes = [
-    { label: 'Motorista', value: rota.motorista?.nome ?? '—' },
-    { label: 'Veículo',   value: `${rota.veiculo?.tipo} · ${rota.veiculo?.placa}` },
-    { label: 'Peso',      value: formatPeso(rota.pesoTotal) },
-    { label: 'NFs',       value: `${rota.qtdNotas} notas` },
+    { label: 'Código da rota',   value: rota.codigoRota },
+    { label: 'Região',           value: rota.regiao },
+    { label: 'Motorista',        value: rota.motorista?.nome ?? '—' },
+    { label: 'Veículo',          value: `${rota.veiculo?.tipo ?? '—'} · ${rota.veiculo?.placa ?? '—'}` },
+    { label: 'Peso total',       value: formatPeso(rota.pesoTotal) },
+    { label: 'Qtd. NFs',         value: `${rota.qtdNotas} notas fiscais` },
+    { label: 'NFs concatenadas', value: rota.nfsConcatenadas ?? '—' },
   ]
 
   return (
@@ -177,37 +173,7 @@ function RouteCard({ rota, onUpdateStatus, onAskConfirm }: {
       {expanded && (
         <div className="animate-fade-in border-t border-[0.5px] border-[var(--border-subtle)] bg-page px-3.5 py-3">
           {rota.notasFiscais.length > 0 ? (
-            <table className="w-full border-collapse text-[11px]" style={{ tableLayout: 'fixed' }}>
-              <thead>
-                <tr>
-                  {['Nº NFS', 'Cond', 'Destinatário', 'Município', 'Peso', 'Tipo'].map((h, i) => (
-                    <th
-                      key={h}
-                      className="text-left text-[10px] text-muted font-medium px-1.5 py-1 border-b border-[0.5px] border-[var(--border-subtle)]"
-                      style={{ width: i === 0 ? 68 : i === 1 ? 60 : i === 3 ? 90 : i === 4 ? 55 : i === 5 ? 58 : undefined }}
-                    >
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {rota.notasFiscais.map(nf => (
-                  <tr key={nf.id}>
-                    <td className="px-1.5 py-1 border-b border-[0.5px] border-[var(--border-faint)] font-mono">{nf.numnfs}</td>
-                    <td className="px-1.5 py-1 border-b border-[0.5px] border-[var(--border-faint)]"><CondDot cond={nf.cond} label /></td>
-                    <td className="px-1.5 py-1 border-b border-[0.5px] border-[var(--border-faint)] truncate">{nf.destinatario}</td>
-                    <td className="px-1.5 py-1 border-b border-[0.5px] border-[var(--border-faint)] truncate">{nf.municipio}</td>
-                    <td className="px-1.5 py-1 border-b border-[0.5px] border-[var(--border-faint)] whitespace-nowrap">{nf.peso}kg</td>
-                    <td className="px-1.5 py-1 border-b border-[0.5px] border-[var(--border-faint)]">
-                      <span className={cn('text-[10px] px-1.5 py-px rounded-full font-medium', TIPO_CLASSES[nf.tipoCliente] ?? TIPO_DEFAULT)}>
-                        {nf.tipoCliente}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <NotasFiscaisTable notas={rota.notasFiscais} compact />
           ) : (
             <p className="text-[11px] text-muted py-1">
               {rota.status === 'enviada'
@@ -227,7 +193,9 @@ function RouteCard({ rota, onUpdateStatus, onAskConfirm }: {
             </Btn>
             {rota.status !== 'enviada' && <Btn size="sm">Editar NFs</Btn>}
             {rota.nfsConcatenadas && (
-              <Btn size="sm" onClick={copyNFs}>{copied ? '✓ Copiado!' : 'Copiar NFs (;)'}</Btn>
+              <Btn size="sm" onClick={() => copy(rota.nfsConcatenadas!)}>
+                {copied ? '✓ Copiado!' : 'Copiar NFs (;)'}
+              </Btn>
             )}
 
             <div className="ml-auto flex gap-1.5">
@@ -260,7 +228,6 @@ function RouteCard({ rota, onUpdateStatus, onAskConfirm }: {
                   details: [
                     ...detalhes,
                     { label: 'Telefone', value: rota.motorista?.telefone ?? '—' },
-                    { label: 'NFs',      value: rota.nfsConcatenadas ?? `${rota.qtdNotas} notas` },
                   ],
                   confirmLabel: 'Confirmar envio',
                   confirmVariant: 'primary',
@@ -298,11 +265,20 @@ export default function RotasPage() {
   const [showDialog,     setShowDialog]     = useState(false)
   const [generating,     setGenerating]     = useState(false)
   const [toast,          setToast]          = useState('')
+  const [log,            setLog]            = useState<LogEntry[]>([])
   const [pendingConfirm, setPendingConfirm] = useState<{ action: ConfirmAction; execute: () => void } | null>(null)
   const imp = useImport()
 
   const filtered  = filter === 'todos' ? routes : routes.filter(r => r.status === filter)
   const pendentes = routes.filter(r => r.status === 'aguardando').length
+
+  function addLog(tipo: LogEntry['tipo'], rota: string, descricao: string) {
+    setLog(prev => [{
+      tipo, rota, descricao,
+      id: Date.now().toString(),
+      ts: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+    }, ...prev])
+  }
 
   function showToast(msg: string) {
     setToast(msg)
@@ -324,6 +300,13 @@ export default function RotasPage() {
         aguardando: `Rota ${rota.codigoRota} submetida para aprovação`,
       }
       showToast(msgs[status] || '')
+
+      if (status === 'aprovada')
+        addLog('aprovacao', rota.codigoRota, `Rota aprovada · ${rota.motorista?.nome} · ${formatPeso(rota.pesoTotal)}`)
+      else if (status === 'rascunho')
+        addLog('rejeicao', rota.codigoRota, 'Rota rejeitada · devolvida para rascunho')
+      else if (status === 'enviada')
+        addLog('envio', rota.codigoRota, `Enviado para ${rota.motorista?.nome} · ${rota.motorista?.telefone}`)
     }
   }
 
@@ -340,6 +323,7 @@ export default function RotasPage() {
       })
       showToast(`✓ IA gerou ${ROTAS_GERADAS_IA.length} novas rotas — aguardando aprovação`)
       setFilter('aguardando')
+      addLog('geracao', '—', `IA gerou ${ROTAS_GERADAS_IA.length} novas rotas — aguardando aprovação`)
     }, 3500)
   }
 
@@ -351,12 +335,7 @@ export default function RotasPage() {
         title="Rotas do dia"
         sub={`${routes.length} rotas · ${routes.reduce((a, r) => a + r.qtdNotas, 0)} NFs · ${new Date().toLocaleDateString('pt-BR')}`}
       >
-        <Btn variant="teal" onClick={imp.runImport} disabled={imp.running}>
-          <svg className="w-[13px] h-[13px]" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <path d="M8 2v8M5 7l3 3 3-3M3 13h10"/>
-          </svg>
-          {imp.running ? 'Atualizando...' : 'Atualizar SIAT'}
-        </Btn>
+        <ImportarSIATButton onClick={imp.runImport} running={imp.running} label="Atualizar SIAT" loadingLabel="Atualizando..." />
 
         <select
           value={filter}
@@ -421,6 +400,27 @@ export default function RotasPage() {
 
         {filtered.length === 0 && (
           <div className="text-center py-10 text-muted text-[13px]">Nenhuma rota com este filtro.</div>
+        )}
+
+        {/* Log de sessão */}
+        {log.length > 0 && (
+          <Card>
+            <CardHeader>
+              <span className="text-xs font-medium">Log desta sessão</span>
+              <Btn size="sm" onClick={() => setLog([])}>Limpar</Btn>
+            </CardHeader>
+            <div className="flex flex-col">
+              {log.map((entry, i) => (
+                <div key={entry.id} className={cn('flex items-center gap-2.5 px-4 py-2.5', i < log.length - 1 && 'border-b border-[0.5px] border-[var(--border-faint)]')}>
+                  <span className={cn('text-[10px] font-medium px-2 py-px rounded-full whitespace-nowrap shrink-0', TIPO_PILL[entry.tipo])}>
+                    {TIPO_LABELS[entry.tipo]}
+                  </span>
+                  <span className="text-[11px] flex-1 text-mid">{entry.descricao}</span>
+                  <span className="text-[10px] text-subtle shrink-0 font-mono">{entry.ts}</span>
+                </div>
+              ))}
+            </div>
+          </Card>
         )}
       </div>
 
