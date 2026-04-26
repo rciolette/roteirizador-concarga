@@ -73,7 +73,8 @@ export default function ConfiguracoesPage() {
         </Btn>
       </Topbar>
 
-      <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-4">
+      <div className="flex-1 overflow-y-auto">
+      <div className="px-5 py-5 flex flex-col gap-6">
         <ImportBar running={imp.running} step={imp.step} progress={imp.progress} result={imp.result} onClose={imp.reset} />
 
         {/* ── Conexão SQL ── */}
@@ -280,6 +281,7 @@ export default function ConfiguracoesPage() {
           </div>
         </Card>
 
+      </div>
       </div>
     </>
   )
