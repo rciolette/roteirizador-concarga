@@ -6,6 +6,7 @@ import {
 } from '@/components/ui'
 import { NotasFiscaisTable } from '@/components/ui/NotasFiscaisTable'
 import { ImportarSIATButton } from '@/components/ui/ImportarSIATButton'
+import { SiatImportDialog } from '@/components/ui/SiatImportDialog'
 import { MOCK_ROTAS, ROTAS_GERADAS_IA } from '@/lib/data'
 import { cn, formatPeso } from '@/lib/utils'
 import { useCopyToClipboard, useImport } from '@/lib/hooks'
@@ -267,6 +268,7 @@ export default function RotasPage() {
   const [toast,          setToast]          = useState('')
   const [log,            setLog]            = useState<LogEntry[]>([])
   const [pendingConfirm, setPendingConfirm] = useState<{ action: ConfirmAction; execute: () => void } | null>(null)
+  const [importDialog,   setImportDialog]   = useState(false)
   const imp = useImport()
 
   const filtered  = filter === 'todos' ? routes : routes.filter(r => r.status === filter)
@@ -336,7 +338,7 @@ export default function RotasPage() {
         title="Rotas do dia"
         sub={`${routes.length} rotas · ${routes.reduce((a, r) => a + r.qtdNotas, 0)} NFs · ${new Date().toLocaleDateString('pt-BR')}`}
       >
-        <ImportarSIATButton onClick={imp.runImport} running={imp.running} label="Atualizar SIAT" loadingLabel="Atualizando..." />
+        <ImportarSIATButton onClick={() => setImportDialog(true)} running={imp.running} label="Atualizar SIAT" loadingLabel="Atualizando..." />
 
         <select
           value={filter}
@@ -427,6 +429,13 @@ export default function RotasPage() {
       </div>
 
       {showDialog && <GerarRotasDialog onClose={() => setShowDialog(false)} onConfirm={handleConfirm} />}
+
+      {importDialog && (
+        <SiatImportDialog
+          onClose={() => setImportDialog(false)}
+          onConfirm={f => { setImportDialog(false); imp.runImport(f) }}
+        />
+      )}
 
       {pendingConfirm && (
         <ConfirmDialog

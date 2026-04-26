@@ -1,5 +1,12 @@
 'use client'
 import { useState, useCallback } from 'react'
+import {
+  normalizeSiatPayload,
+  summarizeSiat,
+  type SiatRow,
+  type SiatFilters,
+  type SiatSummary,
+} from '@/lib/siat'
 
 export function useCopyToClipboard(timeout = 2000) {
   const [copied, setCopied] = useState(false)
@@ -11,55 +18,71 @@ export function useCopyToClipboard(timeout = 2000) {
   return { copied, copy }
 }
 
-interface ImportState {
-  running: boolean
-  step: string
-  progress: number
-  result?: { nfs: number; peso: number; veiculos: number }
-  error?: string
+export interface ImportResult {
+  nfs:      number  // back-compat: total de NFs únicas (= summary.totalNFs)
+  peso:     number  // back-compat: peso em toneladas (= summary.pesoTotalToneladas)
+  veiculos: number  // back-compat: veículos únicos (= summary.veiculosUnicos)
+  rows:     SiatRow[]
+  summary:  SiatSummary
 }
 
-const STEPS = [
-  { progress: 5,   step: 'Conectando ao SIAT...' },
-  { progress: 20,  step: 'Autenticando usuário SIAT_BI...' },
-  { progress: 38,  step: 'Executando query SQL...' },
-  { progress: 56,  step: 'Lendo notas fiscais pendentes...' },
-  { progress: 72,  step: 'Importando frota e motoristas...' },
-  { progress: 88,  step: 'Salvando no Supabase...' },
-  { progress: 100, step: 'Importação concluída com sucesso' },
-]
+interface ImportState {
+  running:  boolean
+  step:     string
+  progress: number
+  result?:  ImportResult
+  error?:   string
+}
 
 export function useImport() {
   const [state, setState] = useState<ImportState>({
-    running: false, step: '', progress: 0
+    running: false, step: '', progress: 0,
   })
 
-  const runImport = useCallback(() => {
-    setState({ running: true, step: STEPS[0].step, progress: STEPS[0].progress })
+  const runImport = useCallback(async (filters: SiatFilters = {}) => {
+    setState({ running: true, step: 'Conectando ao SIAT via n8n...', progress: 15 })
 
-    let i = 1
-    const next = () => {
-      if (i >= STEPS.length) return
-      const delay = 400 + Math.random() * 400
-      setTimeout(() => {
-        const s = STEPS[i]
-        setState(prev => ({ ...prev, step: s.step, progress: s.progress }))
-        if (s.progress >= 100) {
-          setTimeout(() => {
-            setState({
-              running: false,
-              step: 'Importação concluída com sucesso',
-              progress: 100,
-              result: { nfs: 418, peso: 64.1, veiculos: 43 }
-            })
-          }, 300)
-          return
-        }
-        i++
-        next()
-      }, delay)
+    try {
+      setState(prev => ({ ...prev, step: 'Executando query SQL no SIAT...', progress: 40 }))
+
+      const res = await fetch('/api/siat', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(filters),
+      })
+
+      setState(prev => ({ ...prev, step: 'Processando resposta...', progress: 75 }))
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || `HTTP ${res.status}`)
+      }
+
+      const raw     = await res.json()
+      const rows    = normalizeSiatPayload(raw)
+      const summary = summarizeSiat(rows)
+
+      setState({
+        running:  false,
+        step:     `Importação concluída · ${summary.totalNFs} NFs · ${summary.veiculosUnicos} veículos`,
+        progress: 100,
+        result: {
+          nfs:      summary.totalNFs,
+          peso:     summary.pesoTotalToneladas,
+          veiculos: summary.veiculosUnicos,
+          rows,
+          summary,
+        },
+      })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'erro desconhecido'
+      setState({
+        running:  false,
+        step:     `Falha: ${message}`,
+        progress: 0,
+        error:    message,
+      })
     }
-    next()
   }, [])
 
   const reset = useCallback(() => {

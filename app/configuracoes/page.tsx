@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import { Topbar, Card, CardHeader, Btn, ImportBar, TextInput, TextArea } from '@/components/ui'
 import { ImportarSIATButton } from '@/components/ui/ImportarSIATButton'
+import { SiatImportDialog } from '@/components/ui/SiatImportDialog'
 import { DEFAULT_CONFIG } from '@/lib/data'
 import { AppConfig, InstrucaoRota } from '@/types'
 import { useImport } from '@/lib/hooks'
@@ -25,6 +26,7 @@ function Label({ children }: { children: React.ReactNode }) {
 export default function ConfiguracoesPage() {
   const [cfg, setCfg] = useState<AppConfig>(DEFAULT_CONFIG)
   const [saved, setSaved] = useState(false)
+  const [importDialog, setImportDialog] = useState(false)
   const imp = useImport()
 
   const setSql = (k: keyof AppConfig['sql'], v: string) =>
@@ -69,7 +71,7 @@ export default function ConfiguracoesPage() {
       {/* Topbar fica sticky enquanto o main rola */}
       <div className="sticky top-0 z-10">
         <Topbar title="Configurações" sub="Conexão, regras, frota e instruções da IA">
-          <ImportarSIATButton onClick={imp.runImport} running={imp.running} label="Testar e importar SIAT" />
+          <ImportarSIATButton onClick={() => setImportDialog(true)} running={imp.running} label="Testar e importar SIAT" />
           <Btn variant="primary" onClick={handleSave}>
             {saved ? '✓ Salvo!' : 'Salvar configurações'}
           </Btn>
@@ -86,7 +88,7 @@ export default function ConfiguracoesPage() {
             <span className="text-xs font-medium">Conexão SQL — SIAT</span>
             <div className="flex gap-2 items-center">
               {imp.result && <span className="text-[11px] text-success">conexão ok</span>}
-              <Btn size="sm" onClick={imp.runImport} disabled={imp.running}>Testar conexão</Btn>
+              <Btn size="sm" onClick={() => imp.runImport()} disabled={imp.running}>Testar conexão</Btn>
             </div>
           </CardHeader>
           <div className="px-4 py-4 flex flex-col gap-3">
@@ -121,7 +123,7 @@ export default function ConfiguracoesPage() {
         <Card>
           <CardHeader>
             <span className="text-xs font-medium">Script SQL — query de importação</span>
-            <Btn size="sm" onClick={imp.runImport} disabled={imp.running}>Executar agora</Btn>
+            <Btn size="sm" onClick={() => imp.runImport()} disabled={imp.running}>Executar agora</Btn>
           </CardHeader>
           <div className="px-4 py-4">
             <TextArea mono rows={12} className="min-h-[200px]" value={cfg.sql.script} onChange={v => setSql('script', v)} />
@@ -285,6 +287,13 @@ export default function ConfiguracoesPage() {
         </Card>
 
       </div>
+
+      {importDialog && (
+        <SiatImportDialog
+          onClose={() => setImportDialog(false)}
+          onConfirm={f => { setImportDialog(false); imp.runImport(f) }}
+        />
+      )}
     </div>
   )
 }

@@ -1,7 +1,9 @@
 'use client'
+import { useState } from 'react'
 import Link from 'next/link'
 import { Topbar, MetricCard, Card, CardHeader, Btn, ImportBar } from '@/components/ui'
 import { ImportarSIATButton } from '@/components/ui/ImportarSIATButton'
+import { SiatImportDialog } from '@/components/ui/SiatImportDialog'
 import { MOCK_METRICS } from '@/lib/data'
 import { formatPeso } from '@/lib/utils'
 import { useImport } from '@/lib/hooks'
@@ -9,6 +11,7 @@ import { useImport } from '@/lib/hooks'
 export default function Page() {
   const imp = useImport()
   const m   = MOCK_METRICS
+  const [importDialog, setImportDialog] = useState(false)
 
   return (
     <div>
@@ -17,7 +20,7 @@ export default function Page() {
           title="Dashboard"
           sub={new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
         >
-          <ImportarSIATButton onClick={imp.runImport} running={imp.running} />
+          <ImportarSIATButton onClick={() => setImportDialog(true)} running={imp.running} />
           <Link href="/configuracoes"><Btn>Configurações</Btn></Link>
           <Link href="/rotas"><Btn variant="primary">+ Gerar rotas</Btn></Link>
         </Topbar>
@@ -130,6 +133,13 @@ export default function Page() {
           </Link>
         </div>
       </div>
+
+      {importDialog && (
+        <SiatImportDialog
+          onClose={() => setImportDialog(false)}
+          onConfirm={f => { setImportDialog(false); imp.runImport(f) }}
+        />
+      )}
     </div>
   )
 }
