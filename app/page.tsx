@@ -11,17 +11,19 @@ export default function Page() {
   const m   = MOCK_METRICS
 
   return (
-    <>
-      <Topbar
-        title="Dashboard"
-        sub={new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-      >
-        <ImportarSIATButton onClick={imp.runImport} running={imp.running} />
-        <Link href="/configuracoes"><Btn>Configurações</Btn></Link>
-        <Link href="/rotas"><Btn variant="primary">+ Gerar rotas</Btn></Link>
-      </Topbar>
+    <div>
+      <div className="sticky top-0 z-10">
+        <Topbar
+          title="Dashboard"
+          sub={new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+        >
+          <ImportarSIATButton onClick={imp.runImport} running={imp.running} />
+          <Link href="/configuracoes"><Btn>Configurações</Btn></Link>
+          <Link href="/rotas"><Btn variant="primary">+ Gerar rotas</Btn></Link>
+        </Topbar>
+      </div>
 
-      <div className="flex-1 overflow-y-auto p-4 px-5 flex flex-col gap-3">
+      <div className="px-5 py-4 flex flex-col gap-3 pb-20">
         <ImportBar running={imp.running} step={imp.step} progress={imp.progress} result={imp.result} onClose={imp.reset} />
 
         {/* Métricas */}
@@ -128,6 +130,6 @@ export default function Page() {
           </Link>
         </div>
       </div>
-    </>
+    </div>
   )
 }

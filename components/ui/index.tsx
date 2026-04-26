@@ -65,7 +65,7 @@ export function Card({ children, style, className }: {
 }) {
   return (
     <div
-      className={cn('bg-white dark:bg-[#1E1E1C] border border-[0.5px] border-[var(--border-card)] rounded-lg overflow-hidden shrink-0', className)}
+      className={cn('bg-white dark:bg-[#1E1E1C] border border-[0.5px] border-[var(--border-card)] rounded-lg overflow-hidden', className)}
       style={style}
     >
       {children}

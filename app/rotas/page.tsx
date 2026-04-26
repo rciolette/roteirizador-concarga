@@ -51,7 +51,7 @@ function GerarRotasDialog({ onClose, onConfirm }: { onClose: () => void; onConfi
   const set = (k: string, v: string) => setForm(p => ({ ...p, [k]: v }))
 
   return (
-    <div className="absolute inset-0 bg-black/55 flex items-center justify-center z-50 rounded-lg">
+    <div className="fixed inset-0 bg-black/55 flex items-center justify-center z-50">
       <div className="animate-fade-in bg-white dark:bg-[#1E1E1C] rounded-xl border border-[0.5px] border-[var(--border-light)] p-6 w-[440px] max-w-[90vw]">
         <div className="text-sm font-medium mb-1">Instrução para o agente de IA</div>
         <div className="text-[11px] text-muted mb-4">
@@ -330,7 +330,8 @@ export default function RotasPage() {
   const toastOk = toast.startsWith('✓')
 
   return (
-    <div className="relative flex-1 flex flex-col overflow-hidden">
+    <div>
+      <div className="sticky top-0 z-10">
       <Topbar
         title="Rotas do dia"
         sub={`${routes.length} rotas · ${routes.reduce((a, r) => a + r.qtdNotas, 0)} NFs · ${new Date().toLocaleDateString('pt-BR')}`}
@@ -360,8 +361,9 @@ export default function RotasPage() {
           <Btn variant="primary" onClick={() => setShowDialog(true)}>+ Gerar rotas</Btn>
         )}
       </Topbar>
+      </div>
 
-      <div className="flex-1 overflow-y-auto p-4 px-5 flex flex-col gap-2.5">
+      <div className="px-5 py-4 flex flex-col gap-2.5 pb-20">
         <ImportBar running={imp.running} step={imp.step} progress={imp.progress} result={imp.result} onClose={imp.reset} />
 
         {toast && (
