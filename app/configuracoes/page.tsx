@@ -29,8 +29,6 @@ export default function ConfiguracoesPage() {
   const [importDialog, setImportDialog] = useState(false)
   const imp = useImport()
 
-  const setSql = (k: keyof AppConfig['sql'], v: string) =>
-    setCfg(p => ({ ...p, sql: { ...p.sql, [k]: v } }))
   const setOp = (k: keyof AppConfig['operacao'], v: string) =>
     setCfg(p => ({ ...p, operacao: { ...p.operacao, [k]: v } }))
   const setPeso = (k: keyof AppConfig['pesos'], v: string) =>
@@ -81,54 +79,6 @@ export default function ConfiguracoesPage() {
       {/* Conteúdo em bloco normal — cresce com o conteúdo, main scrolla */}
       <div className="px-5 py-5 flex flex-col gap-6 pb-20">
         <ImportBar running={imp.running} step={imp.step} progress={imp.progress} result={imp.result} onClose={imp.reset} />
-
-        {/* ── Conexão SQL ── */}
-        <Card>
-          <CardHeader>
-            <span className="text-xs font-medium">Conexão SQL — SIAT</span>
-            <div className="flex gap-2 items-center">
-              {imp.result && <span className="text-[11px] text-success">conexão ok</span>}
-              <Btn size="sm" onClick={() => imp.runImport()} disabled={imp.running}>Testar conexão</Btn>
-            </div>
-          </CardHeader>
-          <div className="px-4 py-4 flex flex-col gap-3">
-            <div className="grid grid-cols-[1fr_120px] gap-3">
-              <div>
-                <Label>Host</Label>
-                <TextInput mono value={cfg.sql.host} onChange={v => setSql('host', v)} />
-              </div>
-              <div>
-                <Label>Porta</Label>
-                <TextInput mono value={cfg.sql.port} onChange={v => setSql('port', v)} />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>Banco de dados</Label>
-                <TextInput mono value={cfg.sql.database} onChange={v => setSql('database', v)} />
-              </div>
-              <div>
-                <Label>Usuário</Label>
-                <TextInput mono value={cfg.sql.user} onChange={v => setSql('user', v)} />
-              </div>
-            </div>
-            <div className="max-w-xs">
-              <Label>Senha</Label>
-              <TextInput mono type="password" value={cfg.sql.password} onChange={v => setSql('password', v)} />
-            </div>
-          </div>
-        </Card>
-
-        {/* ── Script SQL ── */}
-        <Card>
-          <CardHeader>
-            <span className="text-xs font-medium">Script SQL — query de importação</span>
-            <Btn size="sm" onClick={() => imp.runImport()} disabled={imp.running}>Executar agora</Btn>
-          </CardHeader>
-          <div className="px-4 py-4">
-            <TextArea mono rows={12} className="min-h-[200px]" value={cfg.sql.script} onChange={v => setSql('script', v)} />
-          </div>
-        </Card>
 
         {/* ── Horários ── */}
         <Card>

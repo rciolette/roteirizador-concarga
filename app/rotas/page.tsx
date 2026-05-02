@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Topbar, Card, CardHeader, Btn, StatusPill, WeightBar,
   ImportBar, ConfirmDialog, ConfirmAction, TextArea, Select,
@@ -7,7 +7,8 @@ import {
 import { NotasFiscaisTable } from '@/components/ui/NotasFiscaisTable'
 import { ImportarSIATButton } from '@/components/ui/ImportarSIATButton'
 import { SiatImportDialog } from '@/components/ui/SiatImportDialog'
-import { MOCK_ROTAS, ROTAS_GERADAS_IA } from '@/lib/data'
+import { ROTAS_GERADAS_IA } from '@/lib/data'
+import { siatRowsToRotas } from '@/lib/siat'
 import { cn, formatPeso } from '@/lib/utils'
 import { useCopyToClipboard, useImport } from '@/lib/hooks'
 import { Rota, RouteStatus } from '@/types'
@@ -261,7 +262,7 @@ function RouteCard({ rota, onUpdateStatus, onAskConfirm }: {
 
 // ── Rotas Page ────────────────────────────────────────────────────────────────
 export default function RotasPage() {
-  const [routes,         setRoutes]         = useState<Rota[]>(MOCK_ROTAS)
+  const [routes,         setRoutes]         = useState<Rota[]>([])
   const [filter,         setFilter]         = useState<RouteStatus | 'todos'>('todos')
   const [showDialog,     setShowDialog]     = useState(false)
   const [generating,     setGenerating]     = useState(false)
@@ -270,6 +271,13 @@ export default function RotasPage() {
   const [pendingConfirm, setPendingConfirm] = useState<{ action: ConfirmAction; execute: () => void } | null>(null)
   const [importDialog,   setImportDialog]   = useState(false)
   const imp = useImport()
+
+  // Atualiza rotas com dados reais do SIAT após cada importação
+  useEffect(() => {
+    if (imp.result?.rows.length) {
+      setRoutes(siatRowsToRotas(imp.result.rows))
+    }
+  }, [imp.result])
 
   const filtered  = filter === 'todos' ? routes : routes.filter(r => r.status === filter)
   const pendentes = routes.filter(r => r.status === 'aguardando').length
@@ -336,7 +344,9 @@ export default function RotasPage() {
       <div className="sticky top-0 z-10">
       <Topbar
         title="Rotas do dia"
-        sub={`${routes.length} rotas · ${routes.reduce((a, r) => a + r.qtdNotas, 0)} NFs · ${new Date().toLocaleDateString('pt-BR')}`}
+        sub={routes.length
+          ? `${routes.length} rotas · ${routes.reduce((a, r) => a + r.qtdNotas, 0)} NFs · ${new Date().toLocaleDateString('pt-BR')}`
+          : `Importe o SIAT para carregar as rotas de hoje · ${new Date().toLocaleDateString('pt-BR')}`}
       >
         <ImportarSIATButton onClick={() => setImportDialog(true)} running={imp.running} label="Atualizar SIAT" loadingLabel="Atualizando..." />
 
@@ -402,7 +412,18 @@ export default function RotasPage() {
           />
         ))}
 
-        {filtered.length === 0 && (
+        {routes.length === 0 && !imp.running && (
+          <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
+            <svg className="w-8 h-8 text-subtle" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1M16 12l-4-4m0 0l-4 4m4-4v12"/>
+            </svg>
+            <div className="text-sm font-medium">Nenhuma rota carregada</div>
+            <div className="text-[12px] text-muted max-w-xs">Clique em &ldquo;Atualizar SIAT&rdquo; para importar as notas fiscais do dia e gerar as rotas.</div>
+            <Btn onClick={() => setImportDialog(true)}>Importar SIAT agora</Btn>
+          </div>
+        )}
+
+        {routes.length > 0 && filtered.length === 0 && (
           <div className="text-center py-10 text-muted text-[13px]">Nenhuma rota com este filtro.</div>
         )}
 

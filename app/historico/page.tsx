@@ -1,10 +1,13 @@
 'use client'
-import { useState } from 'react'
-import { Topbar, Card, StatusPill, Btn } from '@/components/ui'
+import { useState, useEffect } from 'react'
+import { Topbar, Card, StatusPill, Btn, ImportBar } from '@/components/ui'
+import { ImportarSIATButton } from '@/components/ui/ImportarSIATButton'
+import { SiatImportDialog } from '@/components/ui/SiatImportDialog'
 import { NotasFiscaisTable } from '@/components/ui/NotasFiscaisTable'
 import { HISTORICO_DIAS } from '@/lib/data'
+import { siatRowsToRotas } from '@/lib/siat'
 import { cn, formatPeso } from '@/lib/utils'
-import { useCopyToClipboard } from '@/lib/hooks'
+import { useCopyToClipboard, useImport } from '@/lib/hooks'
 import { Rota } from '@/types'
 
 // ── Detalhe Modal ─────────────────────────────────────────────────────────────
@@ -81,20 +84,50 @@ function DetalheModal({ rota, onClose }: { rota: Rota; onClose: () => void }) {
 }
 
 // ── Historico Page ────────────────────────────────────────────────────────────
+// HISTORICO_DIAS[0] = hoje (dados mock substituídos pelo SIAT após import)
+// Demais dias permanecem como referência histórica até persistência em BD.
+
 export default function HistoricoPage() {
   const [diaIdx,          setDiaIdx]          = useState(0)
   const [rotaSelecionada, setRotaSelecionada] = useState<Rota | null>(null)
+  const [importDialog,    setImportDialog]    = useState(false)
+  const [hojeRotas,       setHojeRotas]       = useState<Rota[] | null>(null)
+  const imp = useImport()
 
-  const dia = HISTORICO_DIAS[diaIdx]
+  // Quando o SIAT é importado, substitui os dados do dia atual
+  useEffect(() => {
+    if (imp.result?.rows.length) {
+      setHojeRotas(siatRowsToRotas(imp.result.rows))
+      setDiaIdx(0)
+    }
+  }, [imp.result])
+
+  const dia      = HISTORICO_DIAS[diaIdx]
+  const isHoje   = diaIdx === 0
+  const itens    = isHoje && hojeRotas ? hojeRotas : dia.items
+  const rotasQtd = isHoje && hojeRotas ? hojeRotas.length        : dia.rotas
+  const nfsQtd   = isHoje && hojeRotas ? hojeRotas.reduce((a, r) => a + r.qtdNotas, 0) : dia.nfs
+  const pesoQtd  = isHoje && hojeRotas ? hojeRotas.reduce((a, r) => a + r.pesoTotal, 0) : dia.peso
 
   return (
     <div>
       <div className="sticky top-0 z-10">
-        <Topbar title="Histórico" sub="Rotas finalizadas por dia" />
+        <Topbar title="Histórico" sub="Rotas finalizadas por dia">
+          <ImportarSIATButton
+            onClick={() => setImportDialog(true)}
+            running={imp.running}
+            label="Importar hoje"
+            loadingLabel="Importando..."
+          />
+        </Topbar>
+      </div>
+
+      <div className="px-5 pt-3">
+        <ImportBar running={imp.running} step={imp.step} progress={imp.progress} result={imp.result} onClose={imp.reset} />
       </div>
 
       {/* Filtros de data */}
-      <div className="flex gap-2 px-5 pt-3 overflow-x-auto pb-px">
+      <div className="flex gap-2 px-5 pt-2 overflow-x-auto pb-px">
         {HISTORICO_DIAS.map((d, i) => (
           <button
             key={d.data}
@@ -107,7 +140,7 @@ export default function HistoricoPage() {
                 : 'bg-white dark:bg-[#1E1E1C] text-base border-[var(--border-mid)] hover:bg-cream',
             )}
           >
-            {d.label}
+            {d.label}{i === 0 && hojeRotas ? ' · SIAT' : ''}
           </button>
         ))}
       </div>
@@ -115,9 +148,9 @@ export default function HistoricoPage() {
       {/* Métricas do dia */}
       <div className="flex gap-3 px-5 py-3">
         {[
-          { label: 'Rotas',  value: dia.rotas },
-          { label: 'NFs',    value: dia.nfs },
-          { label: 'Peso',   value: formatPeso(dia.peso) },
+          { label: 'Rotas', value: rotasQtd },
+          { label: 'NFs',   value: nfsQtd },
+          { label: 'Peso',  value: formatPeso(pesoQtd) },
         ].map(m => (
           <div key={m.label} className="flex-1 bg-white dark:bg-[#1E1E1C] border border-[0.5px] border-[var(--border-card)] rounded-lg px-3.5 py-2.5">
             <div className="text-[11px] text-muted">{m.label}</div>
@@ -140,7 +173,7 @@ export default function HistoricoPage() {
               </tr>
             </thead>
             <tbody>
-              {dia.items.map((rota, i) => (
+              {itens.map((rota, i) => (
                 <tr
                   key={rota.id}
                   onClick={() => setRotaSelecionada(rota)}
@@ -157,10 +190,24 @@ export default function HistoricoPage() {
                   <td className="px-3 py-[7px] border-b border-[0.5px] border-[var(--border-faint)]"><StatusPill status={rota.status} /></td>
                 </tr>
               ))}
+              {itens.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-3 py-8 text-center text-[12px] text-muted">
+                    Importe o SIAT para ver as rotas de hoje.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </Card>
       </div>
+
+      {importDialog && (
+        <SiatImportDialog
+          onClose={() => setImportDialog(false)}
+          onConfirm={f => { setImportDialog(false); imp.runImport(f) }}
+        />
+      )}
 
       {rotaSelecionada && (
         <DetalheModal rota={rotaSelecionada} onClose={() => setRotaSelecionada(null)} />

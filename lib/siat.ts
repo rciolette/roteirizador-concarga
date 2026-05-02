@@ -1,6 +1,8 @@
 // Tipos e utilitários para o payload do webhook n8n Execute-SQL-SIAT.
 // Cada linha do payload combina dados de NF + veículo + motorista (resultado denormalizado do JOIN no SIAT).
 
+import type { Rota, NotaFiscal, Veiculo, Motorista, ClientType } from '@/types'
+
 export interface SiatRow {
   NUMNFS:         number | string | null
   ROTA:           string | null
@@ -57,6 +59,129 @@ export function normalizeSiatPayload(raw: unknown): SiatRow[] {
     return [obj as SiatRow]
   }
   return []
+}
+
+// ── Transformer: SiatRow[] → Rota[] ──────────────────────────────────────────
+// O payload do n8n retorna linhas denormalizadas em dois formatos:
+//   • NF rows:      têm NUMNFS + ROTA, sem Placa
+//   • Vehicle rows: têm Placa + NomeMotorista, sem NUMNFS
+// Agrupamos NFs por ROTA e atribuímos veículos do pool round-robin.
+
+function tipoVeiculoFromSiat(tipo: string | null): Veiculo['tipo'] {
+  if (!tipo) return 'VUC'
+  const t = tipo.toLowerCase()
+  if (t.includes('fiorin'))            return 'Fiorino'
+  if (t.includes('3/4'))              return '3/4'
+  if (t.includes('truck') || t.includes('caminhão')) return 'Truck'
+  if (t.includes('carreta') || t.includes('bitrem')) return 'Carreta'
+  return 'VUC'
+}
+
+function capKgFromSiat(tipo: string | null, raw: number | null): number {
+  // O SIAT retorna CapacidadeKg em toneladas; valores < 100 são inválidos em kg.
+  if (typeof raw === 'number' && raw >= 100) return raw
+  const t = (tipo ?? '').toLowerCase()
+  if (t.includes('fiorin'))   return 700
+  if (t.includes('3/4'))     return 2500
+  if (t.includes('carreta')) return 15000
+  if (t.includes('truck') || t.includes('cam')) return 6000
+  return 1500
+}
+
+export function siatRowsToRotas(rows: SiatRow[]): Rota[] {
+  const today = new Date().toISOString()
+
+  // Separar NF rows (têm NUMNFS e ROTA) de vehicle rows (têm Placa)
+  const nfRows      = rows.filter(r => r.NUMNFS != null && r.ROTA)
+  const veicRows    = rows.filter(r => r.Placa && r.NomeMotorista)
+
+  // Construir pool de veículos únicos por Placa
+  const veiculoMap  = new Map<string, Veiculo>()
+  const motoristaMap = new Map<string, Motorista>()
+
+  for (const vr of veicRows) {
+    if (vr.Placa && !veiculoMap.has(vr.Placa)) {
+      veiculoMap.set(vr.Placa, {
+        id: `v-${vr.Placa}`,
+        placa: vr.Placa,
+        modelo: vr.Modelo ?? '',
+        tipo: tipoVeiculoFromSiat(vr.TipoVeiculo),
+        capacidadeKg: capKgFromSiat(vr.TipoVeiculo, vr.CapacidadeKg),
+        sigla: vr.Placa.replace(/\W/g, '').slice(-4),
+        status: 'disponivel',
+      })
+    }
+    if (vr.CodMotorista && !motoristaMap.has(vr.CodMotorista)) {
+      motoristaMap.set(vr.CodMotorista, {
+        id: `m-${vr.CodMotorista}`,
+        nome: vr.NomeMotorista ?? vr.Motorista ?? vr.CodMotorista,
+        telefone: vr.Celular && vr.Celular !== '-' ? vr.Celular : (vr.Telefone ?? '—'),
+        sigla: vr.CodMotorista.slice(0, 3).toUpperCase(),
+        status: 'disponivel',
+      })
+    }
+  }
+
+  const veiculoList   = Array.from(veiculoMap.values())
+  const motoristaList = Array.from(motoristaMap.values())
+
+  // Agrupar NF rows por ROTA
+  const byRota = new Map<string, SiatRow[]>()
+  for (const row of nfRows) {
+    const rota = String(row.ROTA!)
+    if (!byRota.has(rota)) byRota.set(rota, [])
+    byRota.get(rota)!.push(row)
+  }
+
+  return Array.from(byRota.entries()).map(([codigoRota, rotaRows], idx) => {
+    const veiculo   = veiculoList.length  ? veiculoList[idx % veiculoList.length]   : undefined
+    const motorista = motoristaList.length ? motoristaList[idx % motoristaList.length] : undefined
+
+    // NFs únicas dentro desta rota
+    const nfNums = [...new Set(rotaRows.map(r => String(r.NUMNFS!)))]
+    const pesoTotal = rotaRows.reduce(
+      (acc, r) => acc + (typeof r.PESBRU_NFS === 'number' ? r.PESBRU_NFS : 0), 0,
+    )
+
+    const notasFiscais: NotaFiscal[] = nfNums.map(nf => {
+      const row = rotaRows.find(r => String(r.NUMNFS) === nf)!
+      const tipoCliente: ClientType = row.Situacao === 'REENTREGA' ? 'Reentrega' : 'Varejo'
+      return {
+        id: `nf-${nf}`,
+        numnfs: nf,
+        destinatario: row.CODCLI_CLI || '—',
+        municipio: '—',
+        bairro: '—',
+        endereco: '—',
+        cep: '—',
+        peso: typeof row.PESBRU_NFS === 'number' ? row.PESBRU_NFS : 0,
+        qtd: 1,
+        tipoCliente,
+        cond: 'ok',
+        grade: '—',
+        rota: codigoRota,
+        dataEmissao: row.DATEMI ?? '—',
+        indRee: false,
+      }
+    })
+
+    return {
+      id: `siat-${codigoRota.replace(/\W+/g, '-')}`,
+      data: today,
+      codigoRota,
+      regiao: codigoRota.split(' ').slice(1).join(' ') || codigoRota,
+      status: 'rascunho' as const,
+      veiculo,
+      veiculoId: veiculo?.id,
+      motorista,
+      motoristaId: motorista?.id,
+      pesoTotal,
+      qtdNotas: nfNums.length,
+      notasFiscais,
+      nfsConcatenadas: nfNums.join(';'),
+      createdAt: today,
+    }
+  })
 }
 
 export function summarizeSiat(rows: SiatRow[]): SiatSummary {

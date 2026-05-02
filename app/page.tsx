@@ -33,24 +33,26 @@ export default function Page() {
         <div className="grid grid-cols-4 gap-2">
           <MetricCard
             label="NFs pendentes"
-            value={imp.result ? imp.result.nfs : m.totalNFs}
-            sub={`última import. ${new Date(m.ultimaImportacao!).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`}
+            value={imp.result ? imp.result.summary.totalNFs : m.totalNFs}
+            sub={imp.result
+              ? `${imp.result.summary.rotasUnicas} rotas · ${imp.result.summary.totalLinhas} linhas SIAT`
+              : `última import. ${new Date(m.ultimaImportacao!).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`}
           />
           <MetricCard
             label="Peso total"
-            value={imp.result ? `${imp.result.peso}t` : formatPeso(m.pesoTotal)}
-            sub="capacidade: 71t"
+            value={imp.result ? `${imp.result.summary.pesoTotalToneladas}t` : formatPeso(m.pesoTotal)}
+            sub={imp.result ? `${imp.result.summary.pesoTotalKg.toLocaleString('pt-BR')} kg` : 'capacidade: 71t'}
           />
           <MetricCard
-            label="Veículos disponíveis"
-            value={imp.result ? imp.result.veiculos : m.veiculosDisponiveis}
-            sub={`de ${m.veiculosTotal} ativos`}
+            label="Veículos no SIAT"
+            value={imp.result ? imp.result.summary.veiculosUnicos : m.veiculosDisponiveis}
+            sub={imp.result ? `${imp.result.summary.motoristasUnicos} motoristas` : `de ${m.veiculosTotal} ativos`}
             valueColor="#3B6D11"
           />
           <MetricCard
-            label="Rotas p/ aprovar"
-            value={m.rotasPendentes}
-            sub="aguardando operador"
+            label="Rotas identificadas"
+            value={imp.result ? imp.result.summary.rotasUnicas : m.rotasPendentes}
+            sub={imp.result ? 'do SIAT — aguardando geração' : 'aguardando operador'}
             valueColor="#854F0B"
           />
         </div>
