@@ -7,8 +7,8 @@ import {
 import { NotasFiscaisTable } from '@/components/ui/NotasFiscaisTable'
 import { ImportarSIATButton } from '@/components/ui/ImportarSIATButton'
 import { SiatImportDialog } from '@/components/ui/SiatImportDialog'
-import { ROTAS_GERADAS_IA } from '@/lib/data'
-import { siatRowsToRotas } from '@/lib/siat'
+import { siatRowsToRotas, normalizeSiatPayload } from '@/lib/siat'
+import { webhookGerarRotas, Prioridade } from '@/lib/webhooks'
 import { cn, formatPeso } from '@/lib/utils'
 import { useCopyToClipboard, useImport } from '@/lib/hooks'
 import { Rota, RouteStatus } from '@/types'
@@ -45,8 +45,13 @@ const STATUS_FILTERS: { label: string; value: RouteStatus | 'todos' }[] = [
 ]
 
 // ── Gerar Rotas Dialog ────────────────────────────────────────────────────────
-function GerarRotasDialog({ onClose, onConfirm }: { onClose: () => void; onConfirm: () => void }) {
-  const [form, setForm] = useState({
+type GerarRotasFormState = {
+  observacoes: string; motoristasAusentes: string; veiculosBloqueados: string
+  restricoesExtras: string; prioridade: string
+}
+
+function GerarRotasDialog({ onClose, onConfirm }: { onClose: () => void; onConfirm: (form: GerarRotasFormState) => void }) {
+  const [form, setForm] = useState<GerarRotasFormState>({
     observacoes: '', motoristasAusentes: '', veiculosBloqueados: '',
     restricoesExtras: '', prioridade: 'padrao',
   })
@@ -89,7 +94,7 @@ function GerarRotasDialog({ onClose, onConfirm }: { onClose: () => void; onConfi
 
         <div className="flex gap-2 justify-end mt-4">
           <Btn onClick={onClose}>Cancelar</Btn>
-          <Btn variant="primary" onClick={onConfirm}>
+          <Btn variant="primary" onClick={() => onConfirm(form)}>
             <svg className="w-[13px] h-[13px]" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
               <circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 2"/>
             </svg>
@@ -320,21 +325,39 @@ export default function RotasPage() {
     }
   }
 
-  function handleConfirm() {
+  async function handleConfirm(form: GerarRotasFormState) {
     setShowDialog(false)
     setGenerating(true)
-    setTimeout(() => {
-      setGenerating(false)
+
+    const toList = (s: string) => s.split(',').map(x => x.trim()).filter(Boolean)
+
+    try {
+      const raw   = await webhookGerarRotas({
+        data:               new Date().toISOString().slice(0, 10),
+        observacoes:        form.observacoes,
+        motoristasAusentes: toList(form.motoristasAusentes),
+        veiculosBloqueados: toList(form.veiculosBloqueados),
+        restricoesExtras:   form.restricoesExtras,
+        prioridade:         form.prioridade as Prioridade,
+      })
+      const novas = siatRowsToRotas(normalizeSiatPayload(raw))
       const now   = new Date().toISOString()
-      const novas = ROTAS_GERADAS_IA.map(r => ({ ...r, createdAt: now }))
       setRoutes(prev => {
         const ids = new Set(prev.map(r => r.id))
-        return [...prev, ...novas.filter(r => !ids.has(r.id))]
+        return [...prev, ...novas
+          .filter(r => !ids.has(r.id))
+          .map(r => ({ ...r, status: 'aguardando' as const, createdAt: now }))]
       })
-      showToast(`✓ IA gerou ${ROTAS_GERADAS_IA.length} novas rotas — aguardando aprovação`)
+      showToast(`✓ IA gerou ${novas.length} novas rotas — aguardando aprovação`)
       setFilter('aguardando')
-      addLog('geracao', '—', `IA gerou ${ROTAS_GERADAS_IA.length} novas rotas — aguardando aprovação`)
-    }, 3500)
+      addLog('geracao', '—', `IA gerou ${novas.length} novas rotas — aguardando aprovação`)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'erro desconhecido'
+      showToast(`Falha ao gerar rotas: ${msg}`)
+      addLog('geracao', '—', `Falha na geração por IA: ${msg}`)
+    } finally {
+      setGenerating(false)
+    }
   }
 
   const toastOk = toast.startsWith('✓')

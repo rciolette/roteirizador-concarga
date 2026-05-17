@@ -3,21 +3,35 @@ import type { SiatFilters } from '@/lib/siat'
 const N8N_WEBHOOK = process.env.SIAT_WEBHOOK_URL
   ?? 'https://n8n.rcdigitais.com.br/webhook/Execute-SQL-SIAT'
 
-export async function POST(req: Request) {
-  let filters: SiatFilters = {}
-  try {
-    const body = await req.json()
-    if (body && typeof body === 'object') filters = body as SiatFilters
-  } catch {
-    // body vazio/inválido: segue sem filtros
-  }
+export async function GET(req: Request) {
+  const { searchParams } = new URL(req.url)
+
+  const filters: SiatFilters = {}
+  const dataInicio = searchParams.get('dataInicio')
+  const dataFim    = searchParams.get('dataFim')
+  const situacao   = searchParams.get('situacao')
+  const codigoRota = searchParams.get('codigoRota')
+  const qtdMaxima  = searchParams.get('qtdMaxima')
+
+  if (dataInicio) filters.dataInicio = dataInicio
+  if (dataFim)    filters.dataFim    = dataFim
+  if (situacao)   filters.situacao   = situacao
+  if (codigoRota) filters.codigoRota = codigoRota
+  if (qtdMaxima && Number.isFinite(Number(qtdMaxima))) filters.qtdMaxima = Number(qtdMaxima)
+
+  const qs = new URLSearchParams()
+  if (filters.dataInicio) qs.set('dataInicio', filters.dataInicio)
+  if (filters.dataFim)    qs.set('dataFim',    filters.dataFim)
+  if (filters.situacao)   qs.set('situacao',   filters.situacao)
+  if (filters.codigoRota) qs.set('codigoRota', filters.codigoRota)
+  if (filters.qtdMaxima)  qs.set('qtdMaxima',  String(filters.qtdMaxima))
+
+  const url = qs.size > 0 ? `${N8N_WEBHOOK}?${qs}` : N8N_WEBHOOK
 
   try {
-    const upstream = await fetch(N8N_WEBHOOK, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify(filters),
-      signal:  AbortSignal.timeout(30_000),
+    const upstream = await fetch(url, {
+      method: 'GET',
+      signal: AbortSignal.timeout(30_000),
     })
 
     if (!upstream.ok) {
@@ -29,8 +43,7 @@ export async function POST(req: Request) {
       return Response.json({ error, detail: text.slice(0, 500) }, { status: 502 })
     }
 
-    const data = await upstream.json()
-    return Response.json(data)
+    return Response.json(await upstream.json())
   } catch (err) {
     let error: string
     if (err instanceof Error && err.name === 'AbortError') {

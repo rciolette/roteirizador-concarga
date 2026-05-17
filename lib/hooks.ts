@@ -45,11 +45,15 @@ export function useImport() {
     try {
       setState(prev => ({ ...prev, step: 'Executando query SQL no SIAT...', progress: 40 }))
 
-      const res = await fetch('/api/siat', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify(filters),
-      })
+      const qs = new URLSearchParams()
+      if (filters.dataInicio) qs.set('dataInicio', filters.dataInicio)
+      if (filters.dataFim)    qs.set('dataFim',    filters.dataFim)
+      if (filters.situacao)   qs.set('situacao',   filters.situacao)
+      if (filters.codigoRota) qs.set('codigoRota', filters.codigoRota)
+      if (filters.qtdMaxima)  qs.set('qtdMaxima',  String(filters.qtdMaxima))
+
+      const url = qs.size > 0 ? `/api/siat?${qs}` : '/api/siat'
+      const res = await fetch(url, { method: 'GET' })
 
       setState(prev => ({ ...prev, step: 'Processando resposta...', progress: 75 }))
 
