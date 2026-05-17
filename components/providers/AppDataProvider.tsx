@@ -9,38 +9,34 @@ import {
   useState,
 } from 'react'
 import type { Motorista, Rota, Veiculo } from '@/types'
-import type { SiatFilters, SiatSummary } from '@/lib/siat'
-import { normalizeSiatPayload, siatRowsToRotas, summarizeSiat } from '@/lib/siat'
+import type { SiatFilters, SiatSummary, SiatRow } from '@/lib/siat'
+import { normalizeSiatPayload, summarizeSiat } from '@/lib/siat'
 import { listarMotoristas } from '@/lib/motoristas'
 import { listarVeiculos } from '@/lib/veiculos'
-import { limparRascunhosDoDia, salvarRotasSupabase, salvarNfsNaoAlocadas } from '@/lib/webhooks'
-
-const REFRESH_INTERVAL_MS = 10 * 60 * 1000 // 10 minutos
+import { carregarRotasSupabase } from '@/lib/webhooks'
 
 function todayISO(): string {
   return new Date().toISOString().slice(0, 10)
 }
 
-function cacheKey(): string {
-  return `siat-import:${todayISO()}`
-}
-
-interface ImportState {
+interface NfImportState {
   running:  boolean
   step:     string
   progress: number
   summary?: SiatSummary
-  error?:   string
 }
 
 export interface AppData {
-  motoristas:     Motorista[]
-  veiculos:       Veiculo[]
-  rotas:          Rota[]
-  importState:    ImportState
-  refresh:        (filters?: SiatFilters) => Promise<void>
-  dismissImport:  () => void
-  setRotas:       React.Dispatch<React.SetStateAction<Rota[]>>
+  motoristas:      Motorista[]
+  veiculos:        Veiculo[]
+  rotas:           Rota[]
+  loadingRotas:    boolean
+  nfRows:          SiatRow[]
+  nfImportState:   NfImportState
+  refresh:         () => Promise<void>
+  importarNFs:     (filters?: SiatFilters) => Promise<void>
+  dismissNFImport: () => void
+  setRotas:        React.Dispatch<React.SetStateAction<Rota[]>>
 }
 
 const AppDataContext = createContext<AppData | null>(null)
@@ -52,47 +48,34 @@ export function useAppData(): AppData {
 }
 
 export function AppDataProvider({ children }: { children: React.ReactNode }) {
-  const [motoristas, setMotoristas] = useState<Motorista[]>([])
-  const [veiculos,   setVeiculos]   = useState<Veiculo[]>([])
-  const [rotas,      setRotas]      = useState<Rota[]>([])
-  const [importState, setImportState] = useState<ImportState>({
+  const [motoristas,    setMotoristas]    = useState<Motorista[]>([])
+  const [veiculos,      setVeiculos]      = useState<Veiculo[]>([])
+  const [rotas,         setRotas]         = useState<Rota[]>([])
+  const [loadingRotas,  setLoadingRotas]  = useState(true)
+  const [nfRows,        setNfRows]        = useState<SiatRow[]>([])
+  const [nfImportState, setNfImportState] = useState<NfImportState>({
     running: false, step: '', progress: 0,
   })
 
-  // Evitar duplo disparo no StrictMode
   const bootstrapped = useRef(false)
 
-  const runImport = useCallback(async (
-    filters: SiatFilters = {},
-    motPool: Motorista[],
-    veicPool: Veiculo[],
-    forceRefresh = false,
-  ) => {
-    const today = todayISO()
-
-    if (!forceRefresh) {
-      const cached = sessionStorage.getItem(cacheKey())
-      if (cached) {
-        try {
-          const parsed = JSON.parse(cached) as { rotas: Rota[]; summary: SiatSummary }
-          setRotas(parsed.rotas)
-          setImportState({
-            running:  false,
-            step:     `Cache do dia · ${parsed.summary.totalNFs} NFs`,
-            progress: 100,
-            summary:  parsed.summary,
-          })
-          return
-        } catch {
-          sessionStorage.removeItem(cacheKey())
-        }
-      }
+  const refresh = useCallback(async () => {
+    setLoadingRotas(true)
+    try {
+      const rotasDoDia = await carregarRotasSupabase(todayISO())
+      setRotas(rotasDoDia)
+    } catch {
+      // mantém estado atual em caso de falha
+    } finally {
+      setLoadingRotas(false)
     }
+  }, [])
 
-    setImportState({ running: true, step: 'Conectando ao SIAT via n8n...', progress: 15 })
+  const importarNFs = useCallback(async (filters: SiatFilters = {}) => {
+    setNfImportState({ running: true, step: 'Conectando ao SIAT via n8n...', progress: 15 })
 
     try {
-      setImportState(prev => ({ ...prev, step: 'Executando query SQL no SIAT...', progress: 40 }))
+      setNfImportState(prev => ({ ...prev, step: 'Executando query SQL no SIAT...', progress: 40 }))
 
       const qs = new URLSearchParams()
       if (filters.dataInicio) qs.set('dataInicio', filters.dataInicio)
@@ -102,64 +85,31 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       if (filters.qtdMaxima)  qs.set('qtdMaxima',  String(filters.qtdMaxima))
 
       const url = qs.size > 0 ? `/api/siat?${qs}` : '/api/siat'
-      const res = await fetch(url, { method: 'GET' })
+      const res = await fetch(url)
 
-      setImportState(prev => ({ ...prev, step: 'Processando resposta...', progress: 75 }))
+      setNfImportState(prev => ({ ...prev, step: 'Processando notas fiscais...', progress: 75 }))
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
-        throw new Error(err.error || `HTTP ${res.status}`)
+        throw new Error((err as { error?: string }).error || `HTTP ${res.status}`)
       }
 
       const raw     = await res.json()
       const rows    = normalizeSiatPayload(raw)
       const summary = summarizeSiat(rows)
-      const rotasDia = siatRowsToRotas(rows, veicPool, motPool)
 
-      // Persistir no Supabase
-      setImportState(prev => ({ ...prev, step: 'Salvando no Supabase...', progress: 88 }))
-      await limparRascunhosDoDia(today)
-      const rotasSalvas = await salvarRotasSupabase(rotasDia, today)
-
-      // NFs sem rota alocada (sem ROTA no payload)
-      const nfsSemRota = rows
-        .filter(r => r.NUMNFS != null && !r.ROTA)
-        .map(r => Number(r.NUMNFS))
-        .filter(n => !isNaN(n))
-      if (nfsSemRota.length > 0) {
-        await salvarNfsNaoAlocadas(nfsSemRota, today, 'Sem rota no SIAT')
-      }
-
-      setRotas(rotasSalvas)
-
-      // Cache em sessionStorage para o dia
-      sessionStorage.setItem(cacheKey(), JSON.stringify({ rotas: rotasSalvas, summary }))
-
-      setImportState({
+      setNfRows(rows)
+      setNfImportState({
         running:  false,
-        step:     `Importação concluída · ${summary.totalNFs} NFs · ${summary.veiculosUnicos} veículos`,
+        step:     `${summary.totalNFs} notas fiscais importadas · ${summary.rotasUnicas} rotas`,
         progress: 100,
         summary,
       })
     } catch (err) {
       const message = err instanceof Error ? err.message : 'erro desconhecido'
-      setImportState({ running: false, step: `Falha: ${message}`, progress: 0, error: message })
+      setNfImportState({ running: false, step: `Falha: ${message}`, progress: 0 })
     }
   }, [])
-
-  const refresh = useCallback(async (filters?: SiatFilters) => {
-    // Recarrega pools do Supabase antes do re-import para ter dados frescos
-    let mots: Motorista[] = motoristas
-    let veics: Veiculo[]  = veiculos
-    try {
-      ;[mots, veics] = await Promise.all([listarMotoristas(), listarVeiculos()])
-      setMotoristas(mots)
-      setVeiculos(veics)
-    } catch {
-      // mantém o pool atual se Supabase falhar
-    }
-    await runImport(filters ?? {}, mots, veics, true)
-  }, [motoristas, veiculos, runImport])
 
   useEffect(() => {
     if (bootstrapped.current) return
@@ -168,30 +118,34 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     async function bootstrap() {
       const [mots, veics] = await Promise.all([
         listarMotoristas().catch(() => [] as Motorista[]),
-        listarVeiculos().catch(()  => [] as Veiculo[]),
+        listarVeiculos().catch(()    => [] as Veiculo[]),
       ])
       setMotoristas(mots)
       setVeiculos(veics)
-      await runImport({}, mots, veics, true)
+
+      try {
+        const rotasDoDia = await carregarRotasSupabase(todayISO())
+        setRotas(rotasDoDia)
+      } catch {
+        // estado vazio em caso de erro
+      } finally {
+        setLoadingRotas(false)
+      }
     }
 
     bootstrap()
-  }, [runImport])
-
-  const dismissImport = useCallback(() => {
-    setImportState({ running: false, step: '', progress: 0 })
   }, [])
 
-  // Refresh periódico enquanto o painel está aberto
-  useEffect(() => {
-    const id = setInterval(() => {
-      refresh()
-    }, REFRESH_INTERVAL_MS)
-    return () => clearInterval(id)
-  }, [refresh])
+  const dismissNFImport = useCallback(() => {
+    setNfImportState({ running: false, step: '', progress: 0 })
+  }, [])
 
   return (
-    <AppDataContext.Provider value={{ motoristas, veiculos, rotas, importState, refresh, dismissImport, setRotas }}>
+    <AppDataContext.Provider value={{
+      motoristas, veiculos, rotas, loadingRotas,
+      nfRows, nfImportState,
+      refresh, importarNFs, dismissNFImport, setRotas,
+    }}>
       {children}
     </AppDataContext.Provider>
   )

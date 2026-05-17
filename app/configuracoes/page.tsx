@@ -37,8 +37,8 @@ export default function ConfiguracoesPage() {
     }
     setHasChanges(true)
   }, [cfg])
-  const { importState, refresh, dismissImport } = useAppData()
-  const summary = importState.summary
+  const { nfImportState, importarNFs, dismissNFImport } = useAppData()
+  const summary = nfImportState.summary
   const importResult = summary
     ? { nfs: summary.totalNFs, peso: summary.pesoTotalToneladas, veiculos: summary.veiculosUnicos }
     : undefined
@@ -90,7 +90,7 @@ export default function ConfiguracoesPage() {
       {/* Topbar fica sticky enquanto o main rola */}
       <div className="sticky top-0 z-10">
         <Topbar title="Configurações" sub="Conexão, regras, frota e instruções da IA">
-          <ImportarSIATButton onClick={() => setImportDialog(true)} running={importState.running} label="Importar Rotas e Veículos" loadingLabel="Importando..." />
+          <ImportarSIATButton onClick={() => setImportDialog(true)} running={nfImportState.running} label="Importar NFs" loadingLabel="Importando..." />
           <Btn variant="primary" onClick={handleSave}>
             {saved ? '✓ Salvo!' : 'Salvar configurações'}
           </Btn>
@@ -99,7 +99,7 @@ export default function ConfiguracoesPage() {
 
       {/* Conteúdo em bloco normal — cresce com o conteúdo, main scrolla */}
       <div className="px-5 py-5 flex flex-col gap-6 pb-20">
-        <ImportBar running={importState.running} step={importState.step} progress={importState.progress} result={importResult} onClose={dismissImport} />
+        <ImportBar running={nfImportState.running} step={nfImportState.step} progress={nfImportState.progress} result={importResult} onClose={dismissNFImport} />
 
         {/* ── Horários ── */}
         <Card>
@@ -262,7 +262,7 @@ export default function ConfiguracoesPage() {
       {importDialog && (
         <SiatImportDialog
           onClose={() => setImportDialog(false)}
-          onConfirm={f => { setImportDialog(false); refresh(f) }}
+          onConfirm={f => { setImportDialog(false); importarNFs(f) }}
         />
       )}
 

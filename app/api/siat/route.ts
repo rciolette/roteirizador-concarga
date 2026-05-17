@@ -19,18 +19,11 @@ export async function GET(req: Request) {
   if (codigoRota) filters.codigoRota = codigoRota
   if (qtdMaxima && Number.isFinite(Number(qtdMaxima))) filters.qtdMaxima = Number(qtdMaxima)
 
-  const qs = new URLSearchParams()
-  if (filters.dataInicio) qs.set('dataInicio', filters.dataInicio)
-  if (filters.dataFim)    qs.set('dataFim',    filters.dataFim)
-  if (filters.situacao)   qs.set('situacao',   filters.situacao)
-  if (filters.codigoRota) qs.set('codigoRota', filters.codigoRota)
-  if (filters.qtdMaxima)  qs.set('qtdMaxima',  String(filters.qtdMaxima))
-
-  const url = qs.size > 0 ? `${N8N_WEBHOOK}?${qs}` : N8N_WEBHOOK
-
   try {
-    const upstream = await fetch(url, {
-      method: 'GET',
+    const upstream = await fetch(N8N_WEBHOOK, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(Object.keys(filters).length > 0 ? filters : {}),
       signal: AbortSignal.timeout(30_000),
     })
 

@@ -20,6 +20,7 @@ export interface VeiculoDaFrota {
   motorista_id: string | null
   motorista_nome: string | null
   ativo: boolean
+  disponivel_hoje: boolean
 }
 
 export interface VinculadoDaFrota {
@@ -33,66 +34,87 @@ export interface VinculadoDaFrota {
   motorista_sigla: string | null
 }
 
+const PAGE = 1000
+
+async function fetchAllPages<T>(
+  buildQuery: (from: number, to: number) => ReturnType<ReturnType<typeof supabase.from>['select']>,
+): Promise<T[]> {
+  const result: T[] = []
+  let from = 0
+  while (true) {
+    const { data, error } = await buildQuery(from, from + PAGE - 1)
+    if (error) throw error
+    result.push(...((data ?? []) as T[]))
+    if ((data ?? []).length < PAGE) break
+    from += PAGE
+  }
+  return result
+}
+
 export async function listarMotoristas(): Promise<MotoristaDaFrota[]> {
-  const { data, error } = await supabase
-    .from('motoristas')
-    .select('*')
-    .order('nome', { ascending: true })
+  const rows = await fetchAllPages<Record<string, unknown>>(
+    (from, to) => supabase
+      .from('motoristas')
+      .select('*')
+      .order('nome', { ascending: true })
+      .range(from, to),
+  )
 
-  if (error) throw error
-
-  return (data ?? []).map(row => ({
-    id:       row.id,
-    nome:     row.nome,
-    sigla:    row.sigla    ?? '',
-    telefone: row.telefone ?? '',
-    celular:  row.celular  ?? '',
-    ativo:    row.ativo    ?? true,
+  return rows.map(row => ({
+    id:       row.id as string,
+    nome:     row.nome as string,
+    sigla:    (row.sigla    as string | null) ?? '',
+    telefone: (row.telefone as string | null) ?? '',
+    celular:  (row.celular  as string | null) ?? '',
+    ativo:    (row.ativo    as boolean | null) ?? true,
   }))
 }
 
 export async function listarVeiculos(): Promise<VeiculoDaFrota[]> {
-  const { data, error } = await supabase
-    .from('veiculos')
-    .select('*, motoristas(nome, celular, sigla)')
-    .order('placa', { ascending: true })
+  const rows = await fetchAllPages<Record<string, unknown>>(
+    (from, to) => supabase
+      .from('veiculos')
+      .select('*, motoristas(nome, celular, sigla)')
+      .order('placa', { ascending: true })
+      .range(from, to),
+  )
 
-  if (error) throw error
-
-  return (data ?? []).map(row => ({
-    id:            row.id,
-    placa:         row.placa,
-    modelo:        row.modelo       ?? '',
-    categoria:     row.categoria    ?? '',
-    tipo_veiculo:  row.tipo_veiculo ?? '',
-    capacidade_kg: row.capacidade_kg ?? 0,
-    situacao_siat: row.situacao_siat ?? '',
-    motorista_id:  row.motorista_id  ?? null,
+  return rows.map(row => ({
+    id:            row.id as string,
+    placa:         row.placa as string,
+    modelo:        (row.modelo       as string | null) ?? '',
+    categoria:     (row.categoria    as string | null) ?? '',
+    tipo_veiculo:  (row.tipo_veiculo as string | null) ?? '',
+    capacidade_kg: (row.capacidade_kg as number | null) ?? 0,
+    situacao_siat: (row.situacao_siat as string | null) ?? '',
+    motorista_id:   (row.motorista_id  as string | null) ?? null,
     motorista_nome: (row.motoristas as { nome?: string } | null)?.nome ?? null,
-    ativo:         row.ativo ?? true,
+    ativo:          (row.ativo           as boolean | null) ?? true,
+    disponivel_hoje:(row.disponivel_hoje as boolean | null) ?? false,
   }))
 }
 
 export async function listarVinculados(): Promise<VinculadoDaFrota[]> {
-  const { data, error } = await supabase
-    .from('veiculos')
-    .select('*, motoristas(nome, celular, sigla)')
-    .eq('ativo', true)
-    .order('placa', { ascending: true })
+  const rows = await fetchAllPages<Record<string, unknown>>(
+    (from, to) => supabase
+      .from('veiculos')
+      .select('*, motoristas(nome, celular, sigla)')
+      .eq('ativo', true)
+      .order('placa', { ascending: true })
+      .range(from, to),
+  )
 
-  if (error) throw error
-
-  return (data ?? []).map(row => {
+  return rows.map(row => {
     const m = row.motoristas as { nome?: string; celular?: string; sigla?: string } | null
     return {
-      id:               row.id,
-      placa:            row.placa,
-      modelo:           row.modelo       ?? '',
-      capacidade_kg:    row.capacidade_kg ?? 0,
-      situacao_siat:    row.situacao_siat ?? '',
-      motorista_nome:   m?.nome   ?? null,
+      id:                row.id as string,
+      placa:             row.placa as string,
+      modelo:            (row.modelo       as string | null) ?? '',
+      capacidade_kg:     (row.capacidade_kg as number | null) ?? 0,
+      situacao_siat:     (row.situacao_siat as string | null) ?? '',
+      motorista_nome:    m?.nome    ?? null,
       motorista_celular: m?.celular ?? null,
-      motorista_sigla:  m?.sigla  ?? null,
+      motorista_sigla:   m?.sigla   ?? null,
     }
   })
 }
@@ -104,5 +126,21 @@ export async function atualizarAtivoMotorista(id: string, ativo: boolean): Promi
 
 export async function atualizarAtivoVeiculo(id: string, ativo: boolean): Promise<void> {
   const { error } = await supabase.from('veiculos').update({ ativo }).eq('id', id)
+  if (error) throw error
+}
+
+export async function atualizarDisponivelHoje(id: string, disponivel: boolean): Promise<void> {
+  const { error } = await supabase.from('veiculos').update({ disponivel_hoje: disponivel }).eq('id', id)
+  if (error) throw error
+}
+
+export async function resetarDisponivelHoje(): Promise<void> {
+  const { error } = await supabase.from('veiculos').update({ disponivel_hoje: false }).not('id', 'is', null)
+  if (error) throw error
+}
+
+export async function marcarDisponiveisHoje(ids: string[]): Promise<void> {
+  if (ids.length === 0) return
+  const { error } = await supabase.from('veiculos').update({ disponivel_hoje: true }).in('id', ids)
   if (error) throw error
 }

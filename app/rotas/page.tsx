@@ -496,7 +496,7 @@ function RouteCard({ rota, onUpdateStatus, onAskConfirm }: {
 
 // ── Rotas Page ────────────────────────────────────────────────────────────────
 export default function RotasPage() {
-  const { importState, refresh, dismissImport, rotas: routes, setRotas: setRoutes } = useAppData()
+  const { nfImportState, importarNFs, dismissNFImport, nfRows, rotas: routes, setRotas: setRoutes, loadingRotas } = useAppData()
   const [filter,         setFilter]         = useState<RouteStatus | 'todos'>('todos')
   const [showDialog,     setShowDialog]     = useState(false)
   const [generating,     setGenerating]     = useState(false)
@@ -505,7 +505,7 @@ export default function RotasPage() {
   const [pendingConfirm, setPendingConfirm] = useState<{ action: ConfirmAction; execute: () => void } | null>(null)
   const [importDialog,   setImportDialog]   = useState(false)
 
-  const summary = importState.summary
+  const summary = nfImportState.summary
   const importResult = summary
     ? { nfs: summary.totalNFs, peso: summary.pesoTotalToneladas, veiculos: summary.veiculosUnicos }
     : undefined
@@ -578,6 +578,7 @@ export default function RotasPage() {
         veiculosBloqueados: form.veiculosBloqueados.split(',').map(x => x.trim()).filter(Boolean),
         restricoesExtras:   form.restricoesExtras,
         prioridade:         form.prioridade as Prioridade,
+        notasFiscais:       nfRows.length > 0 ? nfRows : undefined,
       }) as RetornoGerarRotas
 
       const novas = mapRetornoGerarRotas(raw)
@@ -617,17 +618,14 @@ export default function RotasPage() {
 
   return (
     <div>
-      {importState.running && routes.length === 0 && (
+      {loadingRotas && routes.length === 0 && (
         <div className="fixed inset-0 bg-page/80 backdrop-blur-sm z-40 flex items-center justify-center">
           <div className="bg-white dark:bg-[#1E1E1C] rounded-xl border border-[0.5px] border-[var(--border-card)] px-8 py-6 flex flex-col items-center gap-3 text-center shadow-lg">
             <svg className="w-6 h-6 text-primary animate-spin-slow" viewBox="0 0 24 24" fill="none">
               <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" strokeDasharray="60" strokeDashoffset="20"/>
             </svg>
             <div className="text-sm font-medium">Carregando rotas do dia...</div>
-            <div className="text-[11px] text-muted">{importState.step}</div>
-            <div className="w-48 h-[3px] bg-cream rounded-full overflow-hidden">
-              <div className="h-full bg-primary rounded-full transition-[width] duration-[400ms]" style={{ width: `${importState.progress}%` }} />
-            </div>
+            <div className="text-[11px] text-muted">Consultando Supabase</div>
           </div>
         </div>
       )}
@@ -639,7 +637,7 @@ export default function RotasPage() {
             ? `${routes.length} rotas · ${routes.reduce((a, r) => a + r.qtdNotas, 0)} NFs · ${new Date().toLocaleDateString('pt-BR')}`
             : `Importe o SIAT para carregar as rotas de hoje · ${new Date().toLocaleDateString('pt-BR')}`}
         >
-          <ImportarSIATButton onClick={() => setImportDialog(true)} running={importState.running} label="Importar Rotas e Veículos" loadingLabel="Importando..." />
+          <ImportarSIATButton onClick={() => setImportDialog(true)} running={nfImportState.running} label="Importar NFs" loadingLabel="Importando..." />
 
           {generating ? (
             <Btn variant="primary" disabled>
@@ -685,7 +683,7 @@ export default function RotasPage() {
       </div>
 
       <div className="px-5 py-4 flex flex-col gap-2.5 pb-20">
-        <ImportBar running={importState.running} step={importState.step} progress={importState.progress} result={importResult} onClose={dismissImport} />
+        <ImportBar running={nfImportState.running} step={nfImportState.step} progress={nfImportState.progress} result={importResult} onClose={dismissNFImport} />
 
         {toast && (
           <div className={cn(
@@ -765,7 +763,7 @@ export default function RotasPage() {
       {importDialog && (
         <SiatImportDialog
           onClose={() => setImportDialog(false)}
-          onConfirm={f => { setImportDialog(false); refresh(f) }}
+          onConfirm={f => { setImportDialog(false); importarNFs(f) }}
         />
       )}
 
