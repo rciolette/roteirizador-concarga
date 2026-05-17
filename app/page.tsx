@@ -102,6 +102,7 @@ export default function Page() {
           <MetricCard
             label="NFs pendentes"
             value={summary ? summary.totalNFs : m.totalNFs}
+            delta={summary ? undefined : m.totalNFs - 388}
             sub={summary
               ? `${summary.rotasUnicas} rotas · ${summary.totalLinhas} linhas SIAT`
               : `última import. ${new Date(m.ultimaImportacao!).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`}
@@ -111,10 +112,12 @@ export default function Page() {
             value={summary ? `${summary.pesoTotalToneladas}t` : formatPeso(m.pesoTotal)}
             sub={summary ? `${summary.pesoTotalKg.toLocaleString('pt-BR')} kg` : undefined}
             capacity={!summary ? { used: m.pesoTotal, total: 71000, label: `${formatPeso(m.pesoTotal)} / 71t` } : undefined}
+            gradientBar={!summary}
           />
           <MetricCard
             label="Veículos disponíveis"
             value={summary ? summary.veiculosUnicos : m.veiculosDisponiveis}
+            inactiveCount={summary ? undefined : m.veiculosTotal - m.veiculosDisponiveis}
             sub={summary ? `${summary.motoristasUnicos} motoristas` : undefined}
             capacity={!summary ? { used: m.veiculosDisponiveis, total: m.veiculosTotal, label: `${m.veiculosDisponiveis} / ${m.veiculosTotal} ativos` } : undefined}
             valueColor="#3B6D11"
@@ -124,7 +127,8 @@ export default function Page() {
             value={summary ? summary.rotasUnicas : m.rotasPendentes}
             sub={summary ? 'do SIAT — aguardando geração' : 'aguardando operador'}
             valueColor="#854F0B"
-            className="border-l-2 border-l-[#854F0B]"
+            className="border-t-2 border-t-primary"
+            cta={{ label: 'Revisar →', href: '/rotas' }}
           />
         </section>
 

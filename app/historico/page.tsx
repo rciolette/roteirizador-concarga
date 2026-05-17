@@ -8,7 +8,7 @@ import { HISTORICO_DIAS } from '@/lib/data'
 import { cn, formatPeso } from '@/lib/utils'
 import { useCopyToClipboard } from '@/lib/hooks'
 import { useAppData } from '@/components/providers/AppDataProvider'
-import { Rota } from '@/types'
+import { Rota, RouteStatus } from '@/types'
 
 // ── Detalhe Modal ─────────────────────────────────────────────────────────────
 function DetalheModal({ rota, onClose }: { rota: Rota; onClose: () => void }) {
@@ -87,9 +87,17 @@ function DetalheModal({ rota, onClose }: { rota: Rota; onClose: () => void }) {
 // HISTORICO_DIAS[0] = hoje (dados mock substituídos pelo SIAT após import)
 // Demais dias permanecem como referência histórica até persistência em BD.
 
+const HIST_STATUS_FILTERS: { label: string; value: RouteStatus | 'todas' }[] = [
+  { label: 'Todas',     value: 'todas' },
+  { label: 'Enviadas',  value: 'enviada' },
+  { label: 'Aprovadas', value: 'aprovada' },
+  { label: 'Rejeitadas', value: 'rejeitada' },
+]
+
 export default function HistoricoPage() {
   const { importState, refresh, dismissImport, rotas } = useAppData()
   const [diaIdx,          setDiaIdx]          = useState(0)
+  const [statusFilter,    setStatusFilter]    = useState<RouteStatus | 'todas'>('todas')
   const [rotaSelecionada, setRotaSelecionada] = useState<Rota | null>(null)
   const [importDialog,    setImportDialog]    = useState(false)
 
@@ -102,10 +110,15 @@ export default function HistoricoPage() {
   const isHoje   = diaIdx === 0
   // Hoje: usa as rotas do provider (importadas do SIAT); outros dias: mock histórico
   const hojeRotas = rotas.length > 0 ? rotas : null
-  const itens    = isHoje && hojeRotas ? hojeRotas : dia.items
+  const allItens = isHoje && hojeRotas ? hojeRotas : dia.items
+  const itens    = statusFilter === 'todas' ? allItens : allItens.filter(r => r.status === statusFilter)
   const rotasQtd = isHoje && hojeRotas ? hojeRotas.length        : dia.rotas
   const nfsQtd   = isHoje && hojeRotas ? hojeRotas.reduce((a, r) => a + r.qtdNotas, 0) : dia.nfs
   const pesoQtd  = isHoje && hojeRotas ? hojeRotas.reduce((a, r) => a + r.pesoTotal, 0) : dia.peso
+
+  function countStatus(s: RouteStatus | 'todas') {
+    return s === 'todas' ? allItens.length : allItens.filter(r => r.status === s).length
+  }
 
   return (
     <div>
@@ -141,6 +154,36 @@ export default function HistoricoPage() {
             {d.label}{i === 0 && hojeRotas ? ' · SIAT' : ''}
           </button>
         ))}
+      </div>
+
+      {/* Filtro de status */}
+      <div className="flex gap-1.5 px-5 pt-2 pb-1 flex-wrap">
+        {HIST_STATUS_FILTERS.map(f => {
+          const count = countStatus(f.value)
+          const active = statusFilter === f.value
+          return (
+            <button
+              key={f.value}
+              onClick={() => setStatusFilter(f.value)}
+              className={cn(
+                'inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-medium transition-colors duration-100',
+                active
+                  ? 'bg-primary text-white'
+                  : 'bg-cream text-mid hover:bg-cream-hover hover:text-base',
+              )}
+            >
+              {f.label}
+              {count > 0 && (
+                <span className={cn(
+                  'text-[10px] min-w-[16px] text-center px-1 rounded-full font-medium',
+                  active ? 'bg-white/25 text-white' : 'bg-white dark:bg-[#2A2A28] text-muted',
+                )}>
+                  {count}
+                </span>
+              )}
+            </button>
+          )
+        })}
       </div>
 
       {/* Métricas do dia */}

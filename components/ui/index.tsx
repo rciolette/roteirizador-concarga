@@ -82,10 +82,14 @@ export function CardHeader({ children, className }: { children: ReactNode; class
 }
 
 // ── Metric Card ───────────────────────────────────────────────────────────────
-export function MetricCard({ label, value, sub, valueColor, capacity, className }: {
+export function MetricCard({ label, value, sub, valueColor, capacity, className, delta, inactiveCount, gradientBar, cta }: {
   label: string; value: string | number; sub?: string; valueColor?: string
   capacity?: { used: number; total: number; label: string }
   className?: string
+  delta?: number
+  inactiveCount?: number
+  gradientBar?: boolean
+  cta?: { label: string; href: string }
 }) {
   const pct      = capacity ? Math.min(100, Math.round((capacity.used / capacity.total) * 100)) : null
   const barColor = pct === null ? '' : pct >= 90 ? 'bg-cond-err' : pct >= 70 ? 'bg-cond-warn' : 'bg-cond-ok'
@@ -94,11 +98,24 @@ export function MetricCard({ label, value, sub, valueColor, capacity, className 
   return (
     <div className={cn('bg-cream border border-[0.5px] border-[var(--border-subtle)] rounded-lg p-3', className)}>
       <div className="text-[11px] text-muted mb-1 uppercase tracking-[0.03em]">{label}</div>
-      <div
-        className="text-[22px] font-medium tracking-[-0.02em] text-base"
-        style={valueColor ? { color: valueColor } : undefined}
-      >
-        {value}
+      <div className="flex items-baseline gap-2 flex-wrap">
+        <div
+          className="text-[22px] font-medium tracking-[-0.02em] text-base"
+          style={valueColor ? { color: valueColor } : undefined}
+        >
+          {value}
+        </div>
+        {inactiveCount !== undefined && inactiveCount > 0 && (
+          <span className="text-[11px] text-warn-mid font-medium">· {inactiveCount} inativos</span>
+        )}
+        {delta !== undefined && (
+          <span className={cn(
+            'text-[10px] font-medium px-1.5 py-px rounded-full',
+            delta > 0 ? 'bg-danger-bg text-danger' : 'bg-success-bg text-success-dark',
+          )}>
+            {delta > 0 ? `+${delta}` : delta} vs ontem
+          </span>
+        )}
       </div>
       {capacity && (
         <div className="mt-1.5">
@@ -107,14 +124,24 @@ export function MetricCard({ label, value, sub, valueColor, capacity, className 
             <span className={cn('text-[11px] font-medium', pctColor)}>{pct}%</span>
           </div>
           <div className="h-[3px] bg-cream-hover rounded-full overflow-hidden">
-            <div
-              className={cn('h-full rounded-full transition-[width] duration-300', barColor)}
-              style={{ width: `${pct}%` }}
-            />
+            {gradientBar ? (
+              <div
+                className="h-full rounded-full transition-[width] duration-300"
+                style={{ width: `${pct}%`, background: 'linear-gradient(to right, var(--color-success), var(--color-warn-accent))' }}
+              />
+            ) : (
+              <div
+                className={cn('h-full rounded-full transition-[width] duration-300', barColor)}
+                style={{ width: `${pct}%` }}
+              />
+            )}
           </div>
         </div>
       )}
       {sub && <div className="text-[11px] text-muted mt-0.5">{sub}</div>}
+      {cta && (
+        <a href={cta.href} className="text-[11px] text-primary font-medium mt-1.5 block hover:underline">{cta.label}</a>
+      )}
     </div>
   )
 }

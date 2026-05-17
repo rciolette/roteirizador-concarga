@@ -1,15 +1,17 @@
 'use client'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useState, useEffect } from 'react'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
+import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 
 const navItems = [
   {
     section: 'Principal',
     items: [
-      { href: '/',          label: 'Dashboard',        badge: '3', badgeType: 'danger' as const },
-      { href: '/rotas',     label: 'Rotas do dia',     badge: '5', badgeType: 'warn'   as const },
+      { href: '/',          label: 'Dashboard',    badge: '3', badgeType: 'danger' as const },
+      { href: '/rotas',     label: 'Rotas do dia', badgeType: 'warn'   as const },
       { href: '/historico', label: 'Histórico' },
       { href: '/frota',     label: 'Frota' },
     ],
@@ -69,6 +71,24 @@ type ReactNode = import('react').ReactNode
 
 export default function Sidebar() {
   const pathname = usePathname()
+  const [aguardandoCount, setAguardandoCount] = useState(0)
+
+  useEffect(() => {
+    async function fetchCount() {
+      try {
+        const { count } = await supabase
+          .from('rotas')
+          .select('*', { count: 'exact', head: true })
+          .eq('status', 'aguardando')
+        setAguardandoCount(count ?? 0)
+      } catch {
+        // fail silently
+      }
+    }
+    fetchCount()
+    const id = setInterval(fetchCount, 60_000)
+    return () => clearInterval(id)
+  }, [])
 
   return (
     <aside className="w-[172px] shrink-0 bg-white dark:bg-[#1E1E1C] border-r border-[0.5px] border-[var(--border-subtle)] flex flex-col h-full">
@@ -111,16 +131,21 @@ export default function Sidebar() {
                     {icons[item.href]}
                   </span>
                   <span className="flex-1 truncate">{item.label}</span>
-                  {item.badge && (
-                    <span className={cn(
-                      'text-[10px] px-1.5 py-px rounded-full font-medium shrink-0',
-                      item.badgeType === 'danger'
-                        ? 'bg-danger-bg text-danger'
-                        : 'bg-warn-bg text-warn',
-                    )}>
-                      {item.badge}
-                    </span>
-                  )}
+                  {item.href === '/rotas'
+                    ? aguardandoCount > 0 && (
+                      <span className="text-[10px] px-1.5 py-px rounded-full font-medium shrink-0 bg-warn-bg text-warn">
+                        {aguardandoCount}
+                      </span>
+                    )
+                    : item.badge && (
+                      <span className={cn(
+                        'text-[10px] px-1.5 py-px rounded-full font-medium shrink-0',
+                        item.badgeType === 'danger' ? 'bg-danger-bg text-danger' : 'bg-warn-bg text-warn',
+                      )}>
+                        {item.badge}
+                      </span>
+                    )
+                  }
                 </Link>
               )
             })}

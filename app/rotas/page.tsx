@@ -318,12 +318,13 @@ function RouteCard({ rota, onUpdateStatus, onAskConfirm }: {
 }) {
   const [expanded, setExpanded] = useState(false)
   const { copied, copy } = useCopyToClipboard()
-  const capacidade = rota.veiculo?.capacidadeKg || 1500
-  const pct = rota.ocupacaoPercent ?? Math.min(100, Math.round((rota.pesoTotal / capacidade) * 100))
-
-  const avatarCls = AVATAR_CLS[rota.id.charCodeAt(1) % 5]
-  const initials  = rota.motorista?.sigla || '??'
-  const temAlertas = (rota.alertas?.length ?? 0) > 0
+  const capacidade  = rota.veiculo?.capacidadeKg || 1500
+  const pct         = rota.ocupacaoPercent ?? Math.min(100, Math.round((rota.pesoTotal / capacidade) * 100))
+  const barColor    = pct >= 95 ? 'bg-danger-mid' : pct >= 80 ? 'bg-warn-mid' : 'bg-primary'
+  const avatarCls   = AVATAR_CLS[rota.id.charCodeAt(1) % 5]
+  const initials    = rota.motorista?.sigla || '??'
+  const temAlertas  = (rota.alertas?.length ?? 0) > 0
+  const isActionable = rota.status === 'rascunho' || rota.status === 'aguardando'
 
   const detalhes = [
     { label: 'Código da rota',   value: rota.codigoRota },
@@ -342,40 +343,27 @@ function RouteCard({ rota, onUpdateStatus, onAskConfirm }: {
         ? 'border border-[1.5px] border-primary'
         : 'border border-[0.5px] border-[var(--border-card)]',
     )}>
-      {/* Header row */}
+      {/* 1. TÍTULO */}
       <div
-        className="flex items-center gap-2.5 px-3.5 py-[10px] cursor-pointer"
+        className="flex items-center gap-2.5 px-3.5 pt-[10px] pb-1 cursor-pointer"
         onClick={() => setExpanded(e => !e)}
       >
         <div className={cn('w-8 h-8 rounded-lg shrink-0 flex items-center justify-center text-[10px] font-medium', avatarCls)}>
           {initials}
         </div>
-
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">
             <span className="text-xs font-medium truncate">{rota.codigoRota}</span>
             {rota.regiao && <span className="text-[10px] text-muted shrink-0">· {rota.regiao}</span>}
           </div>
-          <div className="text-[10px] text-muted mt-px">
-            {rota.motorista?.nome} · {rota.veiculo?.placa}
-          </div>
         </div>
-
-        <div className="flex gap-2.5 items-center shrink-0">
+        <div className="flex items-center gap-2 shrink-0">
           {temAlertas && (
             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-danger-bg text-danger text-[10px] font-medium">
               <span className="w-[5px] h-[5px] rounded-full bg-cond-err shrink-0" />
               {rota.alertas!.length}
             </span>
           )}
-          <div className="text-right hidden sm:block">
-            <div className="text-xs font-medium">{formatPeso(rota.pesoTotal)}</div>
-            <div className="text-[10px] text-muted">{pct}% ocup.</div>
-          </div>
-          <div className="text-right">
-            <div className="text-xs font-medium">{rota.qtdNotas}</div>
-            <div className="text-[10px] text-muted">NFs</div>
-          </div>
           <StatusPill status={rota.status} />
           <svg
             className={cn('w-3.5 h-3.5 text-muted transition-transform duration-150', expanded && 'rotate-180')}
@@ -386,10 +374,83 @@ function RouteCard({ rota, onUpdateStatus, onAskConfirm }: {
         </div>
       </div>
 
-      {/* Expanded */}
+      {/* 2. MOTORISTA / VEÍCULO */}
+      <div className="flex items-center px-3.5 pb-2">
+        <div className="w-[42px] shrink-0" />
+        <div className="text-[10px] text-muted flex-1 truncate min-w-0">
+          {rota.motorista?.nome ?? '—'} · {rota.veiculo?.tipo ?? '—'} {rota.veiculo?.placa ?? ''}
+        </div>
+        <div className="text-right shrink-0 ml-2">
+          <span className="text-xs font-medium">{rota.qtdNotas}</span>
+          <span className="text-[10px] text-muted"> NFs · {formatPeso(rota.pesoTotal)}</span>
+        </div>
+      </div>
+
+      {/* 3. BARRA DE CAPACIDADE */}
+      <div className="px-3.5 pb-2.5">
+        <div className="h-[3px] bg-cream-hover rounded-full overflow-hidden">
+          <div
+            className={cn('h-full rounded-full transition-[width] duration-300', barColor)}
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+        <div className="text-[10px] text-muted mt-0.5">{pct}% · {formatPeso(capacidade)} cap.</div>
+      </div>
+
+      {/* 4. BOTÕES */}
+      {(isActionable || rota.status === 'aprovada') && (
+        <div className="px-3.5 pb-2.5 pt-2 flex gap-1.5 justify-end border-t border-[0.5px] border-[var(--border-faint)]">
+          {isActionable && (
+            <>
+              <button
+                onClick={() => onAskConfirm({
+                  title: `Rejeitar rota ${rota.codigoRota}`,
+                  description: 'A rota será marcada como rejeitada e não poderá mais ser enviada.',
+                  details: detalhes,
+                  confirmLabel: 'Rejeitar rota',
+                  confirmVariant: 'danger-soft',
+                }, () => onUpdateStatus(rota.id, 'rejeitada'))}
+                className="px-3 py-[5px] text-[11px] text-muted hover:text-danger transition-colors cursor-pointer bg-transparent border-none"
+              >
+                Rejeitar
+              </button>
+              <Btn size="sm" variant="success" onClick={() => onAskConfirm({
+                title: `Aprovar rota ${rota.codigoRota}`,
+                description: 'A rota será aprovada e ficará pronta para envio ao motorista.',
+                details: detalhes,
+                confirmLabel: 'Aprovar rota',
+                confirmVariant: 'success',
+              }, () => onUpdateStatus(rota.id, 'aprovada'))}>
+                <svg className="w-[11px] h-[11px]" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M3 8l3.5 3.5L13 5"/>
+                </svg>
+                <span className="font-semibold">Aprovar</span>
+              </Btn>
+            </>
+          )}
+          {rota.status === 'aprovada' && (
+            <Btn size="sm" variant="primary" onClick={() => onAskConfirm({
+              title: 'Enviar rota ao motorista',
+              description: `Uma mensagem será disparada para ${rota.motorista?.nome} com a sequência de entregas.`,
+              details: [
+                ...detalhes,
+                { label: 'Telefone', value: rota.motorista?.telefone ?? '—' },
+              ],
+              confirmLabel: 'Confirmar envio',
+              confirmVariant: 'primary',
+            }, () => onUpdateStatus(rota.id, 'enviada'))}>
+              <svg className="w-[11px] h-[11px]" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path d="M2 8l12-6-6 12V8H2z"/>
+              </svg>
+              Enviar ao motorista
+            </Btn>
+          )}
+        </div>
+      )}
+
+      {/* EXPANDED: alertas + NFs + ações extras */}
       {expanded && (
         <div className="animate-fade-in border-t border-[0.5px] border-[var(--border-subtle)] bg-page px-3.5 py-3">
-          {/* Alertas */}
           {temAlertas && (
             <div className="mb-3 flex flex-col gap-1">
               {rota.alertas!.map((a, i) => (
@@ -411,7 +472,6 @@ function RouteCard({ rota, onUpdateStatus, onAskConfirm }: {
             </p>
           )}
 
-          {/* Actions */}
           <div className="flex gap-1.5 mt-3 pt-2.5 border-t border-[0.5px] border-[var(--border-subtle)] flex-wrap">
             {(rota.status === 'aprovada' || rota.status === 'enviada') && (
               <Btn size="sm" onClick={() => rota.linkMaps && window.open(rota.linkMaps, '_blank')} disabled={!rota.linkMaps}>
@@ -427,48 +487,6 @@ function RouteCard({ rota, onUpdateStatus, onAskConfirm }: {
                 {copied ? '✓ Copiado!' : 'Copiar NFs'}
               </Btn>
             )}
-
-            <div className="ml-auto flex gap-1.5">
-              {(rota.status === 'rascunho' || rota.status === 'aguardando') && (
-                <>
-                  <Btn size="sm" variant="danger-soft" onClick={() => onAskConfirm({
-                    title: `Rejeitar rota ${rota.codigoRota}`,
-                    description: 'A rota será marcada como rejeitada e não poderá mais ser enviada.',
-                    details: detalhes,
-                    confirmLabel: 'Rejeitar rota',
-                    confirmVariant: 'danger-soft',
-                  }, () => onUpdateStatus(rota.id, 'rejeitada'))}>
-                    Rejeitar
-                  </Btn>
-                  <Btn size="sm" variant="success" onClick={() => onAskConfirm({
-                    title: `Aprovar rota ${rota.codigoRota}`,
-                    description: 'A rota será aprovada e ficará pronta para envio ao motorista.',
-                    details: detalhes,
-                    confirmLabel: 'Aprovar rota',
-                    confirmVariant: 'success',
-                  }, () => onUpdateStatus(rota.id, 'aprovada'))}>
-                    Aprovar
-                  </Btn>
-                </>
-              )}
-              {rota.status === 'aprovada' && (
-                <Btn size="sm" variant="primary" onClick={() => onAskConfirm({
-                  title: 'Enviar rota ao motorista',
-                  description: `Uma mensagem será disparada para ${rota.motorista?.nome} com a sequência de entregas.`,
-                  details: [
-                    ...detalhes,
-                    { label: 'Telefone', value: rota.motorista?.telefone ?? '—' },
-                  ],
-                  confirmLabel: 'Confirmar envio',
-                  confirmVariant: 'primary',
-                }, () => onUpdateStatus(rota.id, 'enviada'))}>
-                  <svg className="w-[11px] h-[11px]" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                    <path d="M2 8l12-6-6 12V8H2z"/>
-                  </svg>
-                  Enviar ao motorista
-                </Btn>
-              )}
-            </div>
           </div>
         </div>
       )}
@@ -621,8 +639,8 @@ export default function RotasPage() {
         </Topbar>
       </div>
 
-      {/* Filtro em abas */}
-      <div className="px-5 pt-3 pb-0 flex gap-1 flex-wrap border-b border-[0.5px] border-[var(--border-faint)]">
+      {/* Filtro em pills */}
+      <div className="px-5 py-2.5 flex gap-1.5 flex-wrap border-b border-[0.5px] border-[var(--border-faint)]">
         {STATUS_FILTERS.map(f => {
           const count = countByStatus(f.value)
           const active = filter === f.value
@@ -631,17 +649,17 @@ export default function RotasPage() {
               key={f.value}
               onClick={() => setFilter(f.value)}
               className={cn(
-                'px-3 py-1.5 text-[11px] font-medium rounded-t-md border-b-2 transition-colors',
+                'inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-medium transition-colors duration-100',
                 active
-                  ? 'border-primary text-primary bg-primary-bg/60'
-                  : 'border-transparent text-muted hover:text-base hover:bg-cream',
+                  ? 'bg-primary text-white'
+                  : 'bg-cream text-mid hover:bg-cream-hover hover:text-base',
               )}
             >
               {f.label}
               {count > 0 && (
                 <span className={cn(
-                  'ml-1 px-1.5 py-px rounded-full text-[10px]',
-                  active ? 'bg-primary text-white' : 'bg-cream-hover text-mid',
+                  'text-[10px] min-w-[16px] text-center px-1 rounded-full font-medium',
+                  active ? 'bg-white/25 text-white' : 'bg-white dark:bg-[#2A2A28] text-muted',
                 )}>
                   {count}
                 </span>
