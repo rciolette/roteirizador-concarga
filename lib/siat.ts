@@ -67,7 +67,7 @@ export function normalizeSiatPayload(raw: unknown): SiatRow[] {
 //   • Vehicle rows: têm Placa + NomeMotorista, sem NUMNFS
 // Agrupamos NFs por ROTA e atribuímos veículos do pool round-robin.
 
-function tipoVeiculoFromSiat(tipo: string | null): Veiculo['tipo'] {
+export function tipoVeiculoFromSiat(tipo: string | null): Veiculo['tipo'] {
   if (!tipo) return 'VUC'
   const t = tipo.toLowerCase()
   if (t.includes('fiorin'))            return 'Fiorino'
@@ -77,7 +77,7 @@ function tipoVeiculoFromSiat(tipo: string | null): Veiculo['tipo'] {
   return 'VUC'
 }
 
-function capKgFromSiat(tipo: string | null, raw: number | null): number {
+export function capKgFromSiat(tipo: string | null, raw: number | null): number {
   // O SIAT retorna CapacidadeKg em toneladas; valores < 100 são inválidos em kg.
   if (typeof raw === 'number' && raw >= 100) return raw
   const t = (tipo ?? '').toLowerCase()
@@ -88,42 +88,18 @@ function capKgFromSiat(tipo: string | null, raw: number | null): number {
   return 1500
 }
 
-export function siatRowsToRotas(rows: SiatRow[]): Rota[] {
+export function siatRowsToRotas(
+  rows: SiatRow[],
+  veiculoPool: Veiculo[]    = [],
+  motoristaPool: Motorista[] = [],
+): Rota[] {
   const today = new Date().toISOString()
 
-  // Separar NF rows (têm NUMNFS e ROTA) de vehicle rows (têm Placa)
-  const nfRows      = rows.filter(r => r.NUMNFS != null && r.ROTA)
-  const veicRows    = rows.filter(r => r.Placa && r.NomeMotorista)
+  // Apenas NF rows (têm NUMNFS e ROTA)
+  const nfRows = rows.filter(r => r.NUMNFS != null && r.ROTA)
 
-  // Construir pool de veículos únicos por Placa
-  const veiculoMap  = new Map<string, Veiculo>()
-  const motoristaMap = new Map<string, Motorista>()
-
-  for (const vr of veicRows) {
-    if (vr.Placa && !veiculoMap.has(vr.Placa)) {
-      veiculoMap.set(vr.Placa, {
-        id: `v-${vr.Placa}`,
-        placa: vr.Placa,
-        modelo: vr.Modelo ?? '',
-        tipo: tipoVeiculoFromSiat(vr.TipoVeiculo),
-        capacidadeKg: capKgFromSiat(vr.TipoVeiculo, vr.CapacidadeKg),
-        sigla: vr.Placa.replace(/\W/g, '').slice(-4),
-        status: 'disponivel',
-      })
-    }
-    if (vr.CodMotorista && !motoristaMap.has(vr.CodMotorista)) {
-      motoristaMap.set(vr.CodMotorista, {
-        id: `m-${vr.CodMotorista}`,
-        nome: vr.NomeMotorista ?? vr.Motorista ?? vr.CodMotorista,
-        telefone: vr.Celular && vr.Celular !== '-' ? vr.Celular : (vr.Telefone ?? '—'),
-        sigla: vr.CodMotorista.slice(0, 3).toUpperCase(),
-        status: 'disponivel',
-      })
-    }
-  }
-
-  const veiculoList   = Array.from(veiculoMap.values())
-  const motoristaList = Array.from(motoristaMap.values())
+  // Índice para casar veículo por placa antes do round-robin
+  const veiculoByPlaca = new Map(veiculoPool.map(v => [v.placa.toUpperCase(), v]))
 
   // Agrupar NF rows por ROTA
   const byRota = new Map<string, SiatRow[]>()
@@ -133,9 +109,26 @@ export function siatRowsToRotas(rows: SiatRow[]): Rota[] {
     byRota.get(rota)!.push(row)
   }
 
+  // Veículos disponíveis para round-robin (apenas status disponivel)
+  const veiculosDisponiveis = veiculoPool.filter(v => v.status === 'disponivel')
+  const veiculoList = veiculosDisponiveis.length ? veiculosDisponiveis : veiculoPool
+  const motoristaList = motoristaPool.filter(m => m.status === 'disponivel')
+
   return Array.from(byRota.entries()).map(([codigoRota, rotaRows], idx) => {
-    const veiculo   = veiculoList.length  ? veiculoList[idx % veiculoList.length]   : undefined
-    const motorista = motoristaList.length ? motoristaList[idx % motoristaList.length] : undefined
+    // Tentar casar veículo pela placa que vier na primeira row da rota
+    const primeiraPlaca = rotaRows.find(r => r.Placa)?.Placa?.toUpperCase()
+    const veiculo =
+      (primeiraPlaca && veiculoByPlaca.get(primeiraPlaca)) ||
+      (veiculoList.length ? veiculoList[idx % veiculoList.length] : undefined)
+
+    // Tentar casar motorista pelo codigo_siat do veículo escolhido, ou round-robin
+    const codSiat = rotaRows.find(r => r.CodMotorista)?.CodMotorista
+    const motoristaDoVeiculo = codSiat
+      ? motoristaPool.find(m => m.id.endsWith(codSiat) || m.nome === codSiat)
+      : undefined
+    const motorista =
+      motoristaDoVeiculo ||
+      (motoristaList.length ? motoristaList[idx % motoristaList.length] : undefined)
 
     // NFs únicas dentro desta rota
     const nfNums = [...new Set(rotaRows.map(r => String(r.NUMNFS!)))]

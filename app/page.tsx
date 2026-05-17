@@ -6,13 +6,18 @@ import { ImportarSIATButton } from '@/components/ui/ImportarSIATButton'
 import { SiatImportDialog } from '@/components/ui/SiatImportDialog'
 import { MOCK_METRICS } from '@/lib/data'
 import { formatPeso } from '@/lib/utils'
-import { useImport } from '@/lib/hooks'
+import { useAppData } from '@/components/providers/AppDataProvider'
 
 export default function Page() {
-  const imp = useImport()
+  const { importState, refresh, dismissImport, rotas } = useAppData()
   const m   = MOCK_METRICS
   const rotasTotal = m.rotasRascunho + m.rotasPendentes + m.rotasAprovadas + m.rotasEnviadas
   const [importDialog, setImportDialog] = useState(false)
+
+  const summary = importState.summary
+  const importResult = summary
+    ? { nfs: summary.totalNFs, peso: summary.pesoTotalToneladas, veiculos: summary.veiculosUnicos }
+    : undefined
 
   return (
     <div>
@@ -21,13 +26,13 @@ export default function Page() {
           title="Dashboard"
           sub={new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
         >
-          <ImportarSIATButton onClick={() => setImportDialog(true)} running={imp.running} />
+          <ImportarSIATButton onClick={() => setImportDialog(true)} running={importState.running} />
           <Link href="/rotas"><Btn variant="primary">+ Gerar rotas com IA</Btn></Link>
         </Topbar>
       </div>
 
       <div className="px-5 py-4 flex flex-col gap-3 pb-20">
-        <ImportBar running={imp.running} step={imp.step} progress={imp.progress} result={imp.result} onClose={imp.reset} />
+        <ImportBar running={importState.running} step={importState.step} progress={importState.progress} result={importResult} onClose={dismissImport} />
 
         {/* Alertas + Status */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
@@ -96,28 +101,28 @@ export default function Page() {
         <section aria-label="Métricas operacionais" className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           <MetricCard
             label="NFs pendentes"
-            value={imp.result ? imp.result.summary.totalNFs : m.totalNFs}
-            sub={imp.result
-              ? `${imp.result.summary.rotasUnicas} rotas · ${imp.result.summary.totalLinhas} linhas SIAT`
+            value={summary ? summary.totalNFs : m.totalNFs}
+            sub={summary
+              ? `${summary.rotasUnicas} rotas · ${summary.totalLinhas} linhas SIAT`
               : `última import. ${new Date(m.ultimaImportacao!).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`}
           />
           <MetricCard
             label="Peso total"
-            value={imp.result ? `${imp.result.summary.pesoTotalToneladas}t` : formatPeso(m.pesoTotal)}
-            sub={imp.result ? `${imp.result.summary.pesoTotalKg.toLocaleString('pt-BR')} kg` : undefined}
-            capacity={!imp.result ? { used: m.pesoTotal, total: 71000, label: `${formatPeso(m.pesoTotal)} / 71t` } : undefined}
+            value={summary ? `${summary.pesoTotalToneladas}t` : formatPeso(m.pesoTotal)}
+            sub={summary ? `${summary.pesoTotalKg.toLocaleString('pt-BR')} kg` : undefined}
+            capacity={!summary ? { used: m.pesoTotal, total: 71000, label: `${formatPeso(m.pesoTotal)} / 71t` } : undefined}
           />
           <MetricCard
-            label="Veículos no SIAT"
-            value={imp.result ? imp.result.summary.veiculosUnicos : m.veiculosDisponiveis}
-            sub={imp.result ? `${imp.result.summary.motoristasUnicos} motoristas` : undefined}
-            capacity={!imp.result ? { used: m.veiculosDisponiveis, total: m.veiculosTotal, label: `${m.veiculosDisponiveis} / ${m.veiculosTotal} ativos` } : undefined}
+            label="Veículos disponíveis"
+            value={summary ? summary.veiculosUnicos : m.veiculosDisponiveis}
+            sub={summary ? `${summary.motoristasUnicos} motoristas` : undefined}
+            capacity={!summary ? { used: m.veiculosDisponiveis, total: m.veiculosTotal, label: `${m.veiculosDisponiveis} / ${m.veiculosTotal} ativos` } : undefined}
             valueColor="#3B6D11"
           />
           <MetricCard
             label="Rotas identificadas"
-            value={imp.result ? imp.result.summary.rotasUnicas : m.rotasPendentes}
-            sub={imp.result ? 'do SIAT — aguardando geração' : 'aguardando operador'}
+            value={summary ? summary.rotasUnicas : m.rotasPendentes}
+            sub={summary ? 'do SIAT — aguardando geração' : 'aguardando operador'}
             valueColor="#854F0B"
             className="border-l-2 border-l-[#854F0B]"
           />
@@ -156,7 +161,7 @@ export default function Page() {
       {importDialog && (
         <SiatImportDialog
           onClose={() => setImportDialog(false)}
-          onConfirm={f => { setImportDialog(false); imp.runImport(f) }}
+          onConfirm={f => { setImportDialog(false); refresh(f) }}
         />
       )}
     </div>

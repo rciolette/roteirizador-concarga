@@ -7,11 +7,11 @@ import {
 import { NotasFiscaisTable } from '@/components/ui/NotasFiscaisTable'
 import { ImportarSIATButton } from '@/components/ui/ImportarSIATButton'
 import { SiatImportDialog } from '@/components/ui/SiatImportDialog'
-import { siatRowsToRotas } from '@/lib/siat'
 import { webhookGerarRotas, mapRetornoGerarRotas, salvarRotasSupabase, salvarNfsNaoAlocadas, atualizarStatusRota, webhookEnviarMotorista, Prioridade, MotoristaPayload } from '@/lib/webhooks'
 import { listarMotoristas, criarMotorista, atualizarMotorista, removerMotorista, importarMotoristas } from '@/lib/motoristas'
 import { cn, formatPeso } from '@/lib/utils'
-import { useCopyToClipboard, useImport } from '@/lib/hooks'
+import { useCopyToClipboard } from '@/lib/hooks'
+import { useAppData } from '@/components/providers/AppDataProvider'
 import { Rota, RouteStatus, RetornoGerarRotas } from '@/types'
 
 // ── Log de sessão ─────────────────────────────────────────────────────────────
@@ -478,7 +478,7 @@ function RouteCard({ rota, onUpdateStatus, onAskConfirm }: {
 
 // ── Rotas Page ────────────────────────────────────────────────────────────────
 export default function RotasPage() {
-  const [routes,         setRoutes]         = useState<Rota[]>([])
+  const { importState, refresh, dismissImport, rotas: routes, setRotas: setRoutes } = useAppData()
   const [filter,         setFilter]         = useState<RouteStatus | 'todos'>('todos')
   const [showDialog,     setShowDialog]     = useState(false)
   const [generating,     setGenerating]     = useState(false)
@@ -486,13 +486,11 @@ export default function RotasPage() {
   const [log,            setLog]            = useState<LogEntry[]>([])
   const [pendingConfirm, setPendingConfirm] = useState<{ action: ConfirmAction; execute: () => void } | null>(null)
   const [importDialog,   setImportDialog]   = useState(false)
-  const imp = useImport()
 
-  useEffect(() => {
-    if (imp.result?.rows.length) {
-      setRoutes(siatRowsToRotas(imp.result.rows))
-    }
-  }, [imp.result])
+  const summary = importState.summary
+  const importResult = summary
+    ? { nfs: summary.totalNFs, peso: summary.pesoTotalToneladas, veiculos: summary.veiculosUnicos }
+    : undefined
 
   const filtered  = filter === 'todos' ? routes : routes.filter(r => r.status === filter)
 
@@ -608,7 +606,7 @@ export default function RotasPage() {
             ? `${routes.length} rotas · ${routes.reduce((a, r) => a + r.qtdNotas, 0)} NFs · ${new Date().toLocaleDateString('pt-BR')}`
             : `Importe o SIAT para carregar as rotas de hoje · ${new Date().toLocaleDateString('pt-BR')}`}
         >
-          <ImportarSIATButton onClick={() => setImportDialog(true)} running={imp.running} label="Atualizar SIAT" loadingLabel="Atualizando..." />
+          <ImportarSIATButton onClick={() => setImportDialog(true)} running={importState.running} label="Atualizar SIAT" loadingLabel="Atualizando..." />
 
           {generating ? (
             <Btn variant="primary" disabled>
@@ -654,7 +652,7 @@ export default function RotasPage() {
       </div>
 
       <div className="px-5 py-4 flex flex-col gap-2.5 pb-20">
-        <ImportBar running={imp.running} step={imp.step} progress={imp.progress} result={imp.result} onClose={imp.reset} />
+        <ImportBar running={importState.running} step={importState.step} progress={importState.progress} result={importResult} onClose={dismissImport} />
 
         {toast && (
           <div className={cn(
@@ -692,7 +690,7 @@ export default function RotasPage() {
           ))}
         </div>
 
-        {routes.length === 0 && !imp.running && (
+        {routes.length === 0 && !importState.running && (
           <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
             <svg className="w-8 h-8 text-subtle" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1M16 12l-4-4m0 0l-4 4m4-4v12"/>
@@ -734,7 +732,7 @@ export default function RotasPage() {
       {importDialog && (
         <SiatImportDialog
           onClose={() => setImportDialog(false)}
-          onConfirm={f => { setImportDialog(false); imp.runImport(f) }}
+          onConfirm={f => { setImportDialog(false); refresh(f) }}
         />
       )}
 

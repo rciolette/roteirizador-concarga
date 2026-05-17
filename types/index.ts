@@ -34,6 +34,7 @@ export interface Veiculo {
   sigla: string
   status: 'disponivel' | 'indisponivel' | 'manutencao'
   regiaoPreferencial?: string
+  codigoSiatMotorista?: string
 }
 
 export interface Motorista {

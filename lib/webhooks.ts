@@ -1,6 +1,4 @@
 import type { Rota, RetornoGerarRotas, ClientType, RouteStatus } from '@/types'
-import type { SiatFilters, SiatRow } from '@/lib/siat'
-import { normalizeSiatPayload } from '@/lib/siat'
 import { supabase } from '@/lib/supabase'
 
 export type Prioridade = 'padrao' | 'vermelho' | 'menos-veiculos' | 'menor-distancia'
@@ -194,19 +192,20 @@ export async function webhookEnviarMotorista(payload: EnviarMotoristaPayload): P
   }
 }
 
-export async function webhookImportarSIAT(filters: SiatFilters = {}): Promise<SiatRow[]> {
-  const qs = new URLSearchParams()
-  if (filters.dataInicio) qs.set('dataInicio', filters.dataInicio)
-  if (filters.dataFim)    qs.set('dataFim',    filters.dataFim)
-  if (filters.situacao)   qs.set('situacao',   filters.situacao)
-  if (filters.codigoRota) qs.set('codigoRota', filters.codigoRota)
-  if (filters.qtdMaxima)  qs.set('qtdMaxima',  String(filters.qtdMaxima))
+export async function limparRascunhosDoDia(data: string): Promise<void> {
+  // Remove rotas rascunho do dia antes de re-importar.
+  // Deleta notas_fiscais primeiro para satisfazer a FK, depois as rotas.
+  // Rotas aprovadas/enviadas não são tocadas.
+  const { data: rotasDia } = await supabase
+    .from('rotas')
+    .select('id')
+    .eq('data', data)
+    .eq('status', 'rascunho')
 
-  const url = qs.size > 0 ? `/api/siat?${qs}` : '/api/siat'
-  const res = await fetch(url, { method: 'GET' })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err.error || `HTTP ${res.status}`)
-  }
-  return normalizeSiatPayload(await res.json())
+  const ids = (rotasDia ?? []).map(r => r.id)
+  if (ids.length === 0) return
+
+  await supabase.from('notas_fiscais').delete().in('rota_id', ids)
+  await supabase.from('historico_rotas').delete().in('rota_id', ids)
+  await supabase.from('rotas').delete().in('id', ids)
 }

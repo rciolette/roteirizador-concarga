@@ -11,6 +11,7 @@ const navItems = [
       { href: '/',          label: 'Dashboard',        badge: '3', badgeType: 'danger' as const },
       { href: '/rotas',     label: 'Rotas do dia',     badge: '5', badgeType: 'warn'   as const },
       { href: '/historico', label: 'Histórico' },
+      { href: '/frota',     label: 'Frota' },
     ],
   },
   {
@@ -44,6 +45,16 @@ const icons: Record<string, ReactNode> = {
   '/rotas/acoes': (
     <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
       <path d="M2 4h12M4 8h8M6 12h4"/>
+    </svg>
+  ),
+  '/frota': (
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <rect x="1" y="8" width="8" height="5" rx="1"/>
+      <path d="M9 10h2l2-2.5V13H9V10z"/>
+      <circle cx="3.5" cy="13.5" r="1" fill="currentColor" stroke="none"/>
+      <circle cx="11.5" cy="13.5" r="1" fill="currentColor" stroke="none"/>
+      <circle cx="5" cy="4.5" r="2"/>
+      <circle cx="11" cy="4.5" r="1.5" strokeWidth="1.3"/>
     </svg>
   ),
   '/configuracoes': (
