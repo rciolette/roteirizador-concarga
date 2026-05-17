@@ -1,5 +1,5 @@
 export type CondStatus = 'ok' | 'laranja' | 'vermelho'
-export type RouteStatus = 'rascunho' | 'aguardando' | 'aprovada' | 'enviada'
+export type RouteStatus = 'rascunho' | 'aguardando' | 'aprovada' | 'enviada' | 'rejeitada'
 export type ClientType = 'CD' | 'Rede' | 'Varejo' | 'Reentrega'
 
 export interface NotaFiscal {
@@ -41,6 +41,7 @@ export interface Motorista {
   nome: string
   telefone: string
   sigla: string
+  placa?: string
   veiculoId?: string
   veiculo?: Veiculo
   status: 'disponivel' | 'ausente' | 'em_rota'
@@ -61,6 +62,8 @@ export interface Rota {
   notasFiscais: NotaFiscal[]
   linkMaps?: string
   nfsConcatenadas?: string
+  alertas?: string[]
+  ocupacaoPercent?: number
   createdAt: string
   enviadoEm?: string
 }
@@ -142,9 +145,48 @@ export interface AppConfig {
   instrucoesPorRota: InstrucaoRota[]
 }
 
+export interface RetornoGerarRotas {
+  rotas: {
+    codigoRota: string
+    regiao: string
+    veiculo: string
+    motorista: string
+    celular: string
+    pesoTotal: number
+    ocupacaoPercent: number
+    qtdNotas: number
+    status: 'rascunho'
+    alertas: string[]
+    linkMaps: string
+    notas: {
+      numnfs: number
+      destinatario: string
+      municipio: string
+      bairro: string
+      endereco: string
+      pesoKg: number
+      cond: 'ok' | 'laranja' | 'vermelho'
+      tipoCliente: string
+      agendamento: string
+      reentrega: boolean
+      sac: string | null
+      observacao: string
+    }[]
+  }[]
+  nfsNaoAlocadas: number[]
+  motivoNaoAlocacao: string
+  resumo: {
+    totalNfs: number
+    totalRotas: number
+    totalVeiculosUsados: number
+    pesoTotal: number
+    nfsComAlerta: number
+    geradoEm: string
+  }
+}
+
 export interface GerarRotasInput {
   observacoes: string
-  motoristasAusentes: string
   veiculosBloqueados: string
   restricoesExtras: string
   prioridade: string

@@ -105,6 +105,7 @@ const PILL: Record<RouteStatus, { pill: string; dot: string; label: string }> = 
   aguardando: { pill: 'bg-warn-bg text-warn',            dot: 'bg-cond-warn', label: 'aguardando' },
   aprovada:   { pill: 'bg-success-bg text-success-dark', dot: 'bg-cond-ok',   label: 'aprovada' },
   enviada:    { pill: 'bg-primary-bg text-primary-dark', dot: 'bg-primary',   label: 'enviada' },
+  rejeitada:  { pill: 'bg-danger-bg text-danger',        dot: 'bg-cond-err',  label: 'rejeitada' },
 }
 
 export function StatusPill({ status }: { status: RouteStatus }) {
