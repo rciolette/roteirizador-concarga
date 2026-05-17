@@ -11,6 +11,7 @@ import { useImport } from '@/lib/hooks'
 export default function Page() {
   const imp = useImport()
   const m   = MOCK_METRICS
+  const rotasTotal = m.rotasRascunho + m.rotasPendentes + m.rotasAprovadas + m.rotasEnviadas
   const [importDialog, setImportDialog] = useState(false)
 
   return (
@@ -29,40 +30,43 @@ export default function Page() {
         <ImportBar running={imp.running} step={imp.step} progress={imp.progress} result={imp.result} onClose={imp.reset} />
 
         {/* Alertas + Status */}
-        <div className="grid grid-cols-2 gap-2.5">
-          <Card>
-            <CardHeader>
-              <span className="text-xs font-medium">Alertas de prioridade</span>
-              <span className="text-[11px] px-2 py-0.5 rounded-full bg-cond-err text-white font-medium">3 críticos</span>
-            </CardHeader>
-            {[
-              { color: 'bg-cond-err',  text: `${m.nfsVermelho} NFs em vermelho sem rota atribuída`, meta: 'urgente' },
-              { color: 'bg-cond-warn', text: 'Rota 30.12 Barreiro acima de 95% capacidade',         meta: 'peso' },
-              { color: 'bg-cond-warn', text: '5 agendamentos para hoje sem veículo',                 meta: 'GRADE' },
-            ].map((a, i) => (
-              <div
-                key={i}
-                className="flex items-center gap-2.5 px-3.5 py-2 text-xs border-b border-[0.5px] border-[var(--border-faint)]"
-              >
-                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${a.color}`} />
-                <span className="flex-1">{a.text}</span>
-                <span className="text-[10px] text-muted shrink-0">{a.meta}</span>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          <div role="region" aria-label="Alertas de prioridade">
+            <Card>
+              <CardHeader>
+                <span className="text-xs font-medium">Alertas de prioridade</span>
+                <span className="text-[11px] px-2 py-0.5 rounded-full bg-cond-err text-white font-medium">3 críticos</span>
+              </CardHeader>
+              {[
+                { color: 'bg-cond-err',  text: `${m.nfsVermelho} NFs em vermelho sem rota atribuída`, meta: 'urgente' },
+                { color: 'bg-cond-warn', text: 'Rota 30.12 Barreiro acima de 95% capacidade',         meta: 'peso' },
+                { color: 'bg-cond-warn', text: '5 agendamentos para hoje sem veículo',                 meta: 'GRADE' },
+              ].map((a, i) => (
+                <div
+                  key={i}
+                  className="flex items-center gap-2.5 px-3.5 py-2 text-xs border-b border-[0.5px] border-[var(--border-faint)]"
+                >
+                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${a.color}`} />
+                  <span className="flex-1">{a.text}</span>
+                  <span className="text-[11px] text-muted shrink-0">{a.meta}</span>
+                </div>
+              ))}
+              <div className="flex items-center gap-2 px-3.5 py-1 border-b border-[0.5px] border-[var(--border-faint)]">
+                <span className="text-[9px] text-muted uppercase tracking-[0.06em]">informações</span>
+                <div className="flex-1 h-px bg-[var(--border-faint)]" />
               </div>
-            ))}
-            <div className="flex items-center gap-2 px-3.5 py-1 border-b border-[0.5px] border-[var(--border-faint)]">
-              <span className="text-[9px] text-muted uppercase tracking-[0.06em]">informações</span>
-              <div className="flex-1 h-px bg-[var(--border-faint)]" />
-            </div>
-            <div className="flex items-center gap-2.5 px-3.5 py-2 text-xs opacity-60">
-              <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-cond-ok" />
-              <span className="flex-1">DOUGLAS B confirmou disponibilidade</span>
-              <span className="text-[10px] shrink-0">ok</span>
-            </div>
-          </Card>
+              <div className="flex items-center gap-2.5 px-3.5 py-2 text-xs opacity-60">
+                <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-cond-ok" />
+                <span className="flex-1">DOUGLAS B confirmou disponibilidade</span>
+                <span className="text-[11px] shrink-0">ok</span>
+              </div>
+            </Card>
+          </div>
 
           <Card>
             <CardHeader>
               <span className="text-xs font-medium">Status das rotas — hoje</span>
+              <span className="text-[11px] text-muted">{rotasTotal} total</span>
             </CardHeader>
             {[
               { dot: 'bg-subtle',    label: 'Rascunho',              value: m.rotasRascunho,  vc: 'text-base' },
@@ -72,18 +76,24 @@ export default function Page() {
             ].map((s, i, arr) => (
               <div
                 key={i}
-                className={`flex items-center gap-2.5 px-3.5 py-2 text-xs ${i < arr.length - 1 ? 'border-b border-[0.5px] border-[var(--border-faint)]' : ''}`}
+                className={`flex items-center gap-2.5 px-3.5 py-2.5 text-xs ${i < arr.length - 1 ? 'border-b border-[0.5px] border-[var(--border-faint)]' : ''}`}
               >
                 <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${s.dot}`} />
-                <span className="flex-1">{s.label}</span>
-                <span className={`text-xs font-medium ${s.vc}`}>{s.value} rotas</span>
+                <span className="w-[108px] shrink-0 text-[11px]">{s.label}</span>
+                <div className="flex-1 h-[3px] bg-cream-hover rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full ${s.dot}`}
+                    style={{ width: `${Math.round((s.value / rotasTotal) * 100)}%` }}
+                  />
+                </div>
+                <span className={`text-xs font-medium shrink-0 ml-2 ${s.vc}`}>{s.value}</span>
               </div>
             ))}
           </Card>
         </div>
 
         {/* Métricas */}
-        <div className="grid grid-cols-4 gap-2">
+        <section aria-label="Métricas operacionais" className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           <MetricCard
             label="NFs pendentes"
             value={imp.result ? imp.result.summary.totalNFs : m.totalNFs}
@@ -109,8 +119,9 @@ export default function Page() {
             value={imp.result ? imp.result.summary.rotasUnicas : m.rotasPendentes}
             sub={imp.result ? 'do SIAT — aguardando geração' : 'aguardando operador'}
             valueColor="#854F0B"
+            className="border-l-2 border-l-[#854F0B]"
           />
-        </div>
+        </section>
 
         {/* Tipo de cliente */}
         <Card>
@@ -118,31 +129,28 @@ export default function Page() {
             <span className="text-xs font-medium">Resumo por tipo de cliente</span>
             <span className="text-[11px] text-muted">hoje</span>
           </CardHeader>
-          <div className="grid grid-cols-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4">
             {m.porTipoCliente.map((t, i, arr) => (
               <div
                 key={t.tipo}
                 className={`px-3.5 py-2.5 ${i < arr.length - 1 ? 'border-r border-[0.5px] border-[var(--border-faint)]' : ''}`}
               >
-                <div className="text-[10px] text-muted mb-1">{t.tipo}</div>
+                <div className="text-[11px] text-muted mb-1">{t.tipo}</div>
                 <div className={`text-[18px] font-medium ${t.tipo === 'Reentrega' ? 'text-warn-mid' : 'text-base'}`}>
                   {t.count}
                 </div>
-                <div className="text-[10px] text-muted">NFs</div>
+                <div className="text-[11px] text-muted">NFs</div>
               </div>
             ))}
           </div>
         </Card>
 
-        {/* CTAs */}
-        <div className="flex gap-2">
-          <Link href="/rotas" className="flex-1">
-            <Btn variant="primary" style={{ width: '100%', justifyContent: 'center' }}>+ Gerar rotas com IA</Btn>
-          </Link>
-          <Link href="/rotas" className="flex-1">
-            <Btn style={{ width: '100%', justifyContent: 'center' }}>Ver rotas pendentes ({m.rotasPendentes})</Btn>
-          </Link>
-        </div>
+        {/* CTA */}
+        <Link href="/rotas">
+          <Btn style={{ width: '100%', justifyContent: 'center' }}>
+            Ver {m.rotasPendentes} rotas pendentes →
+          </Btn>
+        </Link>
       </div>
 
       {importDialog && (

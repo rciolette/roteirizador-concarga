@@ -82,17 +82,18 @@ export function CardHeader({ children, className }: { children: ReactNode; class
 }
 
 // ── Metric Card ───────────────────────────────────────────────────────────────
-export function MetricCard({ label, value, sub, valueColor, capacity }: {
+export function MetricCard({ label, value, sub, valueColor, capacity, className }: {
   label: string; value: string | number; sub?: string; valueColor?: string
   capacity?: { used: number; total: number; label: string }
+  className?: string
 }) {
   const pct      = capacity ? Math.min(100, Math.round((capacity.used / capacity.total) * 100)) : null
   const barColor = pct === null ? '' : pct >= 90 ? 'bg-cond-err' : pct >= 70 ? 'bg-cond-warn' : 'bg-cond-ok'
   const pctColor = pct === null ? '' : pct >= 90 ? 'text-danger-mid' : pct >= 70 ? 'text-warn-mid' : 'text-success'
 
   return (
-    <div className="bg-cream border border-[0.5px] border-[var(--border-subtle)] rounded-lg p-3">
-      <div className="text-[10px] text-muted mb-1 uppercase tracking-[0.03em]">{label}</div>
+    <div className={cn('bg-cream border border-[0.5px] border-[var(--border-subtle)] rounded-lg p-3', className)}>
+      <div className="text-[11px] text-muted mb-1 uppercase tracking-[0.03em]">{label}</div>
       <div
         className="text-[22px] font-medium tracking-[-0.02em] text-base"
         style={valueColor ? { color: valueColor } : undefined}
@@ -102,8 +103,8 @@ export function MetricCard({ label, value, sub, valueColor, capacity }: {
       {capacity && (
         <div className="mt-1.5">
           <div className="flex items-center justify-between mb-1">
-            <span className="text-[10px] text-muted">{capacity.label}</span>
-            <span className={cn('text-[10px] font-medium', pctColor)}>{pct}%</span>
+            <span className="text-[11px] text-muted">{capacity.label}</span>
+            <span className={cn('text-[11px] font-medium', pctColor)}>{pct}%</span>
           </div>
           <div className="h-[3px] bg-cream-hover rounded-full overflow-hidden">
             <div
@@ -113,7 +114,7 @@ export function MetricCard({ label, value, sub, valueColor, capacity }: {
           </div>
         </div>
       )}
-      {sub && <div className="text-[10px] text-muted mt-0.5">{sub}</div>}
+      {sub && <div className="text-[11px] text-muted mt-0.5">{sub}</div>}
     </div>
   )
 }

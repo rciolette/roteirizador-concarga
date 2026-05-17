@@ -92,7 +92,7 @@ export default function Sidebar() {
                   key={item.href}
                   href={item.href}
                   className={cn(
-                    'flex items-center gap-2 px-2.5 py-[7px] rounded-lg text-xs transition-colors duration-100',
+                    'flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs transition-colors duration-100',
                     'border-l-[2.5px]',
                     active
                       ? 'bg-cream text-base font-medium border-primary'
