@@ -1,29 +1,42 @@
 'use client'
 import { useTheme } from 'next-themes'
 import { useEffect, useState } from 'react'
-import { Moon, Sun } from 'lucide-react'
+import { cn } from '@/lib/utils'
+
+type Mode = 'light' | 'system' | 'dark'
+const MODES: Mode[] = ['light', 'system', 'dark']
+const ICONS: Record<Mode, string> = { light: '☀', system: '◉', dark: '☾' }
+const LABELS: Record<Mode, string> = { light: 'Modo claro', system: 'Sistema', dark: 'Modo escuro' }
 
 export function ThemeToggle() {
-  const { setTheme, resolvedTheme } = useTheme()
+  const { theme, setTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => setMounted(true), [])
 
-  // Stable placeholder avoids layout shift before mount
-  if (!mounted) return <div className="w-7 h-7 shrink-0" />
+  if (!mounted) return <div className="h-[26px] w-[76px] shrink-0" />
 
-  const isDark = resolvedTheme === 'dark'
+  const current: Mode = (MODES.includes(theme as Mode) ? theme : 'system') as Mode
 
   return (
-    <button
-      onClick={() => setTheme(isDark ? 'light' : 'dark')}
-      className="w-7 h-7 rounded-lg flex items-center justify-center text-muted hover:text-base hover:bg-cream transition-colors duration-100 border border-[0.5px] border-[var(--border-subtle)] cursor-pointer shrink-0"
-      aria-label={isDark ? 'Ativar modo claro' : 'Ativar modo escuro'}
-    >
-      {isDark
-        ? <Sun size={13} strokeWidth={1.6} />
-        : <Moon size={13} strokeWidth={1.6} />
-      }
-    </button>
+    <div className="flex items-center bg-page border border-[0.5px] border-[var(--border-subtle)] rounded-lg p-0.5 gap-0.5">
+      {MODES.map(m => (
+        <button
+          key={m}
+          onClick={() => setTheme(m)}
+          title={LABELS[m]}
+          aria-label={LABELS[m]}
+          className={cn(
+            'w-[22px] h-5 flex items-center justify-center rounded text-[12px] leading-none',
+            'transition-colors duration-100 cursor-pointer border-none',
+            current === m
+              ? 'bg-white dark:bg-[#2A2A28] text-base shadow-sm'
+              : 'bg-transparent text-subtle hover:text-muted',
+          )}
+        >
+          {ICONS[m]}
+        </button>
+      ))}
+    </div>
   )
 }

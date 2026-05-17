@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Topbar, Card, CardHeader, Btn, ImportBar, TextInput, TextArea } from '@/components/ui'
 import { ImportarSIATButton } from '@/components/ui/ImportarSIATButton'
 import { SiatImportDialog } from '@/components/ui/SiatImportDialog'
@@ -26,7 +26,17 @@ function Label({ children }: { children: React.ReactNode }) {
 export default function ConfiguracoesPage() {
   const [cfg, setCfg] = useState<AppConfig>(DEFAULT_CONFIG)
   const [saved, setSaved] = useState(false)
+  const [hasChanges, setHasChanges] = useState(false)
   const [importDialog, setImportDialog] = useState(false)
+  const initialRender = useRef(true)
+
+  useEffect(() => {
+    if (initialRender.current) {
+      initialRender.current = false
+      return
+    }
+    setHasChanges(true)
+  }, [cfg])
   const { importState, refresh, dismissImport } = useAppData()
   const summary = importState.summary
   const importResult = summary
@@ -63,8 +73,15 @@ export default function ConfiguracoesPage() {
     }))
   }
 
+  function handleDiscard() {
+    setCfg(DEFAULT_CONFIG)
+    setHasChanges(false)
+    initialRender.current = true
+  }
+
   function handleSave() {
     setSaved(true)
+    setHasChanges(false)
     setTimeout(() => setSaved(false), 2000)
   }
 
@@ -247,6 +264,19 @@ export default function ConfiguracoesPage() {
           onClose={() => setImportDialog(false)}
           onConfirm={f => { setImportDialog(false); refresh(f) }}
         />
+      )}
+
+      {hasChanges && (
+        <div className="fixed bottom-0 left-0 right-0 z-50 flex items-center justify-end gap-3 px-6 py-3 bg-white dark:bg-[#1E1E1C] border-t border-[0.5px] border-[var(--border-subtle)] shadow-lg">
+          <span className="text-xs text-muted">Alterações não salvas</span>
+          <button
+            onClick={handleDiscard}
+            className="px-3.5 py-[5px] text-xs text-muted hover:text-base transition-colors cursor-pointer bg-transparent border-none"
+          >
+            Descartar
+          </button>
+          <Btn variant="primary" onClick={handleSave}>Salvar configurações</Btn>
+        </div>
       )}
     </div>
   )

@@ -321,14 +321,7 @@ export function EmptyState({ message }: { message: string }) {
 
 // ── Mock Banner ───────────────────────────────────────────────────────────────
 export function MockBanner() {
-  return (
-    <div className="bg-warn-bg border-b border-[0.5px] border-warn-border px-6 py-1.5 flex items-center gap-2 text-[11px] text-warn shrink-0">
-      <span className="bg-warn-accent text-white text-[9px] font-bold px-1.5 py-px rounded-[3px] tracking-[0.05em]">
-        SIMULAÇÃO
-      </span>
-      <span>Modo mock ativo — nenhuma ação envia dados reais ao SIAT ou a qualquer sistema externo.</span>
-    </div>
-  )
+  return <div className="h-[6px] bg-warn-accent shrink-0 opacity-80" />
 }
 
 // ── Confirm Dialog ────────────────────────────────────────────────────────────

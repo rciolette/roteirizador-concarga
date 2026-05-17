@@ -80,10 +80,7 @@ export default function Sidebar() {
               <path d="M2 8l4-5 4 5 4-5"/>
             </svg>
           </div>
-          <div>
-            <div className="text-[13px] font-medium text-base tracking-[-0.01em]">Concarga</div>
-            <div className="text-[9px] text-subtle">Roteirizador v1.0</div>
-          </div>
+          <div className="text-[13px] font-medium text-base tracking-[-0.01em]">Concarga</div>
         </div>
       </div>
 
@@ -133,12 +130,18 @@ export default function Sidebar() {
 
       {/* Footer */}
       <div className="px-[18px] py-3 border-t border-[0.5px] border-[var(--border-subtle)]">
-        <div className="flex items-center justify-between mb-1.5">
+        <div className="flex items-center justify-between mb-2.5">
           <div className="text-[10px] text-subtle">Tema</div>
           <ThemeToggle />
         </div>
-        <div className="text-[10px] text-subtle mb-0.5">Conectado a</div>
-        <div className="text-[11px] text-mid font-mono font-medium">siat.dyndns.info</div>
+        <div className="text-[10px] text-subtle mb-1">SIAT</div>
+        <div className="flex items-center gap-1.5">
+          <span className="relative flex h-1.5 w-1.5 shrink-0">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cond-ok opacity-60" />
+            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-cond-ok" />
+          </span>
+          <span className="text-[11px] text-mid font-mono font-medium">siat.dyndns.info</span>
+        </div>
       </div>
     </aside>
   )
