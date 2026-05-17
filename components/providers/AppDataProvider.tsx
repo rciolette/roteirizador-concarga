@@ -172,7 +172,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       ])
       setMotoristas(mots)
       setVeiculos(veics)
-      await runImport({}, mots, veics, false)
+      await runImport({}, mots, veics, true)
     }
 
     bootstrap()

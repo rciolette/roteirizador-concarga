@@ -90,7 +90,7 @@ export default function ConfiguracoesPage() {
       {/* Topbar fica sticky enquanto o main rola */}
       <div className="sticky top-0 z-10">
         <Topbar title="Configurações" sub="Conexão, regras, frota e instruções da IA">
-          <ImportarSIATButton onClick={() => setImportDialog(true)} running={importState.running} label="Testar e importar SIAT" />
+          <ImportarSIATButton onClick={() => setImportDialog(true)} running={importState.running} label="Importar Rotas e Veículos" loadingLabel="Importando..." />
           <Btn variant="primary" onClick={handleSave}>
             {saved ? '✓ Salvo!' : 'Salvar configurações'}
           </Btn>

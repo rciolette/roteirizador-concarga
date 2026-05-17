@@ -617,6 +617,21 @@ export default function RotasPage() {
 
   return (
     <div>
+      {importState.running && routes.length === 0 && (
+        <div className="fixed inset-0 bg-page/80 backdrop-blur-sm z-40 flex items-center justify-center">
+          <div className="bg-white dark:bg-[#1E1E1C] rounded-xl border border-[0.5px] border-[var(--border-card)] px-8 py-6 flex flex-col items-center gap-3 text-center shadow-lg">
+            <svg className="w-6 h-6 text-primary animate-spin-slow" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" strokeDasharray="60" strokeDashoffset="20"/>
+            </svg>
+            <div className="text-sm font-medium">Carregando rotas do dia...</div>
+            <div className="text-[11px] text-muted">{importState.step}</div>
+            <div className="w-48 h-[3px] bg-cream rounded-full overflow-hidden">
+              <div className="h-full bg-primary rounded-full transition-[width] duration-[400ms]" style={{ width: `${importState.progress}%` }} />
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="sticky top-0 z-10">
         <Topbar
           title="Rotas do dia"
@@ -624,7 +639,7 @@ export default function RotasPage() {
             ? `${routes.length} rotas · ${routes.reduce((a, r) => a + r.qtdNotas, 0)} NFs · ${new Date().toLocaleDateString('pt-BR')}`
             : `Importe o SIAT para carregar as rotas de hoje · ${new Date().toLocaleDateString('pt-BR')}`}
         >
-          <ImportarSIATButton onClick={() => setImportDialog(true)} running={importState.running} label="Atualizar SIAT" loadingLabel="Atualizando..." />
+          <ImportarSIATButton onClick={() => setImportDialog(true)} running={importState.running} label="Importar Rotas e Veículos" loadingLabel="Importando..." />
 
           {generating ? (
             <Btn variant="primary" disabled>

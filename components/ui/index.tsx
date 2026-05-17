@@ -205,8 +205,26 @@ export function ImportBar({ running, step, progress, result, onClose }: {
   running: boolean; step: string; progress: number;
   result?: { nfs: number; peso: number; veiculos: number }; onClose?: () => void
 }) {
-  if (!running && !result) return null
+  const hasError = !running && !result && step.startsWith('Falha')
+  if (!running && !result && !hasError) return null
   const done = progress >= 100
+
+  if (hasError) {
+    return (
+      <div className="animate-fade-in bg-white dark:bg-[#1E1E1C] rounded-lg px-4 py-3 flex items-center gap-3.5 border border-[0.5px] border-danger-border">
+        <svg className="w-[18px] h-[18px] text-danger shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/>
+        </svg>
+        <div className="flex-1 min-w-0">
+          <div className="text-xs font-medium text-danger">{step}</div>
+          <div className="text-[11px] text-muted mt-0.5">Verifique se o workflow está ativo no n8n e tente novamente.</div>
+        </div>
+        {onClose && (
+          <button onClick={onClose} className="bg-transparent border-none cursor-pointer text-muted text-lg px-1 leading-none rounded-md hover:text-base transition-colors">×</button>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className={cn(
