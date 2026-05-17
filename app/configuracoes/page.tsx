@@ -5,7 +5,7 @@ import { ImportarSIATButton } from '@/components/ui/ImportarSIATButton'
 import { SiatImportDialog } from '@/components/ui/SiatImportDialog'
 import { DEFAULT_CONFIG } from '@/lib/data'
 import { AppConfig, InstrucaoRota } from '@/types'
-import { useImport } from '@/lib/hooks'
+import { useAppData } from '@/components/providers/AppDataProvider'
 import { cn } from '@/lib/utils'
 
 const DIAS = ['seg', 'ter', 'qua', 'qui', 'sex', 'sab'] as const
@@ -27,7 +27,11 @@ export default function ConfiguracoesPage() {
   const [cfg, setCfg] = useState<AppConfig>(DEFAULT_CONFIG)
   const [saved, setSaved] = useState(false)
   const [importDialog, setImportDialog] = useState(false)
-  const imp = useImport()
+  const { importState, refresh, dismissImport } = useAppData()
+  const summary = importState.summary
+  const importResult = summary
+    ? { nfs: summary.totalNFs, peso: summary.pesoTotalToneladas, veiculos: summary.veiculosUnicos }
+    : undefined
 
   const setOp = (k: keyof AppConfig['operacao'], v: string) =>
     setCfg(p => ({ ...p, operacao: { ...p.operacao, [k]: v } }))
@@ -69,7 +73,7 @@ export default function ConfiguracoesPage() {
       {/* Topbar fica sticky enquanto o main rola */}
       <div className="sticky top-0 z-10">
         <Topbar title="Configurações" sub="Conexão, regras, frota e instruções da IA">
-          <ImportarSIATButton onClick={() => setImportDialog(true)} running={imp.running} label="Testar e importar SIAT" />
+          <ImportarSIATButton onClick={() => setImportDialog(true)} running={importState.running} label="Testar e importar SIAT" />
           <Btn variant="primary" onClick={handleSave}>
             {saved ? '✓ Salvo!' : 'Salvar configurações'}
           </Btn>
@@ -78,7 +82,7 @@ export default function ConfiguracoesPage() {
 
       {/* Conteúdo em bloco normal — cresce com o conteúdo, main scrolla */}
       <div className="px-5 py-5 flex flex-col gap-6 pb-20">
-        <ImportBar running={imp.running} step={imp.step} progress={imp.progress} result={imp.result} onClose={imp.reset} />
+        <ImportBar running={importState.running} step={importState.step} progress={importState.progress} result={importResult} onClose={dismissImport} />
 
         {/* ── Horários ── */}
         <Card>
@@ -241,7 +245,7 @@ export default function ConfiguracoesPage() {
       {importDialog && (
         <SiatImportDialog
           onClose={() => setImportDialog(false)}
-          onConfirm={f => { setImportDialog(false); imp.runImport(f) }}
+          onConfirm={f => { setImportDialog(false); refresh(f) }}
         />
       )}
     </div>

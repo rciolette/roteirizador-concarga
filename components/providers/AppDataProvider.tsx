@@ -149,9 +149,15 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
 
   const refresh = useCallback(async (filters?: SiatFilters) => {
     // Recarrega pools do Supabase antes do re-import para ter dados frescos
-    const [mots, veics] = await Promise.all([listarMotoristas(), listarVeiculos()]).catch(() => [motoristas, veiculos])
-    setMotoristas(mots)
-    setVeiculos(veics)
+    let mots: Motorista[] = motoristas
+    let veics: Veiculo[]  = veiculos
+    try {
+      ;[mots, veics] = await Promise.all([listarMotoristas(), listarVeiculos()])
+      setMotoristas(mots)
+      setVeiculos(veics)
+    } catch {
+      // mantém o pool atual se Supabase falhar
+    }
     await runImport(filters ?? {}, mots, veics, true)
   }, [motoristas, veiculos, runImport])
 
