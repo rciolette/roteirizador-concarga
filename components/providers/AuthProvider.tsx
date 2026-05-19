@@ -53,7 +53,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     carregarUsuario()
 
     const sb = getSupabaseBrowser()
-    const { data: { subscription } } = sb.auth.onAuthStateChange((event) => {
+    const { data: { subscription } } = sb.auth.onAuthStateChange((event: string) => {
       if (event === 'SIGNED_IN')  carregarUsuario()
       if (event === 'SIGNED_OUT') { setUsuario(null); router.replace('/login') }
     })
