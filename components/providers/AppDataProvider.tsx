@@ -8,10 +8,10 @@ import {
   useRef,
   useState,
 } from 'react'
-import type { Motorista, Rota, Veiculo } from '@/types'
+import type { Motorista, NotaFiscal, Rota, Veiculo } from '@/types'
 import type { AppConfig } from '@/types'
 import type { SiatFilters, SiatSummary, SiatRow } from '@/lib/siat'
-import { normalizeSiatPayload, summarizeSiat } from '@/lib/siat'
+import { normalizeSiatPayload, summarizeSiat, siatRowsToNotasPendentes } from '@/lib/siat'
 import { listarMotoristas } from '@/lib/motoristas'
 import { listarVeiculos } from '@/lib/veiculos'
 import { carregarRotasSupabase } from '@/lib/webhooks'
@@ -35,9 +35,11 @@ export interface AppData {
   rotas:           Rota[]
   loadingRotas:    boolean
   nfRows:          SiatRow[]
+  nfsPendentes:    NotaFiscal[]
   nfImportState:   NfImportState
   config:          AppConfig
   refresh:         () => Promise<void>
+  refreshVeiculos: () => Promise<void>
   importarNFs:     (filters?: SiatFilters) => Promise<void>
   dismissNFImport: () => void
   setRotas:        React.Dispatch<React.SetStateAction<Rota[]>>
@@ -58,6 +60,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const [rotas,         setRotas]         = useState<Rota[]>([])
   const [loadingRotas,  setLoadingRotas]  = useState(true)
   const [nfRows,        setNfRows]        = useState<SiatRow[]>([])
+  const [nfsPendentes,  setNfsPendentes]  = useState<NotaFiscal[]>([])
   const [config,        setConfig]        = useState<AppConfig>(DEFAULT_CONFIG)
   const [nfImportState, setNfImportState] = useState<NfImportState>({
     running: false, step: '', progress: 0,
@@ -75,6 +78,13 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setLoadingRotas(false)
     }
+  }, [])
+
+  const refreshVeiculos = useCallback(async () => {
+    try {
+      const veics = await listarVeiculos()
+      setVeiculos(veics)
+    } catch { /* silencioso — mantém estado atual */ }
   }, [])
 
   const importarNFs = useCallback(async (filters: SiatFilters = {}) => {
@@ -105,6 +115,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       const summary = summarizeSiat(rows)
 
       setNfRows(rows)
+      setNfsPendentes(siatRowsToNotasPendentes(rows))
       setNfImportState({
         running:  false,
         step:     `${summary.totalNFs} notas fiscais importadas · ${summary.rotasUnicas} rotas`,
@@ -139,6 +150,9 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       } finally {
         setLoadingRotas(false)
       }
+
+      // Carrega NFs pendentes do SIAT em background — não bloqueia o render inicial
+      importarNFs()
     }
 
     bootstrap()
@@ -151,8 +165,8 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   return (
     <AppDataContext.Provider value={{
       motoristas, veiculos, rotas, loadingRotas,
-      nfRows, nfImportState, config,
-      refresh, importarNFs, dismissNFImport, setRotas, setConfig,
+      nfRows, nfsPendentes, nfImportState, config,
+      refresh, refreshVeiculos, importarNFs, dismissNFImport, setRotas, setConfig,
     }}>
       {children}
     </AppDataContext.Provider>

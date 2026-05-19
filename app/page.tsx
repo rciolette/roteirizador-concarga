@@ -9,7 +9,7 @@ import { useAppData } from '@/components/providers/AppDataProvider'
 import type { ClientType } from '@/types'
 
 export default function Page() {
-  const { nfImportState, importarNFs, dismissNFImport, rotas, veiculos, loadingRotas } = useAppData()
+  const { nfImportState, importarNFs, dismissNFImport, rotas, veiculos, loadingRotas, nfsPendentes } = useAppData()
   const [importDialog, setImportDialog] = useState(false)
 
   const summary = nfImportState.summary
@@ -56,14 +56,25 @@ export default function Page() {
   // ── Alertas dinâmicos ───────────────────────────────────────────────────────
   const alertas = useMemo(() => {
     const list: { color: string; text: string; meta: string }[] = []
+
+    // NFs pendentes (ainda não roteirizadas) com cond derivado do SIAT
+    const pendentesVermelho = nfsPendentes.filter(n => n.cond === 'vermelho').length
+    const pendentesLaranja  = nfsPendentes.filter(n => n.cond === 'laranja').length
+    if (pendentesVermelho > 0)
+      list.push({ color: 'bg-cond-err', text: `${pendentesVermelho} NFs pendentes com agendamento vencido ou hoje`, meta: 'urgente' })
+    if (pendentesLaranja > 0)
+      list.push({ color: 'bg-cond-warn', text: `${pendentesLaranja} NFs pendentes com SAC aberto ou reentrega`, meta: 'atenção' })
+
+    // Alertas de rotas já geradas
     if (metrics.nfsVermelho > 0)
-      list.push({ color: 'bg-cond-err', text: `${metrics.nfsVermelho} NFs em vermelho sem rota atribuída`, meta: 'urgente' })
+      list.push({ color: 'bg-cond-err', text: `${metrics.nfsVermelho} NFs vermelho em rotas geradas`, meta: 'rotas' })
     for (const r of metrics.rotasCapacidadeAlta)
       list.push({ color: 'bg-cond-warn', text: `Rota ${r.codigoRota} acima de ${r.ocupacaoPercent}% capacidade`, meta: 'peso' })
     if (metrics.agendamentosHoje > 0)
-      list.push({ color: 'bg-cond-warn', text: `${metrics.agendamentosHoje} NFs com agendamento hoje`, meta: 'GRADE' })
+      list.push({ color: 'bg-cond-warn', text: `${metrics.agendamentosHoje} NFs com agendamento hoje em rotas`, meta: 'GRADE' })
+
     return list
-  }, [metrics])
+  }, [metrics, nfsPendentes])
 
   const criticos = alertas.filter(a => a.color === 'bg-cond-err').length
 
@@ -75,7 +86,6 @@ export default function Page() {
           sub={new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
         >
           <ImportarSIATButton onClick={() => setImportDialog(true)} running={nfImportState.running} />
-          <Link href="/rotas"><Btn variant="primary">+ Gerar rotas com IA</Btn></Link>
         </Topbar>
       </div>
 

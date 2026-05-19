@@ -1,30 +1,67 @@
 // Tipos e utilitários para o payload do webhook n8n Execute-SQL-SIAT.
-// Cada linha do payload combina dados de NF + veículo + motorista (resultado denormalizado do JOIN no SIAT).
+// O webhook retorna duas fontes mescladas: linhas de NF + linhas de veículo.
+// Após a correção do node "Edit Fields" (includeOtherFields: true) no WF-A,
+// os aliases reais do SQL são repassados diretamente.
 
-import type { Rota, NotaFiscal, Veiculo, Motorista, ClientType } from '@/types'
+import type { Rota, NotaFiscal, Veiculo, Motorista, ClientType, CondStatus } from '@/types'
 
+// ── Campos de NF (aliases do SQL do WF-A) ────────────────────────────────────
 export interface SiatRow {
-  NUMNFS:         number | string | null
-  ROTA:           string | null
-  PESBRU_NFS:     number | null
-  CODCLI_CLI:     string | null
-  DATEMI:         string | null
-  Situacao:       string | null
-  Placa:          string | null
-  Modelo:         string | null
-  Categoria:      string | null
-  TipoVeiculo:    string | null
-  TipoCarroceria: string | null
-  CapacidadeKg:   number | null
-  PBT:            number | null
-  VolumeM3:       number | null
-  CodMotorista:   string | null
-  NomeMotorista:  string | null
-  Telefone:       string | null
-  Celular:        string | null
-  Capacidade:     number | null
-  Volume_M3:      number | null
-  Motorista:      string | null
+  // Identificação da NF
+  NUMNFS?:           number | string | null
+  ROTA?:             string | null
+  NFSSIT?:           number | null
+
+  // Dados da NF
+  PesoBruto?:        number | null
+  Volume?:           number | null
+  Qtd?:              number | null
+  Valor?:            number | null
+  Destinatario?:     string | null
+  DataEmissao?:      string | null
+  DataAgendamento?:  string | null
+  HoraAgendamento?:  string | null
+  Reentrega?:        number | boolean | null  // IND_REE: 0/1 no SQL Server
+  SAC?:              string | null
+  Observacao?:       string | null
+  TipoOperacao?:     number | null
+
+  // Endereço do destinatário
+  CNPJDestinatario?: string | null
+  Cep?:              string | null
+  Bairro?:           string | null
+  Endereco?:         string | null
+  Numero?:           string | null
+  TipoCliente?:      string | null
+  Regiao?:           string | null
+  TipoCarga?:        string | null
+  Municipio?:        string | null
+  UF?:               string | null
+
+  // Endereço alternativo (quando LOCENT_SIT <> 0)
+  EnderecoFinal?:    string | null
+  MunicipioFinal?:   string | null
+  BairroFinal?:      string | null
+  UFFinal?:          string | null
+
+  // Campos de veículo (linhas de veículo no mesmo payload mesclado)
+  Situacao?:         string | null
+  Placa?:            string | null
+  Modelo?:           string | null
+  Categoria?:        string | null
+  TipoVeiculo?:      string | null
+  TipoCarroceria?:   string | null
+  CapacidadeKg?:     number | null
+  PBT?:              number | null
+  VolumeM3?:         number | null
+  CodMotorista?:     string | null
+  NomeMotorista?:    string | null
+  Telefone?:         string | null
+  Celular?:          string | null
+  Capacidade?:       number | null   // alias legado
+  Volume_M3?:        number | null   // alias legado
+  Motorista?:        string | null   // alias legado
+
   [extra: string]: unknown
 }
 
@@ -39,15 +76,35 @@ export interface SiatFilters {
 export interface SiatSummary {
   totalLinhas:        number
   totalNFs:           number  // NUMNFS únicos
-  pesoTotalKg:        number  // soma de PESBRU_NFS
+  pesoTotalKg:        number  // soma de PesoBruto
   pesoTotalToneladas: number
   veiculosUnicos:     number  // Placa única
   rotasUnicas:        number  // ROTA única
   motoristasUnicos:   number  // CodMotorista único
+  nfsVermelho:        number
+  nfsLaranja:         number
 }
 
+// ── derivarCond ───────────────────────────────────────────────────────────────
+// Regras de criticidade derivadas dos campos do SIAT (sem campo nativo de cond):
+//   vermelho — agendamento preenchido e <= hoje (agendada hoje ou atrasada)
+//   laranja  — SAC aberto ou reentrega
+//   ok       — demais casos
+export function derivarCond(row: SiatRow): CondStatus {
+  const hoje = new Date().toISOString().slice(0, 10)
+
+  if (row.DataAgendamento) {
+    const agenda = String(row.DataAgendamento).slice(0, 10)
+    if (agenda <= hoje) return 'vermelho'
+  }
+
+  if (row.SAC || row.Reentrega) return 'laranja'
+
+  return 'ok'
+}
+
+// ── Normalização de envelope ──────────────────────────────────────────────────
 // n8n às vezes muda envelope (array puro, {data:[]}, {rows:[]} etc).
-// Aceita as variantes mais comuns e cai no objeto único como último recurso.
 export function normalizeSiatPayload(raw: unknown): SiatRow[] {
   if (Array.isArray(raw)) return raw as SiatRow[]
   if (raw && typeof raw === 'object') {
@@ -61,11 +118,7 @@ export function normalizeSiatPayload(raw: unknown): SiatRow[] {
   return []
 }
 
-// ── Transformer: SiatRow[] → Rota[] ──────────────────────────────────────────
-// O payload do n8n retorna linhas denormalizadas em dois formatos:
-//   • NF rows:      têm NUMNFS + ROTA, sem Placa
-//   • Vehicle rows: têm Placa + NomeMotorista, sem NUMNFS
-// Agrupamos NFs por ROTA e atribuímos veículos do pool round-robin.
+// ── Helpers de tipo ───────────────────────────────────────────────────────────
 
 export function tipoVeiculoFromSiat(tipo: string | null): Veiculo['tipo'] {
   if (!tipo) return 'VUC'
@@ -78,7 +131,6 @@ export function tipoVeiculoFromSiat(tipo: string | null): Veiculo['tipo'] {
 }
 
 export function capKgFromSiat(tipo: string | null, raw: number | null): number {
-  // O SIAT retorna CapacidadeKg em toneladas; valores < 100 são inválidos em kg.
   if (typeof raw === 'number' && raw >= 100) return raw
   const t = (tipo ?? '').toLowerCase()
   if (t.includes('fiorin'))   return 700
@@ -88,20 +140,71 @@ export function capKgFromSiat(tipo: string | null, raw: number | null): number {
   return 1500
 }
 
+function normalizarTipoCliente(tipo: string | null | undefined): ClientType {
+  if (!tipo) return 'Varejo'
+  const t = tipo.toLowerCase()
+  if (t.includes('reentre'))                            return 'Reentrega'
+  if (t.includes('rede') || t.includes('network'))      return 'Rede'
+  if (t.includes(' cd') || t.startsWith('cd') || t.includes('centro') || t.includes('distribu')) return 'CD'
+  return 'Varejo'
+}
+
+// ── siatRowsToNotasPendentes ──────────────────────────────────────────────────
+// Converte NF rows do SIAT em NotaFiscal[] plana (sem agrupar por rota).
+// Usada para exibir as NFs pendentes de roteirização.
+export function siatRowsToNotasPendentes(rows: SiatRow[]): NotaFiscal[] {
+  const nfRows = rows.filter(r => r.NUMNFS != null && r.ROTA)
+  const seen   = new Set<string>()
+  const result: NotaFiscal[] = []
+
+  for (const row of nfRows) {
+    const nf = String(row.NUMNFS!)
+    if (seen.has(nf)) continue
+    seen.add(nf)
+
+    const reentrega = Boolean(row.Reentrega)
+    const tipoCliente: ClientType = reentrega
+      ? 'Reentrega'
+      : normalizarTipoCliente(row.TipoCliente)
+
+    result.push({
+      id:               `siat-${nf}`,
+      numnfs:           nf,
+      destinatario:     row.Destinatario   || '—',
+      municipio:        row.MunicipioFinal || row.Municipio  || '—',
+      bairro:           row.BairroFinal    || row.Bairro     || '—',
+      endereco:         row.EnderecoFinal  || row.Endereco   || '—',
+      cep:              row.Cep            || '—',
+      peso:             typeof row.PesoBruto === 'number' ? row.PesoBruto : 0,
+      qtd:              typeof row.Qtd     === 'number'   ? row.Qtd      : 1,
+      tipoCliente,
+      cond:             derivarCond(row),
+      grade:            row.TipoCarga      || '—',
+      rota:             String(row.ROTA!),
+      dataEmissao:      row.DataEmissao    ? String(row.DataEmissao).slice(0, 10) : '—',
+      dataAgendamento:  row.DataAgendamento ? String(row.DataAgendamento).slice(0, 10) : undefined,
+      horaAgendamento:  row.HoraAgendamento ? String(row.HoraAgendamento) : undefined,
+      observacao:       row.Observacao     ?? undefined,
+      sac:              row.SAC            ?? undefined,
+      indRee:           reentrega,
+    })
+  }
+
+  return result
+}
+
+// ── siatRowsToRotas ───────────────────────────────────────────────────────────
+// Agrupa NF rows por ROTA e atribui veículos do pool round-robin.
+// Usado para pré-visualização imediata antes de acionar o agente de IA.
 export function siatRowsToRotas(
   rows: SiatRow[],
   veiculoPool: Veiculo[]    = [],
   motoristaPool: Motorista[] = [],
 ): Rota[] {
   const today = new Date().toISOString()
-
-  // Apenas NF rows (têm NUMNFS e ROTA)
   const nfRows = rows.filter(r => r.NUMNFS != null && r.ROTA)
-
-  // Índice para casar veículo por placa antes do round-robin
   const veiculoByPlaca = new Map(veiculoPool.map(v => [v.placa.toUpperCase(), v]))
 
-  // Agrupar NF rows por ROTA
   const byRota = new Map<string, SiatRow[]>()
   for (const row of nfRows) {
     const rota = String(row.ROTA!)
@@ -109,19 +212,16 @@ export function siatRowsToRotas(
     byRota.get(rota)!.push(row)
   }
 
-  // Veículos disponíveis para round-robin (apenas status disponivel)
   const veiculosDisponiveis = veiculoPool.filter(v => v.status === 'disponivel')
-  const veiculoList = veiculosDisponiveis.length ? veiculosDisponiveis : veiculoPool
+  const veiculoList  = veiculosDisponiveis.length ? veiculosDisponiveis : veiculoPool
   const motoristaList = motoristaPool.filter(m => m.status === 'disponivel')
 
   return Array.from(byRota.entries()).map(([codigoRota, rotaRows], idx) => {
-    // Tentar casar veículo pela placa que vier na primeira row da rota
     const primeiraPlaca = rotaRows.find(r => r.Placa)?.Placa?.toUpperCase()
     const veiculo =
       (primeiraPlaca && veiculoByPlaca.get(primeiraPlaca)) ||
       (veiculoList.length ? veiculoList[idx % veiculoList.length] : undefined)
 
-    // Tentar casar motorista pelo codigo_siat do veículo escolhido, ou round-robin
     const codSiat = rotaRows.find(r => r.CodMotorista)?.CodMotorista
     const motoristaDoVeiculo = codSiat
       ? motoristaPool.find(m => m.id.endsWith(codSiat) || m.nome === codSiat)
@@ -130,31 +230,35 @@ export function siatRowsToRotas(
       motoristaDoVeiculo ||
       (motoristaList.length ? motoristaList[idx % motoristaList.length] : undefined)
 
-    // NFs únicas dentro desta rota
-    const nfNums = [...new Set(rotaRows.map(r => String(r.NUMNFS!)))]
+    const nfNums  = [...new Set(rotaRows.map(r => String(r.NUMNFS!)))]
     const pesoTotal = rotaRows.reduce(
-      (acc, r) => acc + (typeof r.PESBRU_NFS === 'number' ? r.PESBRU_NFS : 0), 0,
+      (acc, r) => acc + (typeof r.PesoBruto === 'number' ? r.PesoBruto : 0), 0,
     )
 
     const notasFiscais: NotaFiscal[] = nfNums.map(nf => {
       const row = rotaRows.find(r => String(r.NUMNFS) === nf)!
-      const tipoCliente: ClientType = row.Situacao === 'REENTREGA' ? 'Reentrega' : 'Varejo'
+      const reentrega    = Boolean(row.Reentrega)
+      const tipoCliente: ClientType = reentrega ? 'Reentrega' : normalizarTipoCliente(row.TipoCliente)
       return {
-        id: `nf-${nf}`,
-        numnfs: nf,
-        destinatario: row.CODCLI_CLI || '—',
-        municipio: '—',
-        bairro: '—',
-        endereco: '—',
-        cep: '—',
-        peso: typeof row.PESBRU_NFS === 'number' ? row.PESBRU_NFS : 0,
-        qtd: 1,
+        id:              `nf-${nf}`,
+        numnfs:          nf,
+        destinatario:    row.Destinatario   || '—',
+        municipio:       row.MunicipioFinal || row.Municipio  || '—',
+        bairro:          row.BairroFinal    || row.Bairro     || '—',
+        endereco:        row.EnderecoFinal  || row.Endereco   || '—',
+        cep:             row.Cep            || '—',
+        peso:            typeof row.PesoBruto === 'number' ? row.PesoBruto : 0,
+        qtd:             typeof row.Qtd === 'number' ? row.Qtd : 1,
         tipoCliente,
-        cond: 'ok',
-        grade: '—',
-        rota: codigoRota,
-        dataEmissao: row.DATEMI ?? '—',
-        indRee: false,
+        cond:            derivarCond(row),
+        grade:           row.TipoCarga      || '—',
+        rota:            codigoRota,
+        dataEmissao:     row.DataEmissao    ? String(row.DataEmissao).slice(0, 10) : '—',
+        dataAgendamento: row.DataAgendamento ? String(row.DataAgendamento).slice(0, 10) : undefined,
+        horaAgendamento: row.HoraAgendamento ? String(row.HoraAgendamento) : undefined,
+        observacao:      row.Observacao     ?? undefined,
+        sac:             row.SAC            ?? undefined,
+        indRee:          reentrega,
       }
     })
 
@@ -177,19 +281,30 @@ export function siatRowsToRotas(
   })
 }
 
+// ── summarizeSiat ─────────────────────────────────────────────────────────────
 export function summarizeSiat(rows: SiatRow[]): SiatSummary {
   const nfs        = new Set<string>()
   const placas     = new Set<string>()
   const rotas      = new Set<string>()
   const motoristas = new Set<string>()
-  let pesoKg = 0
+  let pesoKg     = 0
+  let nfsVermelho = 0
+  let nfsLaranja  = 0
 
   for (const r of rows) {
-    if (r.NUMNFS       != null) nfs.add(String(r.NUMNFS))
-    if (r.Placa)                placas.add(r.Placa)
-    if (r.ROTA)                 rotas.add(r.ROTA)
-    if (r.CodMotorista)         motoristas.add(r.CodMotorista)
-    if (typeof r.PESBRU_NFS === 'number') pesoKg += r.PESBRU_NFS
+    if (r.NUMNFS != null) {
+      const nf = String(r.NUMNFS)
+      if (!nfs.has(nf)) {
+        nfs.add(nf)
+        const cond = derivarCond(r)
+        if (cond === 'vermelho') nfsVermelho++
+        else if (cond === 'laranja') nfsLaranja++
+      }
+    }
+    if (r.Placa)        placas.add(r.Placa)
+    if (r.ROTA)         rotas.add(r.ROTA)
+    if (r.CodMotorista) motoristas.add(r.CodMotorista)
+    if (typeof r.PesoBruto === 'number') pesoKg += r.PesoBruto
   }
 
   return {
@@ -200,5 +315,7 @@ export function summarizeSiat(rows: SiatRow[]): SiatSummary {
     veiculosUnicos:     placas.size,
     rotasUnicas:        rotas.size,
     motoristasUnicos:   motoristas.size,
+    nfsVermelho,
+    nfsLaranja,
   }
 }

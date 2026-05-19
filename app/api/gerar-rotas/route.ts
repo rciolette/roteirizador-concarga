@@ -1,9 +1,13 @@
 import type { GerarRotasPayload } from '@/lib/webhooks'
 import { resolveWebhookUrl } from '@/lib/config-store'
+import { exigirPermissao } from '@/lib/auth-server'
 
 const GERAR_ROTAS_DEFAULT = 'https://n8n.rcdigitais.com.br/webhook/gerar-rotas'
 
 export async function POST(req: Request) {
+  const auth = await exigirPermissao('gerar')
+  if (auth instanceof Response) return auth
+
   let payload: GerarRotasPayload
   try {
     payload = await req.json()

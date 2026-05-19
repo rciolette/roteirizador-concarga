@@ -1,9 +1,13 @@
 import type { EnviarMotoristaPayload } from '@/lib/webhooks'
 import { resolveWebhookUrl } from '@/lib/config-store'
+import { exigirPermissao } from '@/lib/auth-server'
 
 const ENVIAR_MOTORISTA_DEFAULT = 'https://n8n.rcdigitais.com.br/webhook/enviar-motorista'
 
 export async function POST(req: Request) {
+  const auth = await exigirPermissao('enviar')
+  if (auth instanceof Response) return auth
+
   let payload: EnviarMotoristaPayload
   try {
     payload = await req.json()

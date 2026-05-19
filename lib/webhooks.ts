@@ -86,7 +86,8 @@ export interface VeiculoDisponivel {
 }
 
 export interface GerarRotasPayload {
-  data:                string
+  dataInicio:          string
+  dataFim:             string
   observacoes:         string
   motoristas:          MotoristaPayload[]
   veiculosDisponiveis: VeiculoDisponivel[]

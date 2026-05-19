@@ -2,13 +2,13 @@
 import { useState, useEffect } from 'react'
 import {
   Topbar, Card, CardHeader, Btn, StatusPill, WeightBar,
-  ImportBar, ConfirmDialog, ConfirmAction, TextArea, Select,
+  ImportBar, ConfirmDialog, ConfirmAction, TextArea, Select, TextInput,
 } from '@/components/ui'
 import { NotasFiscaisTable } from '@/components/ui/NotasFiscaisTable'
 import { ImportarSIATButton } from '@/components/ui/ImportarSIATButton'
 import { SiatImportDialog } from '@/components/ui/SiatImportDialog'
-import { webhookGerarRotas, mapRetornoGerarRotas, salvarRotasSupabase, salvarNfsNaoAlocadas, atualizarStatusRota, webhookEnviarMotorista, Prioridade, MotoristaPayload } from '@/lib/webhooks'
-import { listarMotoristas, criarMotorista, atualizarMotorista, removerMotorista, importarMotoristas } from '@/lib/motoristas'
+import { webhookGerarRotas, mapRetornoGerarRotas, salvarRotasSupabase, salvarNfsNaoAlocadas, atualizarStatusRota, webhookEnviarMotorista, Prioridade, MotoristaPayload, VeiculoDisponivel } from '@/lib/webhooks'
+import type { Veiculo, Motorista } from '@/types'
 import { cn, formatPeso } from '@/lib/utils'
 import { useCopyToClipboard } from '@/lib/hooks'
 import { useAppData } from '@/components/providers/AppDataProvider'
@@ -48,145 +48,104 @@ const STATUS_FILTERS: { label: string; value: RouteStatus | 'todos' }[] = [
 
 // ── Gerar Rotas Dialog ────────────────────────────────────────────────────────
 type GerarRotasFormState = {
-  data: string
+  dataInicio: string
+  dataFim:    string
   observacoes: string
-  veiculosBloqueados: string
   restricoesExtras: string
   prioridade: string
 }
 
-type RosterItem = {
-  _key:     string
-  id?:      string
-  nome:     string
-  telefone: string
-  placa:    string
-  status:   'disponivel' | 'ausente'
-}
-
-function GerarRotasDialog({ onClose, onConfirm }: {
+function GerarRotasDialog({ onClose, onConfirm, motoristas, veiculos }: {
   onClose:    () => void
-  onConfirm:  (form: GerarRotasFormState, motoristas: MotoristaPayload[]) => void
+  onConfirm:  (form: GerarRotasFormState, motoristas: MotoristaPayload[], veiculos: VeiculoDisponivel[]) => void
+  motoristas: Motorista[]
+  veiculos:   Veiculo[]
 }) {
   const hoje = new Date().toISOString().slice(0, 10)
   const [form, setForm] = useState<GerarRotasFormState>({
-    data: hoje, observacoes: '', veiculosBloqueados: '', restricoesExtras: '', prioridade: 'padrao',
+    dataInicio: hoje, dataFim: hoje, observacoes: '', restricoesExtras: '', prioridade: 'padrao',
   })
-  const [roster,    setRoster]    = useState<RosterItem[]>([])
-  const [loading,   setLoading]   = useState(true)
-  const [importMsg, setImportMsg] = useState('')
+  const [motoristasSel, setMotoristasSel] = useState<Set<string>>(
+    () => new Set(motoristas.filter(m => m.status !== 'ausente').map(m => m.id))
+  )
+  const [veiculosSel, setVeiculosSel] = useState<Set<string>>(
+    () => new Set(veiculos.filter(v => v.disponivel_hoje && v.status === 'disponivel').map(v => v.id))
+  )
+  const [buscaMot, setBuscaMot] = useState('')
+  const [buscaVei, setBuscaVei] = useState('')
   const set = (k: string, v: string) => setForm(p => ({ ...p, [k]: v }))
 
-  useEffect(() => {
-    listarMotoristas()
-      .then(list => setRoster(list.map(m => ({
-        _key:     m.id,
-        id:       m.id,
-        nome:     m.nome,
-        telefone: m.telefone,
-        placa:    m.placa ?? '',
-        status:   m.status === 'em_rota' ? 'disponivel' : m.status,
-      }))))
-      .catch(() => {})
-      .finally(() => setLoading(false))
-  }, [])
-
-  function addLine() {
-    setRoster(p => [...p, { _key: Date.now().toString(), nome: '', telefone: '', placa: '', status: 'disponivel' }])
+  function toggleSet(prev: Set<string>, id: string): Set<string> {
+    const next = new Set(prev)
+    next.has(id) ? next.delete(id) : next.add(id)
+    return next
   }
 
-  function removeLine(key: string) {
-    const item = roster.find(r => r._key === key)
-    setRoster(p => p.filter(r => r._key !== key))
-    if (item?.id) removerMotorista(item.id).catch(() => {})
-  }
+  const veiDisabled = (v: Veiculo) => v.status === 'manutencao' || v.status === 'indisponivel'
 
-  function updateField(key: string, field: keyof RosterItem, value: string) {
-    setRoster(p => p.map(r => r._key === key ? { ...r, [field]: value } : r))
-  }
-
-  function toggleStatus(key: string) {
-    setRoster(p => p.map(r => {
-      if (r._key !== key) return r
-      const next = r.status === 'disponivel' ? 'ausente' : 'disponivel'
-      if (r.id) atualizarMotorista(r.id, { status: next }).catch(() => {})
-      return { ...r, status: next }
-    }))
-  }
-
-  function onBlurSave(item: RosterItem) {
-    if (!item.nome.trim()) return
-    if (item.id) {
-      atualizarMotorista(item.id, { nome: item.nome, telefone: item.telefone, placa: item.placa }).catch(() => {})
-    } else {
-      criarMotorista({ nome: item.nome, telefone: item.telefone || undefined, placa: item.placa || undefined, status: item.status })
-        .then(saved => setRoster(p => p.map(r => r._key === item._key ? { ...r, id: saved.id } : r)))
-        .catch(() => {})
-    }
-  }
-
-  async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    try {
-      const imported      = await importarMotoristas(file)
-      const existingNames = new Set(roster.map(r => r.nome.toLowerCase()))
-      const novos         = imported.filter(m => !existingNames.has(m.nome.toLowerCase()))
-      const novasLinhas: RosterItem[] = novos.map(m => ({
-        _key:     `${Date.now()}-${Math.random()}`,
-        nome:     m.nome,
-        telefone: m.telefone ?? '',
-        placa:    m.placa    ?? '',
-        status:   m.status,
-      }))
-      setRoster(p => [...p, ...novasLinhas])
-      showImportMsg(`${novos.length} motorista${novos.length !== 1 ? 's' : ''} importado${novos.length !== 1 ? 's' : ''}`)
-      novasLinhas.forEach((line, i) => {
-        const src = novos[i]
-        criarMotorista({ nome: src.nome, telefone: src.telefone, placa: src.placa, status: src.status })
-          .then(saved => setRoster(p => p.map(r => r._key === line._key ? { ...r, id: saved.id } : r)))
-          .catch(() => {})
-      })
-    } catch {
-      showImportMsg('Erro ao importar arquivo')
-    }
-    e.target.value = ''
-  }
-
-  function showImportMsg(msg: string) {
-    setImportMsg(msg)
-    setTimeout(() => setImportMsg(''), 3000)
-  }
-
-  const toPayload = (r: RosterItem): MotoristaPayload => ({
-    nome:     r.nome,
-    telefone: r.telefone || undefined,
-    placa:    r.placa    || undefined,
-    status:   r.status,
+  const motoristasFiltrados = motoristas.filter(m => {
+    const q = buscaMot.toLowerCase()
+    return !q || m.nome.toLowerCase().includes(q) || m.sigla.toLowerCase().includes(q) || m.telefone.toLowerCase().includes(q)
   })
+
+  const veiculosFiltrados = veiculos.filter(v => {
+    const q = buscaVei.toLowerCase()
+    return !q || v.placa.toLowerCase().includes(q) || v.modelo.toLowerCase().includes(q)
+  })
+
+  function handleConfirmClick() {
+    const motoristasPayload: MotoristaPayload[] = motoristas
+      .filter(m => motoristasSel.has(m.id))
+      .map(m => ({
+        nome:     m.nome,
+        telefone: m.telefone || undefined,
+        placa:    m.placa    || undefined,
+        status:   (m.status === 'ausente' ? 'ausente' : 'disponivel') as 'disponivel' | 'ausente',
+      }))
+    const veiculosPayload: VeiculoDisponivel[] = veiculos
+      .filter(v => veiculosSel.has(v.id))
+      .map(v => ({
+        placa:            v.placa,
+        tipo:             v.tipo,
+        capacidadeKg:     v.capacidadeKg,
+        motoristaNome:    v.motoristaNome,
+        motoristaCelular: v.motoristaCelular,
+      }))
+    onConfirm(form, motoristasPayload, veiculosPayload)
+  }
 
   return (
     <div className="fixed inset-0 bg-black/55 flex items-center justify-center z-50">
-      <div className="animate-fade-in bg-white dark:bg-[#1E1E1C] rounded-xl border border-[0.5px] border-[var(--border-light)] p-6 w-[600px] max-w-[95vw] max-h-[90vh] overflow-y-auto">
+      <div className="animate-fade-in bg-white dark:bg-[#1E1E1C] rounded-xl border border-[0.5px] border-[var(--border-light)] p-6 w-[640px] max-w-[95vw] max-h-[90vh] overflow-y-auto">
         <div className="text-sm font-medium mb-1">Instrução para o agente de IA</div>
         <div className="text-[11px] text-muted mb-4">
           Estas informações serão combinadas com as regras fixas e os dados do SIAT.
         </div>
 
-        <div className="mb-2.5">
-          <label className="block text-[11px] text-muted mb-1">Data das rotas</label>
-          <input
-            type="date"
-            value={form.data}
-            onChange={e => set('data', e.target.value)}
-            className="w-full h-8 border border-[0.5px] border-[var(--border-input)] rounded-lg bg-page px-2 text-xs font-sans outline-none"
-          />
+        <div className="mb-2.5 flex gap-2">
+          <div className="flex-1">
+            <label className="block text-[11px] text-muted mb-1">Data início</label>
+            <input
+              type="date"
+              value={form.dataInicio}
+              onChange={e => set('dataInicio', e.target.value)}
+              className="w-full h-8 border border-[0.5px] border-[var(--border-input)] rounded-lg bg-page px-2 text-xs font-sans outline-none"
+            />
+          </div>
+          <div className="flex-1">
+            <label className="block text-[11px] text-muted mb-1">Data fim</label>
+            <input
+              type="date"
+              value={form.dataFim}
+              onChange={e => set('dataFim', e.target.value)}
+              className="w-full h-8 border border-[0.5px] border-[var(--border-input)] rounded-lg bg-page px-2 text-xs font-sans outline-none"
+            />
+          </div>
         </div>
 
         {[
-          { key: 'observacoes',        label: 'Observações',        ph: 'Instruções gerais para o roteirizador...' },
-          { key: 'veiculosBloqueados', label: 'Veículos bloqueados', ph: 'Ex: ABC-1234, XYZ-5678' },
-          { key: 'restricoesExtras',   label: 'Restrições extras',   ph: 'Ex: Não entregar no centro de BH hoje' },
+          { key: 'observacoes',      label: 'Observações',      ph: 'Instruções gerais para o roteirizador...' },
+          { key: 'restricoesExtras', label: 'Restrições extras', ph: 'Ex: Não entregar no centro de BH hoje' },
         ].map(f => (
           <div key={f.key} className="mb-2.5">
             <label className="block text-[11px] text-muted mb-1">{f.label}</label>
@@ -213,84 +172,91 @@ function GerarRotasDialog({ onClose, onConfirm }: {
         <div className="mt-4 pt-3 border-t border-[0.5px] border-[var(--border-faint)]">
           <div className="flex items-center justify-between mb-2">
             <span className="text-[11px] text-muted font-medium">Motoristas do dia</span>
-            <div className="flex gap-1.5 items-center">
-              <label className="cursor-pointer inline-flex items-center gap-1 h-6 px-2 rounded-md border border-[0.5px] border-[var(--border-input)] text-[11px] text-mid hover:bg-cream transition-colors">
-                <input type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={handleImport} />
-                Importar CSV/XLSX
-              </label>
-              <Btn size="sm" onClick={addLine}>+ Adicionar</Btn>
-            </div>
+            <span className="text-[10px] text-subtle">{motoristasSel.size} de {motoristas.length} selecionados</span>
           </div>
-
-          {importMsg && (
-            <div className={cn(
-              'mb-2 text-[11px] rounded px-2 py-1',
-              importMsg.startsWith('Erro') ? 'bg-danger-bg text-danger' : 'bg-success-bg text-success-dark',
-            )}>
-              {importMsg}
+          <div className="mb-2">
+            <TextInput value={buscaMot} onChange={setBuscaMot} placeholder="Buscar por nome, sigla ou telefone" />
+          </div>
+          {motoristas.length === 0 ? (
+            <div className="text-[11px] text-muted py-2">Nenhum motorista ativo na frota.</div>
+          ) : motoristasFiltrados.length === 0 ? (
+            <div className="text-[11px] text-muted py-2">Nenhum resultado para &ldquo;{buscaMot}&rdquo;.</div>
+          ) : (
+            <div className="flex flex-col gap-0.5 max-h-[160px] overflow-y-auto pr-0.5">
+              {motoristasFiltrados.map(m => (
+                <label key={m.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-cream dark:hover:bg-[#2a2a28] cursor-pointer select-none transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={motoristasSel.has(m.id)}
+                    onChange={() => setMotoristasSel(prev => toggleSet(prev, m.id))}
+                    className="w-3.5 h-3.5 shrink-0 accent-primary"
+                  />
+                  <span className="text-[11px] font-medium flex-1 truncate">{m.nome}</span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-page border border-[0.5px] border-[var(--border-input)] text-subtle font-mono shrink-0">{m.sigla}</span>
+                  {m.telefone && <span className="text-[10px] text-muted shrink-0">{m.telefone}</span>}
+                  <span className={cn(
+                    'text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0',
+                    m.status === 'disponivel' ? 'bg-success-bg text-success-dark' :
+                    m.status === 'em_rota'    ? 'bg-primary-bg text-primary-dark' :
+                                                'bg-danger-bg text-danger',
+                  )}>
+                    {m.status === 'disponivel' ? 'Disponível' : m.status === 'em_rota' ? 'Em rota' : 'Ausente'}
+                  </span>
+                </label>
+              ))}
             </div>
           )}
+        </div>
 
-          {loading ? (
-            <div className="text-[11px] text-muted py-2">Carregando...</div>
-          ) : roster.length === 0 ? (
-            <div className="text-[11px] text-muted py-2">Nenhum motorista. Adicione ou importe.</div>
+        {/* ── Veículos disponíveis ── */}
+        <div className="mt-4 pt-3 border-t border-[0.5px] border-[var(--border-faint)]">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[11px] text-muted font-medium">Veículos disponíveis</span>
+            <span className="text-[10px] text-subtle">{veiculosSel.size} de {veiculos.filter(v => !veiDisabled(v)).length} selecionados</span>
+          </div>
+          <div className="mb-2">
+            <TextInput value={buscaVei} onChange={setBuscaVei} placeholder="Buscar por placa ou modelo" />
+          </div>
+          {veiculos.length === 0 ? (
+            <div className="text-[11px] text-muted py-2">Nenhum veículo ativo na frota.</div>
+          ) : veiculosFiltrados.length === 0 ? (
+            <div className="text-[11px] text-muted py-2">Nenhum resultado para &ldquo;{buscaVei}&rdquo;.</div>
           ) : (
-            <div className="flex flex-col gap-1">
-              <div className="grid grid-cols-[1fr_110px_72px_86px_24px] gap-1 px-0.5 mb-0.5">
-                {['Nome', 'Telefone', 'Placa', 'Status', ''].map(h => (
-                  <span key={h} className="text-[10px] text-subtle">{h}</span>
-                ))}
-              </div>
-              {roster.map(item => (
-                <div key={item._key} className="grid grid-cols-[1fr_110px_72px_86px_24px] gap-1 items-center">
-                  <input
-                    value={item.nome}
-                    onChange={e => updateField(item._key, 'nome', e.target.value)}
-                    onBlur={() => onBlurSave(item)}
-                    placeholder="Nome"
-                    className="h-7 border border-[0.5px] border-[var(--border-input)] rounded-md bg-page px-2 text-[11px] outline-none w-full min-w-0"
-                  />
-                  <input
-                    value={item.telefone}
-                    onChange={e => updateField(item._key, 'telefone', e.target.value)}
-                    onBlur={() => onBlurSave(item)}
-                    placeholder="Telefone"
-                    className="h-7 border border-[0.5px] border-[var(--border-input)] rounded-md bg-page px-2 text-[11px] outline-none w-full min-w-0"
-                  />
-                  <input
-                    value={item.placa}
-                    onChange={e => updateField(item._key, 'placa', e.target.value)}
-                    onBlur={() => onBlurSave(item)}
-                    placeholder="Placa"
-                    className="h-7 border border-[0.5px] border-[var(--border-input)] rounded-md bg-page px-2 text-[11px] outline-none w-full min-w-0"
-                  />
-                  <button
-                    onClick={() => toggleStatus(item._key)}
-                    className={cn(
-                      'h-7 px-1.5 rounded-md text-[10px] font-medium transition-colors whitespace-nowrap',
-                      item.status === 'disponivel' ? 'bg-success-bg text-success-dark' : 'bg-danger-bg text-danger',
+            <div className="flex flex-col gap-0.5 max-h-[160px] overflow-y-auto pr-0.5">
+              {veiculosFiltrados.map(v => {
+                const disabled = veiDisabled(v)
+                return (
+                  <label key={v.id} className={cn(
+                    'flex items-center gap-2 px-2 py-1.5 rounded-lg select-none transition-colors',
+                    disabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-cream dark:hover:bg-[#2a2a28] cursor-pointer',
+                  )}>
+                    <input
+                      type="checkbox"
+                      checked={veiculosSel.has(v.id)}
+                      disabled={disabled}
+                      onChange={() => !disabled && setVeiculosSel(prev => toggleSet(prev, v.id))}
+                      className="w-3.5 h-3.5 shrink-0 accent-primary"
+                    />
+                    <span className="text-[11px] font-medium font-mono shrink-0">{v.placa}</span>
+                    <span className="text-[10px] text-muted truncate flex-1">{v.modelo}</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-page border border-[0.5px] border-[var(--border-input)] text-subtle shrink-0">{v.tipo}</span>
+                    <span className="text-[10px] text-muted shrink-0">{formatPeso(v.capacidadeKg)}</span>
+                    {v.motoristaNome && <span className="text-[10px] text-subtle truncate max-w-[80px] shrink-0">{v.motoristaNome}</span>}
+                    {disabled && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0 bg-page border border-[0.5px] border-[var(--border-input)] text-subtle">
+                        {v.status === 'manutencao' ? 'Manutenção' : 'Indisponível'}
+                      </span>
                     )}
-                  >
-                    {item.status === 'disponivel' ? 'Disponível' : 'Ausente'}
-                  </button>
-                  <button
-                    onClick={() => removeLine(item._key)}
-                    className="h-6 w-6 flex items-center justify-center text-subtle hover:text-danger transition-colors rounded"
-                  >
-                    <svg className="w-3 h-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                      <path d="M4 4l8 8M12 4l-8 8"/>
-                    </svg>
-                  </button>
-                </div>
-              ))}
+                  </label>
+                )
+              })}
             </div>
           )}
         </div>
 
         <div className="flex gap-2 justify-end mt-5">
           <Btn onClick={onClose}>Cancelar</Btn>
-          <Btn variant="primary" onClick={() => onConfirm(form, roster.filter(r => r.nome.trim()).map(toPayload))}>
+          <Btn variant="primary" onClick={handleConfirmClick}>
             <svg className="w-[13px] h-[13px]" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
               <circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 2"/>
             </svg>
@@ -496,8 +462,14 @@ function RouteCard({ rota, onUpdateStatus, onAskConfirm }: {
 
 // ── Rotas Page ────────────────────────────────────────────────────────────────
 export default function RotasPage() {
-  const { nfImportState, importarNFs, dismissNFImport, nfRows, rotas: routes, setRotas: setRoutes, loadingRotas, veiculos, config } = useAppData()
+  const { nfImportState, importarNFs, dismissNFImport, nfRows, rotas: routes, setRotas: setRoutes, loadingRotas, motoristas, veiculos, config, refreshVeiculos } = useAppData()
   const [filter,         setFilter]         = useState<RouteStatus | 'todos'>('todos')
+
+  // Atualiza notas e veículos automaticamente ao abrir a página
+  useEffect(() => {
+    importarNFs()
+    refreshVeiculos()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
   const [showDialog,     setShowDialog]     = useState(false)
   const [generating,     setGenerating]     = useState(false)
   const [toast,          setToast]          = useState('')
@@ -566,30 +538,19 @@ export default function RotasPage() {
     }
   }
 
-  async function handleConfirm(form: GerarRotasFormState, motoristas: MotoristaPayload[]) {
+  async function handleConfirm(form: GerarRotasFormState, motoristasPayload: MotoristaPayload[], veiculosDisponiveis: VeiculoDisponivel[]) {
     setShowDialog(false)
     setGenerating(true)
 
     try {
-      const bloqueadas = new Set(
-        form.veiculosBloqueados.split(',').map(x => x.trim().toUpperCase()).filter(Boolean)
-      )
-      const veiculosDisponiveis = veiculos
-        .filter(v => v.disponivel_hoje && !bloqueadas.has(v.placa.toUpperCase()))
-        .map(v => ({
-          placa:             v.placa,
-          tipo:              v.tipo,
-          capacidadeKg:      v.capacidadeKg,
-          motoristaNome:     v.motoristaNome,
-          motoristaCelular:  v.motoristaCelular,
-        }))
-
+      const hoje = new Date().toISOString().slice(0, 10)
       const raw = await webhookGerarRotas({
-        data:                form.data || new Date().toISOString().slice(0, 10),
+        dataInicio:          form.dataInicio || hoje,
+        dataFim:             form.dataFim    || hoje,
         observacoes:         form.observacoes,
-        motoristas,
+        motoristas:          motoristasPayload,
         veiculosDisponiveis,
-        veiculosBloqueados:  Array.from(bloqueadas),
+        veiculosBloqueados:  [],
         restricoesExtras:    form.restricoesExtras,
         prioridade:          form.prioridade as Prioridade,
         instrucaoGlobal:     config.instrucaoGlobal,
@@ -601,7 +562,7 @@ export default function RotasPage() {
       }) as RetornoGerarRotas
 
       const novas = mapRetornoGerarRotas(raw)
-      const dataRota = form.data || new Date().toISOString().slice(0, 10)
+      const dataRota = form.dataInicio || new Date().toISOString().slice(0, 10)
 
       let rotasSalvas = novas
       try {
@@ -777,7 +738,7 @@ export default function RotasPage() {
         )}
       </div>
 
-      {showDialog && <GerarRotasDialog onClose={() => setShowDialog(false)} onConfirm={(form, motoristas) => handleConfirm(form, motoristas)} />}
+      {showDialog && <GerarRotasDialog onClose={() => setShowDialog(false)} onConfirm={handleConfirm} motoristas={motoristas} veiculos={veiculos} />}
 
       {importDialog && (
         <SiatImportDialog

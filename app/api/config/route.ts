@@ -1,22 +1,11 @@
-import { createClient } from '@supabase/supabase-js'
 import type { AppConfig } from '@/types'
-
-// Requer SUPABASE_SERVICE_ROLE_KEY em .env.local para gravar (ignora RLS)
-function adminClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!key) return null
-  return createClient(url, key, { auth: { persistSession: false } })
-}
+import { exigirPermissao, getAdminClient } from '@/lib/auth-server'
 
 export async function POST(req: Request) {
-  const sb = adminClient()
-  if (!sb) {
-    return Response.json(
-      { error: 'SUPABASE_SERVICE_ROLE_KEY não configurado — configurações salvas apenas localmente' },
-      { status: 503 },
-    )
-  }
+  const auth = await exigirPermissao('webhooks')
+  if (auth instanceof Response) return auth
+
+  const sb = getAdminClient()
 
   let cfg: AppConfig
   try {
@@ -37,9 +26,6 @@ export async function POST(req: Request) {
     .from('configuracoes')
     .upsert(rows, { onConflict: 'chave' })
 
-  if (error) {
-    return Response.json({ error: error.message }, { status: 500 })
-  }
-
+  if (error) return Response.json({ error: error.message }, { status: 500 })
   return Response.json({ ok: true })
 }

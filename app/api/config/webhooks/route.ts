@@ -1,17 +1,10 @@
-import { createClient } from '@supabase/supabase-js'
-
-function adminClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!key) return null
-  return createClient(url, key, { auth: { persistSession: false } })
-}
+import { exigirPermissao, getAdminClient } from '@/lib/auth-server'
 
 export async function POST(req: Request) {
-  const sb = adminClient()
-  if (!sb) {
-    return Response.json({ error: 'SUPABASE_SERVICE_ROLE_KEY não configurado' }, { status: 503 })
-  }
+  const auth = await exigirPermissao('webhooks')
+  if (auth instanceof Response) return auth
+
+  const sb = getAdminClient()
 
   const body = await req.json().catch(() => null)
   if (!body) return Response.json({ error: 'payload inválido' }, { status: 400 })

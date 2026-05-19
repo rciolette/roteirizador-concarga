@@ -1,9 +1,13 @@
 import type { SiatFilters } from '@/lib/siat'
 import { resolveWebhookUrl } from '@/lib/config-store'
+import { exigirPermissao } from '@/lib/auth-server'
 
 const SIAT_DEFAULT = 'https://n8n.rcdigitais.com.br/webhook/Execute-SQL-SIAT'
 
 export async function GET(req: Request) {
+  const auth = await exigirPermissao('importar')
+  if (auth instanceof Response) return auth
+
   const { searchParams } = new URL(req.url)
 
   const filters: SiatFilters = {}

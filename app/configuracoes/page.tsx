@@ -6,6 +6,7 @@ import { SiatImportDialog } from '@/components/ui/SiatImportDialog'
 import { DEFAULT_CONFIG } from '@/lib/data'
 import { AppConfig, InstrucaoRota } from '@/types'
 import { useAppData } from '@/components/providers/AppDataProvider'
+import { useAuth } from '@/components/providers/AuthProvider'
 import { salvarConfig, salvarWebhooks, carregarWebhooks, type WebhookConfig } from '@/lib/config-store'
 import { cn } from '@/lib/utils'
 
@@ -24,9 +25,23 @@ function Label({ children }: { children: React.ReactNode }) {
   return <label className="block text-[11px] text-muted mb-1">{children}</label>
 }
 
+interface Empresa {
+  razao_social:  string | null
+  nome_fantasia: string | null
+  cnpj:          string | null
+  telefone:      string | null
+  email:         string | null
+  cidade:        string | null
+  uf:            string | null
+}
+
 export default function ConfiguracoesPage() {
   const { nfImportState, importarNFs, dismissNFImport, config: globalConfig, setConfig: setGlobalConfig } = useAppData()
+  const { pode } = useAuth()
   const [cfg, setCfg] = useState<AppConfig>(globalConfig)
+  const [empresa, setEmpresa] = useState<Empresa>({ razao_social: '', nome_fantasia: '', cnpj: '', telefone: '', email: '', cidade: '', uf: '' })
+  const [savingEmpresa, setSavingEmpresa] = useState(false)
+  const [msgEmpresa, setMsgEmpresa] = useState('')
   const [webhooks, setWebhooks] = useState<WebhookConfig>({
     siatWebhookUrl: '', gerarRotasWebhookUrl: '', enviarMotoristaWebhookUrl: '',
   })
@@ -37,6 +52,8 @@ export default function ConfiguracoesPage() {
 
   useEffect(() => {
     carregarWebhooks().then(setWebhooks).catch(() => {})
+    // Carregar dados da empresa
+    fetch('/api/empresa').then(r => r.json()).then(d => { if (d.empresa) setEmpresa(d.empresa) }).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -268,7 +285,65 @@ export default function ConfiguracoesPage() {
           </div>
         </Card>
 
-        {/* ── Webhooks ── */}
+        {/* ── Empresa ── */}
+        {pode('empresa') && (
+          <Card>
+            <CardHeader>
+              <span className="text-xs font-medium">Dados da empresa</span>
+            </CardHeader>
+            <div className="px-4 py-4 flex flex-col gap-3">
+              <div className="grid grid-cols-2 gap-3">
+                {([
+                  { label: 'Razão social',    key: 'razao_social'  as const },
+                  { label: 'Nome fantasia',   key: 'nome_fantasia' as const },
+                  { label: 'CNPJ',            key: 'cnpj'          as const },
+                  { label: 'Telefone',        key: 'telefone'      as const },
+                  { label: 'E-mail',          key: 'email'         as const },
+                  { label: 'Cidade',          key: 'cidade'        as const },
+                ] as const).map(f => (
+                  <div key={f.key}>
+                    <Label>{f.label}</Label>
+                    <TextInput
+                      value={empresa[f.key] ?? ''}
+                      onChange={v => setEmpresa(p => ({ ...p, [f.key]: v }))}
+                    />
+                  </div>
+                ))}
+                <div>
+                  <Label>UF</Label>
+                  <TextInput
+                    value={empresa.uf ?? ''}
+                    onChange={v => setEmpresa(p => ({ ...p, uf: v }))}
+                    style={{ width: 80 }}
+                  />
+                </div>
+              </div>
+              {msgEmpresa && <p className="text-[11px] text-primary">{msgEmpresa}</p>}
+              <div>
+                <Btn
+                  variant="primary"
+                  size="sm"
+                  onClick={async () => {
+                    setSavingEmpresa(true)
+                    setMsgEmpresa('')
+                    const res = await fetch('/api/empresa', {
+                      method:  'PATCH',
+                      headers: { 'Content-Type': 'application/json' },
+                      body:    JSON.stringify(empresa),
+                    })
+                    setMsgEmpresa(res.ok ? 'Dados salvos.' : 'Erro ao salvar.')
+                    setSavingEmpresa(false)
+                  }}
+                >
+                  {savingEmpresa ? 'Salvando...' : 'Salvar empresa'}
+                </Btn>
+              </div>
+            </div>
+          </Card>
+        )}
+
+        {/* ── Webhooks — só owner ── */}
+        {pode('webhooks') && (
         <Card>
           <CardHeader>
             <span className="text-xs font-medium">Integrações — Webhooks n8n</span>
@@ -297,6 +372,7 @@ export default function ConfiguracoesPage() {
             ))}
           </div>
         </Card>
+        )}
 
       </div>
 
