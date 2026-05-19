@@ -1,7 +1,7 @@
 import type { GerarRotasPayload } from '@/lib/webhooks'
+import { resolveWebhookUrl } from '@/lib/config-store'
 
-const N8N_WEBHOOK = process.env.GERAR_ROTAS_WEBHOOK_URL
-  ?? 'https://n8n.rcdigitais.com.br/webhook/gerar-rotas'
+const GERAR_ROTAS_DEFAULT = 'https://n8n.rcdigitais.com.br/webhook/gerar-rotas'
 
 export async function POST(req: Request) {
   let payload: GerarRotasPayload
@@ -11,8 +11,10 @@ export async function POST(req: Request) {
     return Response.json({ error: 'payload inválido' }, { status: 400 })
   }
 
+  const webhookUrl = await resolveWebhookUrl('gerarRotasWebhookUrl', 'GERAR_ROTAS_WEBHOOK_URL', GERAR_ROTAS_DEFAULT)
+
   try {
-    const upstream = await fetch(N8N_WEBHOOK, {
+    const upstream = await fetch(webhookUrl, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify(payload),
@@ -22,9 +24,9 @@ export async function POST(req: Request) {
     if (!upstream.ok) {
       const text = await upstream.text().catch(() => '')
       let error = `n8n ${upstream.status}`
-      if (upstream.status === 404) error = 'n8n 404 — workflow WF-B não publicado (ative o toggle no editor n8n)'
+      if (upstream.status === 404) error = `n8n 404 — webhook não encontrado (URL: ${webhookUrl})`
       else if (upstream.status >= 500) error = `n8n ${upstream.status} — erro interno no workflow`
-      console.error('[gerar-rotas] upstream error', upstream.status, text.slice(0, 500))
+      console.error('[gerar-rotas] upstream error', upstream.status, webhookUrl, text.slice(0, 500))
       return Response.json({ error, detail: text.slice(0, 500) }, { status: 502 })
     }
 

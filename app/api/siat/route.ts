@@ -1,7 +1,7 @@
 import type { SiatFilters } from '@/lib/siat'
+import { resolveWebhookUrl } from '@/lib/config-store'
 
-const N8N_WEBHOOK = process.env.SIAT_WEBHOOK_URL
-  ?? 'https://n8n.rcdigitais.com.br/webhook/Execute-SQL-SIAT'
+const SIAT_DEFAULT = 'https://n8n.rcdigitais.com.br/webhook/Execute-SQL-SIAT'
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
@@ -19,8 +19,10 @@ export async function GET(req: Request) {
   if (codigoRota) filters.codigoRota = codigoRota
   if (qtdMaxima && Number.isFinite(Number(qtdMaxima))) filters.qtdMaxima = Number(qtdMaxima)
 
+  const webhookUrl = await resolveWebhookUrl('siatWebhookUrl', 'SIAT_WEBHOOK_URL', SIAT_DEFAULT)
+
   try {
-    const upstream = await fetch(N8N_WEBHOOK, {
+    const upstream = await fetch(webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(Object.keys(filters).length > 0 ? filters : {}),
@@ -30,9 +32,9 @@ export async function GET(req: Request) {
     if (!upstream.ok) {
       const text = await upstream.text().catch(() => '')
       let error = `n8n ${upstream.status}`
-      if (upstream.status === 404) error = 'n8n 404 — workflow não publicado (ative o toggle no editor n8n)'
+      if (upstream.status === 404) error = `n8n 404 — webhook não encontrado (URL: ${webhookUrl})`
       else if (upstream.status >= 500) error = `n8n ${upstream.status} — erro interno no workflow`
-      console.error('[siat] upstream error', upstream.status, text.slice(0, 500))
+      console.error('[siat] upstream error', upstream.status, webhookUrl, text.slice(0, 500))
       return Response.json({ error, detail: text.slice(0, 500) }, { status: 502 })
     }
 

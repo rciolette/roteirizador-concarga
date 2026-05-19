@@ -1,7 +1,7 @@
 import type { EnviarMotoristaPayload } from '@/lib/webhooks'
+import { resolveWebhookUrl } from '@/lib/config-store'
 
-const N8N_WEBHOOK = process.env.ENVIAR_MOTORISTA_WEBHOOK_URL
-  ?? 'https://n8n.rcdigitais.com.br/webhook/enviar-motorista'
+const ENVIAR_MOTORISTA_DEFAULT = 'https://n8n.rcdigitais.com.br/webhook/enviar-motorista'
 
 export async function POST(req: Request) {
   let payload: EnviarMotoristaPayload
@@ -11,8 +11,10 @@ export async function POST(req: Request) {
     return Response.json({ error: 'payload inválido' }, { status: 400 })
   }
 
+  const webhookUrl = await resolveWebhookUrl('enviarMotoristaWebhookUrl', 'ENVIAR_MOTORISTA_WEBHOOK_URL', ENVIAR_MOTORISTA_DEFAULT)
+
   try {
-    const upstream = await fetch(N8N_WEBHOOK, {
+    const upstream = await fetch(webhookUrl, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify(payload),
@@ -22,9 +24,9 @@ export async function POST(req: Request) {
     if (!upstream.ok) {
       const text = await upstream.text().catch(() => '')
       let error = `n8n ${upstream.status}`
-      if (upstream.status === 404) error = 'n8n 404 — workflow enviar-motorista não publicado (ative o toggle no editor n8n)'
+      if (upstream.status === 404) error = `n8n 404 — webhook não encontrado (URL: ${webhookUrl})`
       else if (upstream.status >= 500) error = `n8n ${upstream.status} — erro interno no workflow`
-      console.error('[enviar-motorista] upstream error', upstream.status, text.slice(0, 500))
+      console.error('[enviar-motorista] upstream error', upstream.status, webhookUrl, text.slice(0, 500))
       return Response.json({ error, detail: text.slice(0, 500) }, { status: 502 })
     }
 

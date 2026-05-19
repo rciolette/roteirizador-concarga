@@ -89,6 +89,28 @@ export async function salvarWebhooks(wh: WebhookConfig): Promise<void> {
   } catch { /* silencioso */ }
 }
 
+// Resolução server-side: env var → Supabase config → fallback hardcoded
+export async function resolveWebhookUrl(
+  key: keyof WebhookConfig,
+  envKey: string,
+  defaultUrl: string,
+): Promise<string> {
+  const envUrl = process.env[envKey]
+  if (envUrl) return envUrl
+
+  try {
+    const { data } = await supabase
+      .from('configuracoes')
+      .select('valor')
+      .eq('chave', 'webhooks')
+      .single()
+    const url = (data?.valor as WebhookConfig | null)?.[key]
+    if (url) return url
+  } catch { /* usa fallback */ }
+
+  return defaultUrl
+}
+
 // ── localStorage helpers ──────────────────────────────────────────────────────
 
 function fromLocalStorage(): AppConfig {
