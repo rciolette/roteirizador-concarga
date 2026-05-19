@@ -95,13 +95,13 @@ const HIST_STATUS_FILTERS: { label: string; value: RouteStatus | 'todas' }[] = [
 ]
 
 export default function HistoricoPage() {
-  const { importState, refresh, dismissImport, rotas } = useAppData()
+  const { nfImportState, importarNFs, dismissNFImport, rotas } = useAppData()
   const [diaIdx,          setDiaIdx]          = useState(0)
   const [statusFilter,    setStatusFilter]    = useState<RouteStatus | 'todas'>('todas')
   const [rotaSelecionada, setRotaSelecionada] = useState<Rota | null>(null)
   const [importDialog,    setImportDialog]    = useState(false)
 
-  const summary = importState.summary
+  const summary = nfImportState.summary
   const importResult = summary
     ? { nfs: summary.totalNFs, peso: summary.pesoTotalToneladas, veiculos: summary.veiculosUnicos }
     : undefined
@@ -126,7 +126,7 @@ export default function HistoricoPage() {
         <Topbar title="Histórico" sub="Rotas finalizadas por dia">
           <ImportarSIATButton
             onClick={() => setImportDialog(true)}
-            running={importState.running}
+            running={nfImportState.running}
             label="Importar hoje"
             loadingLabel="Importando..."
           />
@@ -134,7 +134,7 @@ export default function HistoricoPage() {
       </div>
 
       <div className="px-5 pt-3">
-        <ImportBar running={importState.running} step={importState.step} progress={importState.progress} result={importResult} onClose={dismissImport} />
+        <ImportBar running={nfImportState.running} step={nfImportState.step} progress={nfImportState.progress} result={importResult} onClose={dismissNFImport} />
       </div>
 
       {/* Filtros de data */}
@@ -246,7 +246,7 @@ export default function HistoricoPage() {
       {importDialog && (
         <SiatImportDialog
           onClose={() => setImportDialog(false)}
-          onConfirm={f => { setImportDialog(false); refresh(f) }}
+          onConfirm={f => { setImportDialog(false); importarNFs(f) }}
         />
       )}
 

@@ -35,6 +35,9 @@ export interface Veiculo {
   status: 'disponivel' | 'indisponivel' | 'manutencao'
   regiaoPreferencial?: string
   codigoSiatMotorista?: string
+  disponivel_hoje?: boolean
+  motoristaNome?: string
+  motoristaCelular?: string
 }
 
 export interface Motorista {

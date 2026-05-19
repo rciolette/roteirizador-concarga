@@ -9,11 +9,14 @@ import {
   useState,
 } from 'react'
 import type { Motorista, Rota, Veiculo } from '@/types'
+import type { AppConfig } from '@/types'
 import type { SiatFilters, SiatSummary, SiatRow } from '@/lib/siat'
 import { normalizeSiatPayload, summarizeSiat } from '@/lib/siat'
 import { listarMotoristas } from '@/lib/motoristas'
 import { listarVeiculos } from '@/lib/veiculos'
 import { carregarRotasSupabase } from '@/lib/webhooks'
+import { DEFAULT_CONFIG } from '@/lib/data'
+import { carregarConfig } from '@/lib/config-store'
 
 function todayISO(): string {
   return new Date().toISOString().slice(0, 10)
@@ -33,10 +36,12 @@ export interface AppData {
   loadingRotas:    boolean
   nfRows:          SiatRow[]
   nfImportState:   NfImportState
+  config:          AppConfig
   refresh:         () => Promise<void>
   importarNFs:     (filters?: SiatFilters) => Promise<void>
   dismissNFImport: () => void
   setRotas:        React.Dispatch<React.SetStateAction<Rota[]>>
+  setConfig:       React.Dispatch<React.SetStateAction<AppConfig>>
 }
 
 const AppDataContext = createContext<AppData | null>(null)
@@ -53,6 +58,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const [rotas,         setRotas]         = useState<Rota[]>([])
   const [loadingRotas,  setLoadingRotas]  = useState(true)
   const [nfRows,        setNfRows]        = useState<SiatRow[]>([])
+  const [config,        setConfig]        = useState<AppConfig>(DEFAULT_CONFIG)
   const [nfImportState, setNfImportState] = useState<NfImportState>({
     running: false, step: '', progress: 0,
   })
@@ -116,12 +122,14 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     bootstrapped.current = true
 
     async function bootstrap() {
-      const [mots, veics] = await Promise.all([
+      const [mots, veics, cfg] = await Promise.all([
         listarMotoristas().catch(() => [] as Motorista[]),
         listarVeiculos().catch(()    => [] as Veiculo[]),
+        carregarConfig().catch(()    => DEFAULT_CONFIG),
       ])
       setMotoristas(mots)
       setVeiculos(veics)
+      setConfig(cfg)
 
       try {
         const rotasDoDia = await carregarRotasSupabase(todayISO())
@@ -143,8 +151,8 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   return (
     <AppDataContext.Provider value={{
       motoristas, veiculos, rotas, loadingRotas,
-      nfRows, nfImportState,
-      refresh, importarNFs, dismissNFImport, setRotas,
+      nfRows, nfImportState, config,
+      refresh, importarNFs, dismissNFImport, setRotas, setConfig,
     }}>
       {children}
     </AppDataContext.Provider>

@@ -496,7 +496,7 @@ function RouteCard({ rota, onUpdateStatus, onAskConfirm }: {
 
 // ── Rotas Page ────────────────────────────────────────────────────────────────
 export default function RotasPage() {
-  const { nfImportState, importarNFs, dismissNFImport, nfRows, rotas: routes, setRotas: setRoutes, loadingRotas } = useAppData()
+  const { nfImportState, importarNFs, dismissNFImport, nfRows, rotas: routes, setRotas: setRoutes, loadingRotas, veiculos, config } = useAppData()
   const [filter,         setFilter]         = useState<RouteStatus | 'todos'>('todos')
   const [showDialog,     setShowDialog]     = useState(false)
   const [generating,     setGenerating]     = useState(false)
@@ -571,14 +571,33 @@ export default function RotasPage() {
     setGenerating(true)
 
     try {
+      const bloqueadas = new Set(
+        form.veiculosBloqueados.split(',').map(x => x.trim().toUpperCase()).filter(Boolean)
+      )
+      const veiculosDisponiveis = veiculos
+        .filter(v => v.disponivel_hoje && !bloqueadas.has(v.placa.toUpperCase()))
+        .map(v => ({
+          placa:             v.placa,
+          tipo:              v.tipo,
+          capacidadeKg:      v.capacidadeKg,
+          motoristaNome:     v.motoristaNome,
+          motoristaCelular:  v.motoristaCelular,
+        }))
+
       const raw = await webhookGerarRotas({
-        data:               form.data || new Date().toISOString().slice(0, 10),
-        observacoes:        form.observacoes,
+        data:                form.data || new Date().toISOString().slice(0, 10),
+        observacoes:         form.observacoes,
         motoristas,
-        veiculosBloqueados: form.veiculosBloqueados.split(',').map(x => x.trim()).filter(Boolean),
-        restricoesExtras:   form.restricoesExtras,
-        prioridade:         form.prioridade as Prioridade,
-        notasFiscais:       nfRows.length > 0 ? nfRows : undefined,
+        veiculosDisponiveis,
+        veiculosBloqueados:  Array.from(bloqueadas),
+        restricoesExtras:    form.restricoesExtras,
+        prioridade:          form.prioridade as Prioridade,
+        instrucaoGlobal:     config.instrucaoGlobal,
+        instrucoesPorRota:   config.instrucoesPorRota.map(i => ({ codigoRota: i.codigoRota, instrucao: i.instrucao })),
+        pesos:               config.pesos,
+        grades:              config.grades.map(g => ({ nome: g.nome, seg: g.seg, ter: g.ter, qua: g.qua, qui: g.qui, sex: g.sex, sab: g.sab })),
+        horarios:            config.operacao,
+        notasFiscais:        nfRows.length > 0 ? nfRows : undefined,
       }) as RetornoGerarRotas
 
       const novas = mapRetornoGerarRotas(raw)
@@ -721,7 +740,7 @@ export default function RotasPage() {
           ))}
         </div>
 
-        {routes.length === 0 && !importState.running && (
+        {routes.length === 0 && !nfImportState.running && (
           <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
             <svg className="w-8 h-8 text-subtle" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1M16 12l-4-4m0 0l-4 4m4-4v12"/>

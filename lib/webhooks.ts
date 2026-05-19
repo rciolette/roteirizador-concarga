@@ -77,14 +77,28 @@ export interface MotoristaPayload {
   status:    'disponivel' | 'ausente'
 }
 
+export interface VeiculoDisponivel {
+  placa:             string
+  tipo:              string
+  capacidadeKg:      number
+  motoristaNome?:    string
+  motoristaCelular?: string
+}
+
 export interface GerarRotasPayload {
-  data:               string
-  observacoes:        string
-  motoristas:         MotoristaPayload[]
-  veiculosBloqueados: string[]
-  restricoesExtras:   string
-  prioridade:         Prioridade
-  notasFiscais?:      unknown[]
+  data:                string
+  observacoes:         string
+  motoristas:          MotoristaPayload[]
+  veiculosDisponiveis: VeiculoDisponivel[]
+  veiculosBloqueados:  string[]
+  restricoesExtras:    string
+  prioridade:          Prioridade
+  instrucaoGlobal:     string
+  instrucoesPorRota:   { codigoRota: string; instrucao: string }[]
+  pesos:               { fiorino: number; vuc: number; tresQuartos: number; truck: number; carreta: number }
+  grades:              { nome: string; seg: boolean; ter: boolean; qua: boolean; qui: boolean; sex: boolean; sab: boolean }[]
+  horarios:            { inicioRoteirizacao: string; envioMotorista: string; saidaVeiculos: string }
+  notasFiscais?:       unknown[]
 }
 
 export async function webhookGerarRotas(payload: GerarRotasPayload): Promise<unknown> {

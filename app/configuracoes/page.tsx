@@ -6,6 +6,7 @@ import { SiatImportDialog } from '@/components/ui/SiatImportDialog'
 import { DEFAULT_CONFIG } from '@/lib/data'
 import { AppConfig, InstrucaoRota } from '@/types'
 import { useAppData } from '@/components/providers/AppDataProvider'
+import { salvarConfig, salvarWebhooks, carregarWebhooks, type WebhookConfig } from '@/lib/config-store'
 import { cn } from '@/lib/utils'
 
 const DIAS = ['seg', 'ter', 'qua', 'qui', 'sex', 'sab'] as const
@@ -24,11 +25,19 @@ function Label({ children }: { children: React.ReactNode }) {
 }
 
 export default function ConfiguracoesPage() {
-  const [cfg, setCfg] = useState<AppConfig>(DEFAULT_CONFIG)
+  const { nfImportState, importarNFs, dismissNFImport, config: globalConfig, setConfig: setGlobalConfig } = useAppData()
+  const [cfg, setCfg] = useState<AppConfig>(globalConfig)
+  const [webhooks, setWebhooks] = useState<WebhookConfig>({
+    siatWebhookUrl: '', gerarRotasWebhookUrl: '', enviarMotoristaWebhookUrl: '',
+  })
   const [saved, setSaved] = useState(false)
   const [hasChanges, setHasChanges] = useState(false)
   const [importDialog, setImportDialog] = useState(false)
   const initialRender = useRef(true)
+
+  useEffect(() => {
+    carregarWebhooks().then(setWebhooks).catch(() => {})
+  }, [])
 
   useEffect(() => {
     if (initialRender.current) {
@@ -37,7 +46,6 @@ export default function ConfiguracoesPage() {
     }
     setHasChanges(true)
   }, [cfg])
-  const { nfImportState, importarNFs, dismissNFImport } = useAppData()
   const summary = nfImportState.summary
   const importResult = summary
     ? { nfs: summary.totalNFs, peso: summary.pesoTotalToneladas, veiculos: summary.veiculosUnicos }
@@ -80,6 +88,9 @@ export default function ConfiguracoesPage() {
   }
 
   function handleSave() {
+    setGlobalConfig(cfg)
+    salvarConfig(cfg)
+    salvarWebhooks(webhooks)
     setSaved(true)
     setHasChanges(false)
     setTimeout(() => setSaved(false), 2000)
@@ -254,6 +265,36 @@ export default function ConfiguracoesPage() {
             {cfg.instrucoesPorRota.length === 0 && (
               <p className="text-[11px] text-muted py-1">Nenhuma instrução por rota configurada.</p>
             )}
+          </div>
+        </Card>
+
+        {/* ── Webhooks ── */}
+        <Card>
+          <CardHeader>
+            <span className="text-xs font-medium">Integrações — Webhooks n8n</span>
+            <span className="text-[11px] text-muted">editável pelo owner</span>
+          </CardHeader>
+          <div className="px-4 py-4 flex flex-col gap-3">
+            <p className="text-[11px] text-muted">
+              Alterações aqui são salvas no banco. Para ter efeito imediato no servidor, adicione também{' '}
+              <code className="font-mono bg-page px-1 rounded">SUPABASE_SERVICE_ROLE_KEY</code> ao{' '}
+              <code className="font-mono bg-page px-1 rounded">.env.local</code>.
+            </p>
+            {([
+              { label: 'Webhook — Importar NFs (SIAT)',     key: 'siatWebhookUrl'            as const },
+              { label: 'Webhook — Gerar Rotas (agente IA)', key: 'gerarRotasWebhookUrl'      as const },
+              { label: 'Webhook — Enviar ao Motorista',     key: 'enviarMotoristaWebhookUrl' as const },
+            ] as const).map(f => (
+              <div key={f.key}>
+                <Label>{f.label}</Label>
+                <TextInput
+                  mono
+                  value={webhooks[f.key]}
+                  onChange={v => { setWebhooks(p => ({ ...p, [f.key]: v })); setHasChanges(true) }}
+                  placeholder="https://n8n.exemplo.com.br/webhook/..."
+                />
+              </div>
+            ))}
           </div>
         </Card>
 
