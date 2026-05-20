@@ -21,9 +21,11 @@
 - nfs_nao_alocadas, ocorrencias_whatsapp, historico_rotas, configuracoes, grade_cidades
 
 ## Webhooks n8n
-- WF-A: /webhook/Execute-SQL-SIAT (consulta NFs)
-- WF-B: /webhook/gerar-rotas (gerador IA)
-- WF-C: /webhook/n8n_chatbot_concarga (agente WhatsApp)
+- WF-A: https://n8n.rcdigitais.com.br/webhook/Execute-SQL-SIAT (consulta NFs)
+- WF-B: https://n8n.rcdigitais.com.br/webhook/gerar-rotas (gerador IA)
+- WF-C: https://n8n.rcdigitais.com.br/webhook/n8n_chatbot_concarga (agente WhatsApp)
+
+## Workflow n8n On Schedule Trigger
 - WF-05: sync SIAT → Supabase
 
 ## Comportamento esperado do agente

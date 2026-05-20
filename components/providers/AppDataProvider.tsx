@@ -17,6 +17,7 @@ import { listarVeiculos } from '@/lib/veiculos'
 import { carregarRotasSupabase } from '@/lib/webhooks'
 import { DEFAULT_CONFIG } from '@/lib/data'
 import { carregarConfig } from '@/lib/config-store'
+import { useAuth } from '@/components/providers/AuthProvider'
 
 function todayISO(): string {
   return new Date().toISOString().slice(0, 10)
@@ -55,6 +56,8 @@ export function useAppData(): AppData {
 }
 
 export function AppDataProvider({ children }: { children: React.ReactNode }) {
+  const { usuario } = useAuth()
+
   const [motoristas,    setMotoristas]    = useState<Motorista[]>([])
   const [veiculos,      setVeiculos]      = useState<Veiculo[]>([])
   const [rotas,         setRotas]         = useState<Rota[]>([])
@@ -66,7 +69,8 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     running: false, step: '', progress: 0,
   })
 
-  const bootstrapped = useRef(false)
+  const bootstrapped   = useRef(false)
+  const nfImportedRef  = useRef(false)
 
   const refresh = useCallback(async () => {
     setLoadingRotas(true)
@@ -150,13 +154,18 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       } finally {
         setLoadingRotas(false)
       }
-
-      // Carrega NFs pendentes do SIAT em background — não bloqueia o render inicial
-      importarNFs()
     }
 
     bootstrap()
   }, [])
+
+  // Dispara a consulta ao SIAT assim que o usuário estiver autenticado,
+  // garantindo que a sessão já está disponível no servidor ao chamar /api/siat.
+  useEffect(() => {
+    if (!usuario || nfImportedRef.current) return
+    nfImportedRef.current = true
+    importarNFs()
+  }, [usuario, importarNFs])
 
   const dismissNFImport = useCallback(() => {
     setNfImportState({ running: false, step: '', progress: 0 })
