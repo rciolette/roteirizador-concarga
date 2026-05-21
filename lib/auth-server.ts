@@ -22,12 +22,22 @@ export async function getSessaoServidor(): Promise<SessaoServidor | null> {
   const { data: { user } } = await sb.auth.getUser()
   if (!user) return null
 
-  const admin = getAdminClient()
-  const { data } = await admin
-    .from('perfis_usuario')
-    .select('perfil, ativo')
-    .eq('user_id', user.id)
-    .single()
+  // Tenta via admin client (service role); cai no client autenticado se a
+  // chave não estiver configurada no ambiente (SUPABASE_SERVICE_ROLE_KEY vazia).
+  let data: { perfil: string | null; ativo: boolean | null } | null = null
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (serviceKey) {
+    const admin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      serviceKey,
+      { auth: { autoRefreshToken: false, persistSession: false } },
+    )
+    const res = await admin.from('perfis_usuario').select('perfil, ativo').eq('user_id', user.id).single()
+    data = res.data
+  } else {
+    const res = await sb.from('perfis_usuario').select('perfil, ativo').eq('user_id', user.id).single()
+    data = res.data
+  }
 
   return {
     userId: user.id,
