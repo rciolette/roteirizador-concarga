@@ -56,6 +56,7 @@ export async function salvarConfig(cfg: AppConfig): Promise<void> {
 // ── Webhooks ─────────────────────────────────────────────────────────────────
 
 export interface WebhookConfig {
+  /** @deprecated — substituído por /api/siat direto (lib/siat-db.ts) */
   siatWebhookUrl:            string
   gerarRotasWebhookUrl:      string
   enviarMotoristaWebhookUrl: string
