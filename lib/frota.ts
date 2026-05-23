@@ -2,6 +2,7 @@ import { supabase } from '@/lib/supabase'
 
 export interface MotoristaDaFrota {
   id: string
+  codigo_siat: string | null
   nome: string
   sigla: string
   telefone: string
@@ -15,7 +16,10 @@ export interface VeiculoDaFrota {
   modelo: string
   categoria: string
   tipo_veiculo: string
+  tipo_carroceria: string
   capacidade_kg: number
+  pbt: number | null
+  volume_m3: number | null
   situacao_siat: string
   motorista_id: string | null
   motorista_nome: string | null
@@ -61,12 +65,13 @@ export async function listarMotoristas(): Promise<MotoristaDaFrota[]> {
   )
 
   return rows.map(row => ({
-    id:       row.id as string,
-    nome:     row.nome as string,
-    sigla:    (row.sigla    as string | null) ?? '',
-    telefone: (row.telefone as string | null) ?? '',
-    celular:  (row.celular  as string | null) ?? '',
-    ativo:    (row.ativo    as boolean | null) ?? true,
+    id:          row.id as string,
+    codigo_siat: (row.codigo_siat as string | null) ?? null,
+    nome:        row.nome as string,
+    sigla:       (row.sigla    as string | null) ?? '',
+    telefone:    (row.telefone as string | null) ?? '',
+    celular:     (row.celular  as string | null) ?? '',
+    ativo:       (row.ativo    as boolean | null) ?? true,
   }))
 }
 
@@ -80,17 +85,20 @@ export async function listarVeiculos(): Promise<VeiculoDaFrota[]> {
   )
 
   return rows.map(row => ({
-    id:            row.id as string,
-    placa:         row.placa as string,
-    modelo:        (row.modelo       as string | null) ?? '',
-    categoria:     (row.categoria    as string | null) ?? '',
-    tipo_veiculo:  (row.tipo_veiculo as string | null) ?? '',
-    capacidade_kg: (row.capacidade_kg as number | null) ?? 0,
-    situacao_siat: (row.situacao_siat as string | null) ?? '',
-    motorista_id:   (row.motorista_id  as string | null) ?? null,
-    motorista_nome: (row.motoristas as { nome?: string } | null)?.nome ?? null,
-    ativo:          (row.ativo           as boolean | null) ?? true,
-    disponivel_hoje:(row.disponivel_hoje as boolean | null) ?? false,
+    id:              row.id as string,
+    placa:           row.placa as string,
+    modelo:          (row.modelo          as string | null) ?? '',
+    categoria:       (row.categoria       as string | null) ?? '',
+    tipo_veiculo:    (row.tipo_veiculo    as string | null) ?? '',
+    tipo_carroceria: (row.tipo_carroceria as string | null) ?? '',
+    capacidade_kg:   (row.capacidade_kg   as number | null) ?? 0,
+    pbt:             (row.pbt             as number | null) ?? null,
+    volume_m3:       (row.volume_m3       as number | null) ?? null,
+    situacao_siat:   (row.situacao_siat   as string | null) ?? '',
+    motorista_id:    (row.motorista_id    as string | null) ?? null,
+    motorista_nome:  (row.motoristas as { nome?: string } | null)?.nome ?? null,
+    ativo:           (row.ativo           as boolean | null) ?? true,
+    disponivel_hoje: (row.disponivel_hoje as boolean | null) ?? false,
   }))
 }
 

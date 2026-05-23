@@ -7,6 +7,7 @@ export async function listarVeiculos(): Promise<Veiculo[]> {
     .from('veiculos')
     .select('id, placa, modelo, tipo_veiculo, capacidade_kg, situacao, situacao_siat, motorista_id, codigo_siat_motorista, disponivel_hoje, motoristas(nome, celular)')
     .eq('ativo', true)
+    .eq('situacao_siat', 'Ativo')
     .order('placa', { ascending: true })
 
   if (error) throw error

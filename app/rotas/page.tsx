@@ -5,6 +5,8 @@ import {
   ImportBar, ConfirmDialog, ConfirmAction, TextArea, Select, TextInput,
 } from '@/components/ui'
 import { NotasFiscaisTable } from '@/components/ui/NotasFiscaisTable'
+import { NfsPendentesTable } from '@/components/ui/NfsPendentesTable'
+import { MapaRota } from '@/components/ui/MapaRota'
 import { ImportarSIATButton } from '@/components/ui/ImportarSIATButton'
 import { SiatImportDialog } from '@/components/ui/SiatImportDialog'
 import { webhookGerarRotas, mapRetornoGerarRotas, salvarRotasSupabase, salvarNfsNaoAlocadas, atualizarStatusRota, webhookEnviarMotorista, Prioridade, MotoristaPayload, VeiculoDisponivel } from '@/lib/webhooks'
@@ -88,22 +90,27 @@ function GerarRotasDialog({ onClose, onConfirm, motoristas, veiculos }: {
     return !q || m.nome.toLowerCase().includes(q) || m.sigla.toLowerCase().includes(q) || m.telefone.toLowerCase().includes(q)
   })
 
-  const veiculosFiltrados = veiculos.filter(v => {
-    const q = buscaVei.toLowerCase()
-    return !q || v.placa.toLowerCase().includes(q) || v.modelo.toLowerCase().includes(q)
-  })
+  const veiculosFiltrados = veiculos
+    .slice()
+    .sort((a, b) => (b.disponivel_hoje ? 1 : 0) - (a.disponivel_hoje ? 1 : 0))
+    .filter(v => {
+      const q = buscaVei.toLowerCase()
+      return !q || v.placa.toLowerCase().includes(q) || v.modelo.toLowerCase().includes(q)
+    })
 
   function handleConfirmClick() {
+    const veiculosNoPayload = veiculos.filter(v => veiculosSel.has(v.id) && v.disponivel_hoje)
+    const placasDisponiveisNoPayload = new Set(veiculosNoPayload.map(v => v.placa))
+
     const motoristasPayload: MotoristaPayload[] = motoristas
-      .filter(m => motoristasSel.has(m.id))
+      .filter(m => motoristasSel.has(m.id) && (!m.placa || placasDisponiveisNoPayload.has(m.placa)))
       .map(m => ({
         nome:     m.nome,
         telefone: m.telefone || undefined,
         placa:    m.placa    || undefined,
         status:   (m.status === 'ausente' ? 'ausente' : 'disponivel') as 'disponivel' | 'ausente',
       }))
-    const veiculosPayload: VeiculoDisponivel[] = veiculos
-      .filter(v => veiculosSel.has(v.id))
+    const veiculosPayload: VeiculoDisponivel[] = veiculosNoPayload
       .map(v => ({
         placa:            v.placa,
         tipo:             v.tipo,
@@ -242,11 +249,10 @@ function GerarRotasDialog({ onClose, onConfirm, motoristas, veiculos }: {
                     <span className="text-[10px] px-1.5 py-0.5 rounded bg-page border border-[0.5px] border-[var(--border-input)] text-subtle shrink-0">{v.tipo}</span>
                     <span className="text-[10px] text-muted shrink-0">{formatPeso(v.capacidadeKg)}</span>
                     {v.motoristaNome && <span className="text-[10px] text-subtle truncate max-w-[80px] shrink-0">{v.motoristaNome}</span>}
-                    {disabled && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0 bg-page border border-[0.5px] border-[var(--border-input)] text-subtle">
-                        {v.status === 'manutencao' ? 'Manutenção' : 'Indisponível'}
-                      </span>
-                    )}
+                    {v.disponivel_hoje
+                      ? <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0 bg-teal-bg text-[#085041]">Disponível hoje</span>
+                      : <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0 bg-warn-bg text-warn">Ativo</span>
+                    }
                   </label>
                 )
               })}
@@ -436,6 +442,12 @@ function RouteCard({ rota, onUpdateStatus, onAskConfirm }: {
                 ? `Rota enviada ao motorista às ${rota.enviadoEm ? new Date(rota.enviadoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '—'}. Confirmação recebida.`
                 : 'Nenhuma NF carregada nesta rota.'}
             </p>
+          )}
+
+          {rota.notasFiscais.length > 0 && (
+            <div className="mt-3">
+              <MapaRota nfs={rota.notasFiscais} height="260px" />
+            </div>
           )}
 
           <div className="flex gap-1.5 mt-3 pt-2.5 border-t border-[0.5px] border-[var(--border-subtle)] flex-wrap">
@@ -702,14 +714,7 @@ export default function RotasPage() {
         </div>
 
         {routes.length === 0 && !nfImportState.running && (
-          <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
-            <svg className="w-8 h-8 text-subtle" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1M16 12l-4-4m0 0l-4 4m4-4v12"/>
-            </svg>
-            <div className="text-sm font-medium">Nenhuma rota carregada</div>
-            <div className="text-[12px] text-muted max-w-xs">Clique em &ldquo;Atualizar SIAT&rdquo; para importar as notas fiscais do dia e gerar as rotas.</div>
-            <Btn onClick={() => setImportDialog(true)}>Importar SIAT agora</Btn>
-          </div>
+          <NfsPendentesTable />
         )}
 
         {routes.length > 0 && filtered.length === 0 && (

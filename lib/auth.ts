@@ -7,6 +7,8 @@ export interface UsuarioSessao {
   email:      string
   perfil:     Perfil
   nome?:      string
+  username?:  string
+  cargo?:     string
   telefone?:  string
   avatarUrl?: string
   ativo:      boolean
@@ -37,7 +39,7 @@ export async function getUsuarioAtual(): Promise<UsuarioSessao | null> {
 
   const { data } = await sb
     .from('perfis_usuario')
-    .select('perfil, nome, telefone, avatar_url, ativo')
+    .select('perfil, nome, username, cargo, telefone, avatar_url, ativo')
     .eq('user_id', session.user.id)
     .single()
 
@@ -46,6 +48,8 @@ export async function getUsuarioAtual(): Promise<UsuarioSessao | null> {
     email:     session.user.email ?? '',
     perfil:    (data?.perfil as Perfil) ?? 'visualizador',
     nome:      data?.nome ?? (session.user.user_metadata?.nome as string | undefined),
+    username:  data?.username ?? undefined,
+    cargo:     data?.cargo ?? undefined,
     telefone:  data?.telefone ?? undefined,
     avatarUrl: data?.avatar_url ?? undefined,
     ativo:     data?.ativo ?? true,

@@ -12,6 +12,8 @@ export async function PATCH(req: Request) {
 
   const campos: Record<string, unknown> = {}
   if (body.nome       !== undefined) campos.nome       = body.nome
+  if (body.username   !== undefined) campos.username   = body.username
+  if (body.cargo      !== undefined) campos.cargo      = body.cargo
   if (body.telefone   !== undefined) campos.telefone   = body.telefone
   if (body.avatar_url !== undefined) campos.avatar_url = body.avatar_url
 

@@ -13,6 +13,23 @@ import {
 
 type Tab = 'motoristas' | 'veiculos' | 'vinculados'
 
+const PAGE_SIZE = 100
+
+function Paginacao({ page, totalItems, totalPages, onChange }: { page: number; totalItems: number; totalPages: number; onChange: (p: number) => void }) {
+  if (totalPages <= 1) return null
+  const from = page * PAGE_SIZE + 1
+  const to   = Math.min((page + 1) * PAGE_SIZE, totalItems)
+  return (
+    <div className="flex items-center justify-between px-4 py-2.5 border-t border-[0.5px] border-[var(--border-faint)]">
+      <span className="text-[11px] text-muted">{from}–{to} de {totalItems}</span>
+      <div className="flex gap-1.5">
+        <Btn size="sm" onClick={() => onChange(page - 1)} disabled={page === 0}>← Anterior</Btn>
+        <Btn size="sm" onClick={() => onChange(page + 1)} disabled={page >= totalPages - 1}>Próxima →</Btn>
+      </div>
+    </div>
+  )
+}
+
 function Toggle({ checked, onChange, color = 'primary' }: {
   checked: boolean
   onChange: (v: boolean) => void
@@ -58,6 +75,31 @@ function SituacaoBadge({ situacao }: { situacao: string }) {
     )}>
       <span className={cn('w-[5px] h-[5px] rounded-full shrink-0', isDisp ? 'bg-cond-ok' : 'bg-subtle')} />
       {situacao || '—'}
+    </span>
+  )
+}
+
+function VeiculoStatusBadge({ situacaoSiat, disponivelHoje }: { situacaoSiat: string; disponivelHoje: boolean }) {
+  if (situacaoSiat !== 'Ativo') {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap bg-cream text-muted">
+        <span className="w-[5px] h-[5px] rounded-full shrink-0 bg-subtle" />
+        Inativo SIAT
+      </span>
+    )
+  }
+  if (disponivelHoje) {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap bg-teal-bg text-[#085041]">
+        <span className="w-[5px] h-[5px] rounded-full shrink-0 bg-teal" />
+        Disponível hoje
+      </span>
+    )
+  }
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap bg-warn-bg text-warn">
+      <span className="w-[5px] h-[5px] rounded-full shrink-0 bg-cond-warn" />
+      Ativo
     </span>
   )
 }
@@ -133,8 +175,13 @@ export default function FrotaPage() {
   const [toastV,    setToastV]    = useState('')
 
   const [busca,      setBusca]      = useState('')
-  const [filtroSiat, setFiltroSiat] = useState('')
+  const [buscaV,     setBuscaV]     = useState('')
+  const [filtroSiat, setFiltroSiat] = useState('Ativo')
   const [filtroDisp, setFiltroDisp] = useState<'todos' | 'sim' | 'nao'>('todos')
+
+  const [pageM,  setPageM]  = useState(0)
+  const [pageV,  setPageV]  = useState(0)
+  const [pageVi, setPageVi] = useState(0)
 
   useEffect(() => {
     if (tab === 'motoristas' && motoristas.length === 0 && !loadingM) {
@@ -205,14 +252,29 @@ export default function FrotaPage() {
   const motoristasFiltrados = motoristas.filter(m =>
     m.nome.toLowerCase().includes(busca.toLowerCase()),
   )
+  const totalPagesM  = Math.ceil(motoristasFiltrados.length / PAGE_SIZE)
+  const paginatedM   = motoristasFiltrados.slice(pageM * PAGE_SIZE, (pageM + 1) * PAGE_SIZE)
 
   const situacoesSiat = [...new Set(veiculos.map(v => v.situacao_siat).filter(Boolean))]
   const veiculosFiltrados = veiculos.filter(v => {
+    if (buscaV) {
+      const q = buscaV.toLowerCase()
+      if (
+        !v.placa.toLowerCase().includes(q) &&
+        !(v.modelo ?? '').toLowerCase().includes(q) &&
+        !(v.motorista_nome ?? '').toLowerCase().includes(q)
+      ) return false
+    }
     if (filtroSiat && v.situacao_siat !== filtroSiat) return false
     if (filtroDisp === 'sim' && !v.disponivel_hoje) return false
     if (filtroDisp === 'nao' && v.disponivel_hoje)  return false
     return true
   })
+  const totalPagesV  = Math.ceil(veiculosFiltrados.length / PAGE_SIZE)
+  const paginatedV   = veiculosFiltrados.slice(pageV * PAGE_SIZE, (pageV + 1) * PAGE_SIZE)
+
+  const totalPagesVi = Math.ceil(vinculados.length / PAGE_SIZE)
+  const paginatedVi  = vinculados.slice(pageVi * PAGE_SIZE, (pageVi + 1) * PAGE_SIZE)
 
   const qtdDisponiveis = veiculos.filter(v => v.disponivel_hoje).length
 
@@ -260,10 +322,10 @@ export default function FrotaPage() {
                   </span>
                 )}
               </div>
-              <TextInput value={busca} onChange={setBusca} placeholder="Buscar por nome..." style={{ width: 200 }} />
+              <TextInput value={busca} onChange={v => { setBusca(v); setPageM(0) }} placeholder="Buscar por nome..." style={{ width: 200 }} />
             </CardHeader>
 
-            {loadingM ? <TableSkeleton cols={6} /> : motoristasFiltrados.length === 0 ? (
+            {loadingM ? <TableSkeleton cols={7} /> : motoristasFiltrados.length === 0 ? (
               <div className="py-10 text-center text-subtle text-[13px]">
                 {busca ? 'Nenhum motorista encontrado.' : 'Nenhum motorista cadastrado.'}
               </div>
@@ -272,14 +334,15 @@ export default function FrotaPage() {
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-[0.5px] border-[var(--border-subtle)]">
-                      <TH>Nome</TH><TH>Sigla</TH><TH>Telefone</TH><TH>Celular</TH><TH>Status</TH><TH>Ativo</TH>
+                      <TH>Nome</TH><TH>Sigla</TH><TH>Cód. SIAT</TH><TH>Telefone</TH><TH>Celular</TH><TH>Status</TH><TH>Ativo</TH>
                     </tr>
                   </thead>
                   <tbody>
-                    {motoristasFiltrados.map((m, i) => (
+                    {paginatedM.map((m, i) => (
                       <tr key={m.id} className={cn('border-b border-[0.5px] border-[var(--border-faint)] transition-colors', i % 2 !== 0 && 'bg-cream/40', 'hover:bg-primary-bg/30')}>
                         <TD medium>{m.nome}</TD>
                         <TD mono>{m.sigla || '—'}</TD>
+                        <TD mono>{m.codigo_siat || '—'}</TD>
                         <TD>{m.telefone || '—'}</TD>
                         <TD>{m.celular || '—'}</TD>
                         <td className="px-4 py-2.5"><AtivoBadge ativo={m.ativo} /></td>
@@ -290,6 +353,7 @@ export default function FrotaPage() {
                 </table>
               </div>
             )}
+            <Paginacao page={pageM} totalItems={motoristasFiltrados.length} totalPages={totalPagesM} onChange={setPageM} />
           </Card>
         )}
 
@@ -311,12 +375,13 @@ export default function FrotaPage() {
                 )}
               </div>
               <div className="flex items-center gap-2 flex-wrap justify-end">
-                <Select value={filtroDisp} onChange={v => setFiltroDisp(v as 'todos' | 'sim' | 'nao')} className="w-[155px]">
+                <TextInput value={buscaV} onChange={v => { setBuscaV(v); setPageV(0) }} placeholder="Buscar placa, modelo..." style={{ width: 180 }} />
+                <Select value={filtroDisp} onChange={v => { setFiltroDisp(v as 'todos' | 'sim' | 'nao'); setPageV(0) }} className="w-[155px]">
                   <option value="todos">Todos</option>
                   <option value="sim">Disponíveis hoje</option>
                   <option value="nao">Indisponíveis hoje</option>
                 </Select>
-                <Select value={filtroSiat} onChange={setFiltroSiat} className="w-[160px]">
+                <Select value={filtroSiat} onChange={v => { setFiltroSiat(v); setPageV(0) }} className="w-[160px]">
                   <option value="">Todas as situações</option>
                   {situacoesSiat.map(s => <option key={s} value={s}>{s}</option>)}
                 </Select>
@@ -340,22 +405,23 @@ export default function FrotaPage() {
               </div>
             )}
 
-            {loadingV ? <TableSkeleton cols={9} /> : veiculosFiltrados.length === 0 ? (
+            {loadingV ? <TableSkeleton cols={12} /> : veiculosFiltrados.length === 0 ? (
               <div className="py-10 text-center text-subtle text-[13px]">
-                {filtroSiat || filtroDisp !== 'todos' ? 'Nenhum veículo com esse filtro.' : 'Nenhum veículo cadastrado.'}
+                {filtroSiat || filtroDisp !== 'todos' || buscaV ? 'Nenhum veículo com esse filtro.' : 'Nenhum veículo cadastrado.'}
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-[0.5px] border-[var(--border-subtle)]">
-                      <TH>Placa</TH><TH>Modelo</TH><TH>Categoria</TH><TH>Tipo</TH>
-                      <TH>Capacidade</TH><TH>Situação SIAT</TH><TH>Motorista</TH>
+                      <TH>Placa</TH><TH>Modelo</TH><TH>Categoria</TH><TH>Tipo</TH><TH>Carroceria</TH>
+                      <TH>Cap. (kg)</TH><TH>PBT (kg)</TH><TH>Vol. (m³)</TH>
+                      <TH>Situação SIAT</TH><TH>Motorista</TH>
                       <TH>Ativo</TH><TH>Disponível hoje</TH>
                     </tr>
                   </thead>
                   <tbody>
-                    {veiculosFiltrados.map((v, i) => (
+                    {paginatedV.map((v, i) => (
                       <tr key={v.id} className={cn(
                         'border-b border-[0.5px] border-[var(--border-faint)] transition-colors',
                         v.disponivel_hoje ? 'bg-teal-bg/30 dark:bg-teal/5' : i % 2 !== 0 ? 'bg-cream/40' : '',
@@ -365,8 +431,11 @@ export default function FrotaPage() {
                         <TD medium>{v.modelo || '—'}</TD>
                         <TD>{v.categoria || '—'}</TD>
                         <TD>{v.tipo_veiculo || '—'}</TD>
-                        <TD>{v.capacidade_kg ? `${v.capacidade_kg.toLocaleString('pt-BR')} kg` : '—'}</TD>
-                        <td className="px-4 py-2.5"><SituacaoBadge situacao={v.situacao_siat} /></td>
+                        <TD>{v.tipo_carroceria || '—'}</TD>
+                        <td className="px-4 py-2.5 text-xs text-muted tabular-nums text-right">{v.capacidade_kg ? v.capacidade_kg.toLocaleString('pt-BR') : '—'}</td>
+                        <td className="px-4 py-2.5 text-xs text-muted tabular-nums text-right">{v.pbt ? v.pbt.toLocaleString('pt-BR') : '—'}</td>
+                        <td className="px-4 py-2.5 text-xs text-muted tabular-nums text-right">{v.volume_m3 ? v.volume_m3.toLocaleString('pt-BR') : '—'}</td>
+                        <td className="px-4 py-2.5"><VeiculoStatusBadge situacaoSiat={v.situacao_siat} disponivelHoje={v.disponivel_hoje} /></td>
                         <TD>{v.motorista_nome ?? <span className="italic">—</span>}</TD>
                         <td className="px-4 py-2.5"><Toggle checked={v.ativo} onChange={val => toggleVeiculo(v.id, val)} /></td>
                         <td className="px-4 py-2.5"><Toggle checked={v.disponivel_hoje} onChange={val => toggleDisponivelHoje(v.id, val)} color="teal" /></td>
@@ -376,6 +445,7 @@ export default function FrotaPage() {
                 </table>
               </div>
             )}
+            <Paginacao page={pageV} totalItems={veiculosFiltrados.length} totalPages={totalPagesV} onChange={setPageV} />
           </Card>
         )}
 
@@ -397,18 +467,19 @@ export default function FrotaPage() {
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-[0.5px] border-[var(--border-subtle)]">
-                      <TH>Placa</TH><TH>Modelo</TH><TH>Capacidade</TH><TH>Motorista</TH><TH>Celular</TH><TH>Situação SIAT</TH>
+                      <TH>Placa</TH><TH>Modelo</TH><TH>Cap. (kg)</TH><TH>Motorista</TH><TH>Sigla</TH><TH>Celular</TH><TH>Situação SIAT</TH>
                     </tr>
                   </thead>
                   <tbody>
-                    {vinculados.map((v, i) => (
+                    {paginatedVi.map((v, i) => (
                       <tr key={v.id} className={cn('border-b border-[0.5px] border-[var(--border-faint)] transition-colors', i % 2 !== 0 && 'bg-cream/40', 'hover:bg-primary-bg/30')}>
                         <td className="px-4 py-2.5 text-xs font-mono font-medium text-base">{v.placa}</td>
                         <TD medium>{v.modelo || '—'}</TD>
-                        <TD>{v.capacidade_kg ? `${v.capacidade_kg.toLocaleString('pt-BR')} kg` : '—'}</TD>
+                        <td className="px-4 py-2.5 text-xs text-muted tabular-nums text-right">{v.capacidade_kg ? v.capacidade_kg.toLocaleString('pt-BR') : '—'}</td>
                         <td className="px-4 py-2.5 text-xs font-medium text-base">
                           {v.motorista_nome ?? <span className="italic text-subtle">sem motorista</span>}
                         </td>
+                        <TD mono>{v.motorista_sigla || '—'}</TD>
                         <td className="px-4 py-2.5 text-xs font-mono text-muted">{v.motorista_celular || '—'}</td>
                         <td className="px-4 py-2.5"><SituacaoBadge situacao={v.situacao_siat} /></td>
                       </tr>
@@ -417,6 +488,7 @@ export default function FrotaPage() {
                 </table>
               </div>
             )}
+            <Paginacao page={pageVi} totalItems={vinculados.length} totalPages={totalPagesVi} onChange={setPageVi} />
           </Card>
         )}
       </div>

@@ -239,10 +239,11 @@ export async function salvarNfsNaoAlocadas(nfs: number[], data: string, motivo: 
   )
 }
 
-export async function atualizarStatusRota(id: string, status: RouteStatus): Promise<void> {
+export async function atualizarStatusRota(id: string, status: RouteStatus, observacao?: string): Promise<void> {
   const updates: Record<string, unknown> = { status, atualizado_em: new Date().toISOString() }
   if (status === 'aprovada') updates.aprovado_em = new Date().toISOString()
   if (status === 'enviada')  updates.enviado_em  = new Date().toISOString()
+  if (observacao)            updates.observacoes = observacao
 
   await supabase.from('rotas').update(updates).eq('id', id)
   await supabase.from('historico_rotas').insert({
@@ -250,6 +251,34 @@ export async function atualizarStatusRota(id: string, status: RouteStatus): Prom
     status_para: status,
     usuario:     'operador',
   })
+}
+
+export async function reprocessarRota(rotaId: string): Promise<void> {
+  const hoje = new Date().toISOString().slice(0, 10)
+  const res = await fetch('/api/gerar-rotas', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({
+      rotaId,
+      dataInicio:        hoje,
+      dataFim:           hoje,
+      observacoes:       `Reprocessar rota ${rotaId}`,
+      motoristas:        [],
+      veiculosDisponiveis: [],
+      veiculosBloqueados:  [],
+      restricoesExtras:  '',
+      prioridade:        'padrao',
+      instrucaoGlobal:   '',
+      instrucoesPorRota: [],
+      pesos:             { fiorino: 700, vuc: 1200, tresQuartos: 2500, truck: 5000, carreta: 12000 },
+      grades:            [],
+      horarios:          { inicioRoteirizacao: '06:00', envioMotorista: '07:00', saidaVeiculos: '08:00' },
+    }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error((err as { error?: string }).error || `HTTP ${res.status}`)
+  }
 }
 
 export interface EnviarMotoristaPayload {

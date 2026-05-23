@@ -9,6 +9,8 @@ import { useAppData } from '@/components/providers/AppDataProvider'
 import { useAuth } from '@/components/providers/AuthProvider'
 import { salvarConfig, salvarWebhooks, carregarWebhooks, type WebhookConfig } from '@/lib/config-store'
 import { cn } from '@/lib/utils'
+import { GradeCidadesTable } from '@/components/ui/GradeCidadesTable'
+import { RotasCadastradasTable } from '@/components/ui/RotasCadastradasTable'
 
 const DIAS = ['seg', 'ter', 'qua', 'qui', 'sex', 'sab'] as const
 const DIAS_LABELS = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
@@ -185,6 +187,12 @@ export default function ConfiguracoesPage() {
             </table>
           </div>
         </Card>
+
+        {/* ── GRADE — Cidades e Regiões ── */}
+        <GradeCidadesTable />
+
+        {/* ── Rotas Cadastradas ── */}
+        <RotasCadastradasTable />
 
         {/* ── Prioridades ── */}
         <Card>

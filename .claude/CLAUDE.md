@@ -6,6 +6,12 @@
 - Deploy: Vercel (rciolette/roteirizador-concarga)
 - n8n: https://n8n.rcdigitais.com.br
 
+## MCP Supabase — regra crítica
+- Usar SEMPRE o MCP `mcp__supabase__*` (prefixo `mcp__supabase__`)
+- NUNCA usar `mcp__supabase-roi-ventures__*` (projeto errado) nem `mcp__claude_ai_Supabase__*` (sem permissão)
+- O .mcp.json do projeto já aponta para qtbaqcxxoygpqecezbdy — não alterar
+- Se ocorrer erro de autenticação: chamar `mcp__supabase__authenticate` uma vez e aguardar o usuário autorizar no browser
+
 ## Regras obrigatórias
 - Sempre consultar o Supabase antes de criar novas tabelas ou colunas
 - Nunca fazer push direto — sempre aguardar confirmação do Raphael
