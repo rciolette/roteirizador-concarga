@@ -153,12 +153,16 @@ function normalizarTipoCliente(tipo: string | null | undefined): ClientType {
 // Converte NF rows do SIAT em NotaFiscal[] plana (sem agrupar por rota).
 // Usada para exibir as NFs pendentes de roteirização.
 export function siatRowsToNotasPendentes(rows: SiatRow[]): NotaFiscal[] {
-  const nfRows = rows.filter(r => r.NUMNFS != null && r.ROTA)
+  const nfRows = rows.filter(r => {
+    const numnfs = r.NUMNFS ?? r['NumNFS'] ?? r['numnfs']
+    const rota   = r.ROTA   ?? r['Rota']   ?? r['rota']   ?? r['CODIGO_ROTA']
+    return numnfs != null && Boolean(rota)
+  })
   const seen   = new Set<string>()
   const result: NotaFiscal[] = []
 
   for (const row of nfRows) {
-    const nf = String(row.NUMNFS!)
+    const nf = String(row.NUMNFS ?? row['NumNFS'] ?? row['numnfs'] ?? '')
     if (seen.has(nf)) continue
     seen.add(nf)
 
@@ -180,7 +184,7 @@ export function siatRowsToNotasPendentes(rows: SiatRow[]): NotaFiscal[] {
       tipoCliente,
       cond:             derivarCond(row),
       grade:            row.TipoCarga      || '—',
-      rota:             String(row.ROTA!),
+      rota:             String(row.ROTA ?? row['Rota'] ?? row['rota'] ?? row['CODIGO_ROTA'] ?? ''),
       dataEmissao:      row.DataEmissao    ? String(row.DataEmissao).slice(0, 10) : '—',
       dataAgendamento:  row.DataAgendamento ? String(row.DataAgendamento).slice(0, 10) : undefined,
       horaAgendamento:  row.HoraAgendamento ? String(row.HoraAgendamento) : undefined,

@@ -372,7 +372,7 @@ export default function Page() {
             sub={metrics.rotasAguardando > 0 ? 'aguardando aprovação' : rotas.length > 0 ? 'todas processadas' : 'sem rotas hoje'}
             valueColor="#854F0B"
             className="border-t-2 border-t-primary"
-            cta={{ label: 'Revisar →', href: '/rotas' }}
+            cta={{ label: 'Revisar →', href: '/rotas/acoes' }}
           />
         </section>
 
@@ -397,7 +397,7 @@ export default function Page() {
         <NfsPendentesTable />
 
         {/* CTA */}
-        <Link href="/rotas">
+        <Link href={metrics.rotasAguardando > 0 ? '/rotas/acoes' : '/rotas'}>
           <Btn style={{ width: '100%', justifyContent: 'center' }}>
             {metrics.rotasAguardando > 0
               ? `Ver ${metrics.rotasAguardando} rotas aguardando aprovação →`

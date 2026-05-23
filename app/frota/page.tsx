@@ -173,6 +173,8 @@ export default function FrotaPage() {
   const [loadingV,  setLoadingV]  = useState(false)
   const [loadingVi, setLoadingVi] = useState(false)
   const [toastV,    setToastV]    = useState('')
+  const [toastM,    setToastM]    = useState('')
+  const [syncingM,  setSyncingM]  = useState(false)
 
   const [busca,      setBusca]      = useState('')
   const [buscaV,     setBuscaV]     = useState('')
@@ -202,6 +204,28 @@ export default function FrotaPage() {
   function showToastV(msg: string) {
     setToastV(msg)
     setTimeout(() => setToastV(''), 3000)
+  }
+
+  function showToastM(msg: string) {
+    setToastM(msg)
+    setTimeout(() => setToastM(''), 4000)
+  }
+
+  async function handleSincronizarSIAT() {
+    setSyncingM(true)
+    try {
+      const res  = await fetch('/api/sync-frota', { method: 'POST' })
+      const json = await res.json() as { ok?: boolean; motoristas?: number; veiculos?: number; error?: string }
+      if (!res.ok) throw new Error(json.error ?? 'Erro desconhecido')
+      const [mots, veics] = await Promise.all([listarMotoristas(), listarVeiculos()])
+      setMotoristas(mots)
+      setVeiculos(veics)
+      showToastM(`Sincronizado: ${json.motoristas} motoristas · ${json.veiculos} veículos`)
+    } catch (err) {
+      showToastM(`Erro: ${err instanceof Error ? err.message : 'falha na sincronização'}`)
+    } finally {
+      setSyncingM(false)
+    }
   }
 
   const toggleMotorista = useCallback(async (id: string, ativo: boolean) => {
@@ -322,8 +346,22 @@ export default function FrotaPage() {
                   </span>
                 )}
               </div>
-              <TextInput value={busca} onChange={v => { setBusca(v); setPageM(0) }} placeholder="Buscar por nome..." style={{ width: 200 }} />
+              <div className="flex items-center gap-2">
+                <Btn size="sm" onClick={handleSincronizarSIAT} disabled={syncingM}>
+                  {syncingM ? 'Sincronizando...' : '↺ Sincronizar com SIAT'}
+                </Btn>
+                <TextInput value={busca} onChange={v => { setBusca(v); setPageM(0) }} placeholder="Buscar por nome..." style={{ width: 200 }} />
+              </div>
             </CardHeader>
+
+            {toastM && (
+              <div className={cn(
+                'mx-4 mt-3 mb-1 text-[11px] rounded-lg px-3 py-2',
+                toastM.startsWith('Erro') ? 'bg-danger-bg text-danger' : 'bg-success-bg text-success-dark',
+              )}>
+                {toastM}
+              </div>
+            )}
 
             {loadingM ? <TableSkeleton cols={7} /> : motoristasFiltrados.length === 0 ? (
               <div className="py-10 text-center text-subtle text-[13px]">

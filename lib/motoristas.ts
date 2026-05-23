@@ -10,7 +10,6 @@ export async function listarMotoristas(): Promise<Motorista[]> {
   const { data, error } = await supabase
     .from('motoristas')
     .select('id, nome, telefone, celular, placa, sigla, status')
-    .eq('ativo', true)
     .order('nome', { ascending: true })
 
   if (error) throw error

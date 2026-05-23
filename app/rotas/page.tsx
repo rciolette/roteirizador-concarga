@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import {
   Topbar, Card, CardHeader, Btn, StatusPill, WeightBar,
   ImportBar, ConfirmDialog, ConfirmAction, TextArea, Select, TextInput,
@@ -10,6 +10,8 @@ import { MapaRota } from '@/components/ui/MapaRota'
 import { ImportarSIATButton } from '@/components/ui/ImportarSIATButton'
 import { SiatImportDialog } from '@/components/ui/SiatImportDialog'
 import { webhookGerarRotas, mapRetornoGerarRotas, salvarRotasSupabase, salvarNfsNaoAlocadas, atualizarStatusRota, webhookEnviarMotorista, Prioridade, MotoristaPayload, VeiculoDisponivel } from '@/lib/webhooks'
+import { derivarCond } from '@/lib/siat'
+import type { SiatRow } from '@/lib/siat'
 import type { Veiculo, Motorista } from '@/types'
 import { cn, formatPeso } from '@/lib/utils'
 import { useCopyToClipboard } from '@/lib/hooks'
@@ -472,10 +474,102 @@ function RouteCard({ rota, onUpdateStatus, onAskConfirm }: {
   )
 }
 
+// ── S/Rota Tab ────────────────────────────────────────────────────────────────
+function SRotaCondBadge({ cond }: { cond: 'ok' | 'laranja' | 'vermelho' }) {
+  if (cond === 'vermelho') return (
+    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-danger-bg text-danger whitespace-nowrap">
+      <span className="w-[5px] h-[5px] rounded-full bg-cond-err shrink-0" />Vermelho
+    </span>
+  )
+  if (cond === 'laranja') return (
+    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-warn-bg text-warn whitespace-nowrap">
+      <span className="w-[5px] h-[5px] rounded-full bg-cond-warn shrink-0" />Laranja
+    </span>
+  )
+  return <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-cream text-muted">OK</span>
+}
+
+function SRotaTable({ rows }: { rows: SiatRow[] }) {
+  const thCls = 'text-left text-[10px] text-muted font-medium px-2 py-1.5 border-b border-[0.5px] border-[var(--border-subtle)] bg-page whitespace-nowrap'
+  const tdCls = 'px-2 py-[5px] border-b border-[0.5px] border-[var(--border-faint)] text-[11px]'
+  const pesoTotal = rows.reduce((a, r) => a + (typeof r.PesoBruto === 'number' ? r.PesoBruto : 0), 0)
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium">S/Rota — NFs sem rota definida</span>
+          {rows.length > 0 && (
+            <>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-warn-bg text-warn font-medium">{rows.length} NFs</span>
+              <span className="text-[10px] text-muted">{(pesoTotal / 1000).toFixed(2)} t</span>
+            </>
+          )}
+        </div>
+      </CardHeader>
+      {rows.length === 0 ? (
+        <div className="px-4 py-8 text-center text-[12px] text-muted">
+          Nenhuma NF com S/Rota encontrada na importação atual.
+        </div>
+      ) : (
+        <>
+          <div className="px-3.5 py-2 text-[11px] text-warn border-b border-[0.5px] border-[var(--border-faint)]">
+            NFs com ROTA = "S/ROTA" no SIAT — requerem tratamento manual antes da roteirização.
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr>
+                  <th className={thCls}>N NF</th>
+                  <th className={thCls}>Destinatário</th>
+                  <th className={thCls}>Município</th>
+                  <th className={thCls}>Bairro</th>
+                  <th className={thCls}>Tipo</th>
+                  <th className={thCls}>Peso (kg)</th>
+                  <th className={thCls}>COND</th>
+                  <th className={thCls}>SAC</th>
+                  <th className={thCls}>Observação</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row, i) => (
+                  <tr key={String(row.NUMNFS ?? i)} className={i % 2 === 0 ? 'bg-white dark:bg-[#1E1E1C]' : 'bg-page'}>
+                    <td className={cn(thCls, 'font-mono border-b border-[0.5px] border-[var(--border-faint)] bg-transparent')}>{row.NUMNFS ?? '—'}</td>
+                    <td className={cn(tdCls, 'max-w-[180px] truncate')} title={row.Destinatario ?? ''}>{row.Destinatario ?? '—'}</td>
+                    <td className={cn(tdCls, 'whitespace-nowrap text-muted')}>{row.MunicipioFinal ?? row.Municipio ?? '—'}</td>
+                    <td className={cn(tdCls, 'max-w-[110px] truncate text-muted')}>{row.BairroFinal ?? row.Bairro ?? '—'}</td>
+                    <td className={tdCls}><span className="text-[10px] text-muted">{row.TipoCliente ?? '—'}</span></td>
+                    <td className={cn(tdCls, 'tabular-nums text-right whitespace-nowrap')}>
+                      {typeof row.PesoBruto === 'number' ? row.PesoBruto.toLocaleString('pt-BR') : '—'}
+                    </td>
+                    <td className={tdCls}><SRotaCondBadge cond={derivarCond(row)} /></td>
+                    <td className={tdCls}>
+                      {row.SAC
+                        ? <span className="text-[10px] px-1.5 py-px rounded-full font-medium bg-warn-bg text-warn">{row.SAC}</span>
+                        : <span className="text-subtle">—</span>}
+                    </td>
+                    <td className={cn(tdCls, 'max-w-[160px] truncate text-muted')} title={row.Observacao ?? ''}>{row.Observacao ?? '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </Card>
+  )
+}
+
 // ── Rotas Page ────────────────────────────────────────────────────────────────
 export default function RotasPage() {
   const { nfImportState, importarNFs, dismissNFImport, nfRows, rotas: routes, setRotas: setRoutes, loadingRotas, motoristas, veiculos, config, refreshVeiculos } = useAppData()
   const [filter,         setFilter]         = useState<RouteStatus | 'todos'>('todos')
+  const [tabPendentes,   setTabPendentes]   = useState<'pendentes' | 'srota'>('pendentes')
+
+  const sRotaNfs = useMemo(
+    () => nfRows.filter(r => String(r.ROTA || '').toUpperCase().includes('S/ROTA')),
+    [nfRows],
+  )
 
   // Atualiza notas e veículos automaticamente ao abrir a página
   useEffect(() => {
@@ -714,7 +808,36 @@ export default function RotasPage() {
         </div>
 
         {routes.length === 0 && !nfImportState.running && (
-          <NfsPendentesTable />
+          <>
+            <div className="flex gap-1.5">
+              {(['pendentes', 'srota'] as const).map(tab => {
+                const active = tabPendentes === tab
+                const label  = tab === 'pendentes' ? 'Pendentes' : 'S/Rota'
+                const count  = tab === 'srota' ? sRotaNfs.length : 0
+                return (
+                  <button
+                    key={tab}
+                    onClick={() => setTabPendentes(tab)}
+                    className={cn(
+                      'inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-medium transition-colors duration-100',
+                      active ? 'bg-primary text-white' : 'bg-cream text-mid hover:bg-cream-hover hover:text-base',
+                    )}
+                  >
+                    {label}
+                    {count > 0 && (
+                      <span className={cn(
+                        'text-[10px] min-w-[16px] text-center px-1 rounded-full font-medium',
+                        active ? 'bg-white/25 text-white' : 'bg-white dark:bg-[#2A2A28] text-muted',
+                      )}>
+                        {count}
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+            {tabPendentes === 'pendentes' ? <NfsPendentesTable /> : <SRotaTable rows={sRotaNfs} />}
+          </>
         )}
 
         {routes.length > 0 && filtered.length === 0 && (
