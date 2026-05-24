@@ -1,4 +1,6 @@
 import { supabase } from '@/lib/supabase'
+import { tipoVeiculoFromSiat } from '@/lib/siat'
+import type { Veiculo, Motorista } from '@/types'
 
 export interface MotoristaDaFrota {
   id: string
@@ -91,9 +93,9 @@ export async function listarVeiculos(): Promise<VeiculoDaFrota[]> {
     categoria:       (row.categoria       as string | null) ?? '',
     tipo_veiculo:    (row.tipo_veiculo    as string | null) ?? '',
     tipo_carroceria: (row.tipo_carroceria as string | null) ?? '',
-    capacidade_kg:   (row.capacidade_kg   as number | null) ?? 0,
-    pbt:             (row.pbt             as number | null) ?? null,
-    volume_m3:       (row.volume_m3       as number | null) ?? null,
+    capacidade_kg:   parseFloat(String(row.capacidade_kg ?? '0')) || 0,
+    pbt:             row.pbt      != null ? parseFloat(String(row.pbt))      : null,
+    volume_m3:       row.volume_m3 != null ? parseFloat(String(row.volume_m3)) : null,
     situacao_siat:   (row.situacao_siat   as string | null) ?? '',
     motorista_id:    (row.motorista_id    as string | null) ?? null,
     motorista_nome:  (row.motoristas as { nome?: string } | null)?.nome ?? null,
@@ -125,6 +127,39 @@ export async function listarVinculados(): Promise<VinculadoDaFrota[]> {
       motorista_sigla:   m?.sigla   ?? null,
     }
   })
+}
+
+export function veiculoDaFrotaToVeiculo(v: VeiculoDaFrota): Veiculo {
+  const sit = (v.situacao_siat ?? '').toUpperCase()
+  const status: Veiculo['status'] =
+    !v.ativo              ? 'indisponivel' :
+    sit.includes('MANUT') ? 'manutencao'   :
+    v.disponivel_hoje     ? 'disponivel'   :
+    sit.includes('DISPON') ? 'disponivel'  :
+    'indisponivel'
+  return {
+    id:              v.id,
+    placa:           v.placa,
+    modelo:          v.modelo,
+    tipo:            tipoVeiculoFromSiat(v.tipo_veiculo),
+    capacidadeKg:    v.capacidade_kg,
+    volumeCubado:    v.volume_m3 ?? undefined,
+    sigla:           v.placa,
+    status,
+    disponivel_hoje: v.disponivel_hoje,
+    motoristaNome:   v.motorista_nome ?? undefined,
+  }
+}
+
+export function motoristaDaFrotaToMotorista(m: MotoristaDaFrota): Motorista {
+  return {
+    id:        m.id,
+    nome:      m.nome,
+    telefone:  m.celular || m.telefone,
+    sigla:     m.sigla,
+    status:    m.ativo ? 'disponivel' : 'ausente',
+    codigoSiat: m.codigo_siat ?? undefined,
+  }
 }
 
 export async function atualizarAtivoMotorista(id: string, ativo: boolean): Promise<void> {

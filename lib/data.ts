@@ -183,11 +183,11 @@ export const HISTORICO_DIAS = [
 
 export const DEFAULT_CONFIG: AppConfig = {
   sql: {
-    host: 'siat.dyndns.info',
+    host: '',
     port: '10143',
     database: 'SiatWeb_Concarga',
-    user: 'SIAT_BI',
-    password: 'SIAT_BI',
+    user: '',
+    password: '',
     script: `set dateformat YMD;
 WITH UltimaOcorrenciaSAC AS (
   select a.COD_SAC as SAC, b.NUMITE as UltimaOcorrenciaSAC, c.DES_SOL as Descricao

@@ -116,6 +116,10 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
 
       const raw     = await res.json()
       const rows    = normalizeSiatPayload(raw)
+      console.log('[NF DEBUG] total rows:', rows.length)
+      console.log('[NF DEBUG] keys:', Object.keys(rows[0] ?? {}))
+      console.log('[NF DEBUG] row[0]:', JSON.stringify(rows[0]))
+      console.log('[NF DEBUG] pendentes:', siatRowsToNotasPendentes(rows).length)
       const summary = summarizeSiat(rows)
 
       setNfRows(rows)

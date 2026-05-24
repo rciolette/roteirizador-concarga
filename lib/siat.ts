@@ -10,7 +10,7 @@ export interface SiatRow {
   // Identificação da NF
   NUMNFS?:           number | string | null
   ROTA?:             string | null
-  NFSSIT?:           number | null
+  NFSSIT?:           number | string | null
 
   // Dados da NF
   PesoBruto?:        number | null
@@ -235,9 +235,12 @@ export function siatRowsToRotas(
       (primeiraPlaca && veiculoByPlaca.get(primeiraPlaca)) ||
       (veiculoList.length ? veiculoList[idx % veiculoList.length] : undefined)
 
+    // CodMotorista e Placa só chegam via queryVeiculosDisponiveis() (SIAT direto).
+    // Pelo webhook n8n Execute-SQL-SIAT esses campos vêm undefined — o fallback
+    // round-robin abaixo assume o pool completo nesse caso.
     const codSiat = rotaRows.find(r => r.CodMotorista)?.CodMotorista
     const motoristaDoVeiculo = codSiat
-      ? motoristaPool.find(m => m.id.endsWith(codSiat) || m.nome === codSiat)
+      ? motoristaPool.find(m => m.codigoSiat === codSiat)
       : undefined
     const motorista =
       motoristaDoVeiculo ||

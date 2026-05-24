@@ -2,11 +2,11 @@ import sql from 'mssql'
 import type { SiatRow } from '@/lib/siat'
 
 const config: sql.config = {
-  server:   process.env.SIAT_HOST     ?? 'siat.dyndns.info',
+  server:   process.env.SIAT_HOST     ?? '',
   port:     Number(process.env.SIAT_PORT     ?? 10143),
   database: process.env.SIAT_DATABASE ?? 'SiatWeb_Concarga',
-  user:     process.env.SIAT_USER     ?? 'SIAT_BI',
-  password: process.env.SIAT_PASSWORD ?? 'SIAT_BI',
+  user:     process.env.SIAT_USER     ?? '',
+  password: process.env.SIAT_PASSWORD ?? '',
   options: {
     encrypt:                false,
     trustServerCertificate: true,

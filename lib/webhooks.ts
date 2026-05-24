@@ -41,6 +41,8 @@ export async function carregarRotasSupabase(data: string): Promise<Rota[]> {
       codigoRota:      r.codigo_rota as string,
       regiao:          r.regiao as string,
       status:          r.status as RouteStatus,
+      motoristaId:     (r.motorista_id as string) ?? undefined,
+      veiculoId:       (r.veiculo_id   as string) ?? undefined,
       pesoTotal:       (r.peso_total as number)       ?? 0,
       ocupacaoPercent: (r.ocupacao_percent as number) ?? 0,
       qtdNotas:        (r.qtd_notas as number)        ?? 0,
@@ -49,14 +51,14 @@ export async function carregarRotasSupabase(data: string): Promise<Rota[]> {
       createdAt:       r.criado_em as string,
       enviadoEm:       (r.enviado_em as string)       ?? undefined,
       motorista:       r.motorista_nome ? {
-        id:       `m-${r.motorista_nome}`,
+        id:       (r.motorista_id as string) ?? `m-${r.motorista_nome}`,
         nome:     r.motorista_nome as string,
         telefone: (r.motorista_celular as string) ?? '',
         sigla:    (r.motorista_nome as string).split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase(),
         status:   'disponivel' as const,
       } : undefined,
       veiculo: r.veiculo_placa ? {
-        id:           `v-${r.veiculo_placa}`,
+        id:           (r.veiculo_id as string) ?? `v-${r.veiculo_placa}`,
         placa:        r.veiculo_placa as string,
         modelo:       r.veiculo_placa as string,
         tipo:         'VUC' as const,
@@ -174,6 +176,10 @@ export function mapRetornoGerarRotas(retorno: RetornoGerarRotas): Rota[] {
   })
 }
 
+function isUuid(s: unknown): s is string {
+  return typeof s === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(s)
+}
+
 export async function salvarRotasSupabase(rotas: Rota[], data: string): Promise<Rota[]> {
   const resultado: Rota[] = []
 
@@ -188,6 +194,8 @@ export async function salvarRotasSupabase(rotas: Rota[], data: string): Promise<
         veiculo_placa:     rota.veiculo?.placa ?? null,
         motorista_nome:    rota.motorista?.nome ?? null,
         motorista_celular: rota.motorista?.telefone ?? null,
+        motorista_id:      isUuid(rota.motoristaId) ? rota.motoristaId : null,
+        veiculo_id:        isUuid(rota.veiculoId)   ? rota.veiculoId   : null,
         peso_total:        rota.pesoTotal,
         ocupacao_percent:  rota.ocupacaoPercent ?? 0,
         qtd_notas:         rota.qtdNotas,
@@ -204,25 +212,40 @@ export async function salvarRotasSupabase(rotas: Rota[], data: string): Promise<
 
     if (rota.notasFiscais.length > 0) {
       await supabase.from('notas_fiscais').insert(
-        rota.notasFiscais.map((nf, i) => ({
-          rota_id:          row.id,
-          n_nfs:            parseInt(nf.numnfs, 10),
-          destinatario:     nf.destinatario,
-          municipio:        nf.municipio,
-          bairro:           nf.bairro,
-          endereco:         nf.endereco,
-          cep:              nf.cep || null,
-          peso_kg:          nf.peso,
-          tipo_cliente:     nf.tipoCliente,
-          cond:             nf.cond,
-          grade:            nf.grade || null,
-          agendamento:      nf.dataAgendamento || null,
-          hora_agendamento: nf.horaAgendamento || null,
-          reentrega:        nf.indRee,
-          sac:              nf.sac || null,
-          observacao:       nf.observacao || null,
-          sequencia:        i + 1,
-        }))
+        rota.notasFiscais.map((nf, i) => {
+          const agenda   = nf.dataAgendamento || null
+          const emissao  = nf.dataEmissao && nf.dataEmissao !== '—' ? nf.dataEmissao : null
+          const cepVal   = nf.cep && nf.cep !== '—' ? nf.cep : null
+          return {
+            rota_id:          row.id,
+            n_nfs:            parseInt(nf.numnfs, 10),
+            destinatario:     nf.destinatario,
+            municipio:        nf.municipio,
+            municipio_dest:   nf.municipio,
+            bairro:           nf.bairro,
+            bairro_dest:      nf.bairro,
+            endereco:         nf.endereco,
+            endereco_dest:    nf.endereco,
+            cep:              cepVal,
+            cep_dest:         cepVal,
+            peso_kg:          nf.peso,
+            peso_bruto:       nf.peso,
+            tipo_cliente:     nf.tipoCliente,
+            cond:             nf.cond,
+            grade:            nf.grade || null,
+            agendamento:      agenda,
+            dt_agend:         agenda,
+            hora_agendamento: nf.horaAgendamento || null,
+            reentrega:        nf.indRee,
+            ind_reentrega:    nf.indRee ? 1 : 0,
+            sac:              nf.sac || null,
+            observacao:       nf.observacao || null,
+            sequencia:        i + 1,
+            data_emissao:     emissao,
+            placa:            rota.veiculo?.placa ?? null,
+            regiao:           rota.regiao ?? null,
+          }
+        })
       )
     }
 

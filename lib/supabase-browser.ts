@@ -1,13 +1,7 @@
-import { createBrowserClient } from '@supabase/ssr'
+import { supabase } from '@/lib/supabase'
 
-let _client: ReturnType<typeof createBrowserClient> | null = null
-
+// Reutiliza o singleton de lib/supabase para evitar múltiplas instâncias
+// de GoTrueClient no mesmo contexto de browser.
 export function getSupabaseBrowser() {
-  if (!_client) {
-    _client = createBrowserClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    )
-  }
-  return _client
+  return supabase
 }

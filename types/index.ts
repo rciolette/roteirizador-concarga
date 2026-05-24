@@ -45,6 +45,7 @@ export interface Motorista {
   nome: string
   telefone: string
   sigla: string
+  codigoSiat?: string
   placa?: string
   veiculoId?: string
   veiculo?: Veiculo

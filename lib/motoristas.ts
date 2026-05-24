@@ -9,7 +9,7 @@ function deriveSigla(nome: string): string {
 export async function listarMotoristas(): Promise<Motorista[]> {
   const { data, error } = await supabase
     .from('motoristas')
-    .select('id, nome, telefone, celular, placa, sigla, status')
+    .select('id, codigo_siat, nome, telefone, celular, sigla, ativo')
     .order('nome', { ascending: true })
 
   if (error) throw error
@@ -19,8 +19,7 @@ export async function listarMotoristas(): Promise<Motorista[]> {
     nome:     row.nome,
     telefone: row.celular || row.telefone || '',
     sigla:    row.sigla   || deriveSigla(row.nome),
-    placa:    row.placa   ?? undefined,
-    status:   (row.status as Motorista['status']) ?? 'disponivel',
+    status:   'disponivel' as const,
   }))
 }
 
