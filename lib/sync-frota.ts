@@ -1,5 +1,12 @@
+import { createClient } from '@supabase/supabase-js'
 import { queryVeiculosDisponiveis } from '@/lib/siat-db'
-import { getAdminClient } from '@/lib/auth-server'
+
+function getAdminSupabase() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key) throw new Error('NEXT_PUBLIC_SUPABASE_URL ou SUPABASE_SERVICE_ROLE_KEY não configurados')
+  return createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } })
+}
 
 function deriveSigla(nome: string): string {
   return nome.trim().split(/\s+/).map(w => w[0] || '').join('').slice(0, 3).toUpperCase()
@@ -19,7 +26,7 @@ function chunked<T>(arr: T[], size: number): T[][] {
 
 export async function syncFrotaDoSiat(): Promise<{ motoristas: number; veiculos: number }> {
   const rows = await queryVeiculosDisponiveis()
-  const admin = getAdminClient()
+  const admin = getAdminSupabase()
 
   // 1. Coletar motoristas únicos pelo CodMotorista
   const motoristasMap = new Map<string, { nome: string; telefone: string; celular: string }>()

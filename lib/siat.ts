@@ -149,20 +149,29 @@ function normalizarTipoCliente(tipo: string | null | undefined): ClientType {
   return 'Varejo'
 }
 
+function getNF(r: SiatRow): string | null {
+  const v = r.NUMNFS ?? r['NumNFS'] ?? r['numnfs'] ?? r['NF'] ?? r['N_NF'] ?? r['Numnfs']
+  return v != null ? String(v) : null
+}
+
+function getRota(r: SiatRow): string | null {
+  const v = r.ROTA ?? r['Rota'] ?? r['rota'] ?? r['CODIGO_ROTA'] ?? r['CodigoRota'] ?? r['CodRota']
+  const s = v != null ? String(v).trim() : ''
+  return s || null
+}
+
 // ── siatRowsToNotasPendentes ──────────────────────────────────────────────────
 // Converte NF rows do SIAT em NotaFiscal[] plana (sem agrupar por rota).
 // Usada para exibir as NFs pendentes de roteirização.
+// Nota: NFs sem zona de entrega (ROTA null) são incluídas — a zona é campo de
+// exibição, não de elegibilidade. Apenas NUMNFS é obrigatório.
 export function siatRowsToNotasPendentes(rows: SiatRow[]): NotaFiscal[] {
-  const nfRows = rows.filter(r => {
-    const numnfs = r.NUMNFS ?? r['NumNFS'] ?? r['numnfs']
-    const rota   = r.ROTA   ?? r['Rota']   ?? r['rota']   ?? r['CODIGO_ROTA']
-    return numnfs != null && Boolean(rota)
-  })
+  const nfRows = rows.filter(r => getNF(r) != null)
   const seen   = new Set<string>()
   const result: NotaFiscal[] = []
 
   for (const row of nfRows) {
-    const nf = String(row.NUMNFS ?? row['NumNFS'] ?? row['numnfs'] ?? '')
+    const nf = getNF(row)!
     if (seen.has(nf)) continue
     seen.add(nf)
 
@@ -184,7 +193,7 @@ export function siatRowsToNotasPendentes(rows: SiatRow[]): NotaFiscal[] {
       tipoCliente,
       cond:             derivarCond(row),
       grade:            row.TipoCarga      || '—',
-      rota:             String(row.ROTA ?? row['Rota'] ?? row['rota'] ?? row['CODIGO_ROTA'] ?? ''),
+      rota:             getRota(row) ?? '—',
       dataEmissao:      row.DataEmissao    ? String(row.DataEmissao).slice(0, 10) : '—',
       dataAgendamento:  row.DataAgendamento ? String(row.DataAgendamento).slice(0, 10) : undefined,
       horaAgendamento:  row.HoraAgendamento ? String(row.HoraAgendamento) : undefined,
@@ -206,12 +215,12 @@ export function siatRowsToRotas(
   motoristaPool: Motorista[] = [],
 ): Rota[] {
   const today = new Date().toISOString()
-  const nfRows = rows.filter(r => r.NUMNFS != null && r.ROTA)
+  const nfRows = rows.filter(r => getNF(r) != null && getRota(r) != null)
   const veiculoByPlaca = new Map(veiculoPool.map(v => [v.placa.toUpperCase(), v]))
 
   const byRota = new Map<string, SiatRow[]>()
   for (const row of nfRows) {
-    const rota = String(row.ROTA!)
+    const rota = getRota(row)!
     if (!byRota.has(rota)) byRota.set(rota, [])
     byRota.get(rota)!.push(row)
   }
@@ -234,13 +243,13 @@ export function siatRowsToRotas(
       motoristaDoVeiculo ||
       (motoristaList.length ? motoristaList[idx % motoristaList.length] : undefined)
 
-    const nfNums  = [...new Set(rotaRows.map(r => String(r.NUMNFS!)))]
+    const nfNums  = [...new Set(rotaRows.map(r => getNF(r)!))]
     const pesoTotal = rotaRows.reduce(
       (acc, r) => acc + (typeof r.PesoBruto === 'number' ? r.PesoBruto : 0), 0,
     )
 
     const notasFiscais: NotaFiscal[] = nfNums.map(nf => {
-      const row = rotaRows.find(r => String(r.NUMNFS) === nf)!
+      const row = rotaRows.find(r => getNF(r) === nf)!
       const reentrega    = Boolean(row.Reentrega)
       const tipoCliente: ClientType = reentrega ? 'Reentrega' : normalizarTipoCliente(row.TipoCliente)
       return {
@@ -296,8 +305,8 @@ export function summarizeSiat(rows: SiatRow[]): SiatSummary {
   let nfsLaranja  = 0
 
   for (const r of rows) {
-    if (r.NUMNFS != null) {
-      const nf = String(r.NUMNFS)
+    const nf = getNF(r)
+    if (nf != null) {
       if (!nfs.has(nf)) {
         nfs.add(nf)
         const cond = derivarCond(r)
@@ -305,9 +314,10 @@ export function summarizeSiat(rows: SiatRow[]): SiatSummary {
         else if (cond === 'laranja') nfsLaranja++
       }
     }
-    if (r.Placa)        placas.add(r.Placa)
-    if (r.ROTA)         rotas.add(r.ROTA)
-    if (r.CodMotorista) motoristas.add(r.CodMotorista)
+    if (r.Placa)            placas.add(r.Placa)
+    const rota = getRota(r)
+    if (rota)               rotas.add(rota)
+    if (r.CodMotorista)     motoristas.add(r.CodMotorista)
     if (typeof r.PesoBruto === 'number') pesoKg += r.PesoBruto
   }
 
