@@ -1,78 +1,17 @@
 'use client'
-import { useMemo, useState, useEffect, useRef } from 'react'
+import { useMemo, useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
-import { Topbar, MetricCard, Card, CardHeader, Btn, ImportBar, Select } from '@/components/ui'
+import { Topbar, MetricCard, Card, CardHeader, Btn, ImportBar } from '@/components/ui'
 import { ImportarSIATButton } from '@/components/ui/ImportarSIATButton'
 import { SiatImportDialog } from '@/components/ui/SiatImportDialog'
 import { NfsPendentesTable } from '@/components/ui/NfsPendentesTable'
 import { formatPeso } from '@/lib/utils'
 import { useAppData } from '@/components/providers/AppDataProvider'
-import { getSupabaseBrowser } from '@/lib/supabase-browser'
 import type { ClientType } from '@/types'
 
 export default function Page() {
   const { nfImportState, importarNFs, dismissNFImport, rotas, veiculos, loadingRotas, nfsPendentes } = useAppData()
   const [importDialog, setImportDialog] = useState(false)
-
-  // ── Filtros de NFs ──────────────────────────────────────────────────────────
-  const [situacao,    setSituacao]    = useState('')
-  const [dtAgend,     setDtAgend]     = useState('')
-  const [dataEmissao, setDataEmissao] = useState('')
-
-  type FilteredData = { totalNFs: number; pesoTotal: number; porTipoCliente: { tipo: ClientType; count: number }[]; loading: boolean }
-  const [filteredData, setFilteredData] = useState<FilteredData | null>(null)
-
-  const hasFilters = !!(situacao || dtAgend || dataEmissao)
-
-  function clearFilters() { setSituacao(''); setDtAgend(''); setDataEmissao('') }
-
-  useEffect(() => {
-    if (!hasFilters) { setFilteredData(null); return }
-
-    let cancelled = false
-    setFilteredData(prev => prev ? { ...prev, loading: true } : { totalNFs: 0, pesoTotal: 0, porTipoCliente: [], loading: true })
-
-    async function fetchFiltered() {
-      const sb = getSupabaseBrowser()
-      let q = sb
-        .from('notas_fiscais')
-        .select('id, tipo_cliente, peso_bruto, peso_kg, reentrega, sac, dt_agend, data_emissao, rota_id')
-
-      switch (situacao) {
-        case 'Aguardando':
-        case 'S/Rota':
-          q = q.is('rota_id', null); break
-        case 'SAC aberto':
-          q = q.not('sac', 'is', null).neq('sac', '').neq('sac', '0'); break
-        case 'Reentrega':
-          q = q.eq('reentrega', true); break
-        case 'Agendada':
-          q = q.not('dt_agend', 'is', null); break
-      }
-
-      if (dtAgend)     q = q.eq('dt_agend',     dtAgend)
-      if (dataEmissao) q = q.eq('data_emissao', dataEmissao)
-
-      type NfRow = { peso_bruto: number | null; peso_kg: number | null; tipo_cliente: string | null; reentrega: boolean | null }
-      const { data } = await q.limit(5000)
-
-      if (!cancelled && data) {
-        const rows = data as NfRow[]
-        const pesoTotal = rows.reduce((s: number, n: NfRow) => s + ((n.peso_bruto ?? n.peso_kg) ?? 0), 0)
-        const up = (v: string | null) => (v ?? '').toUpperCase()
-        const porTipoCliente: { tipo: ClientType; count: number }[] = [
-          { tipo: 'CD',        count: rows.filter((n: NfRow) => up(n.tipo_cliente) === 'CD').length },
-          { tipo: 'Rede',      count: rows.filter((n: NfRow) => up(n.tipo_cliente) === 'REDE').length },
-          { tipo: 'Varejo',    count: rows.filter((n: NfRow) => up(n.tipo_cliente) === 'VAREJO').length },
-          { tipo: 'Reentrega', count: rows.filter((n: NfRow) => n.reentrega === true || up(n.tipo_cliente) === 'REENTREGA').length },
-        ]
-        setFilteredData({ totalNFs: rows.length, pesoTotal, porTipoCliente, loading: false })
-      }
-    }
-
-    fetchFiltered()
-    return () => { cancelled = true }
-  }, [situacao, dtAgend, dataEmissao, hasFilters])
 
   const summary = nfImportState.summary
   const importResult = summary
@@ -81,25 +20,24 @@ export default function Page() {
 
   // ── Métricas calculadas de dados reais ──────────────────────────────────────
   const metrics = useMemo(() => {
-    const rotasRascunho  = rotas.filter(r => r.status === 'rascunho').length
+    const rotasRascunho   = rotas.filter(r => r.status === 'rascunho').length
     const rotasAguardando = rotas.filter(r => r.status === 'aguardando').length
-    const rotasAprovadas = rotas.filter(r => r.status === 'aprovada').length
-    const rotasEnviadas  = rotas.filter(r => r.status === 'enviada').length
-    const totalNFs       = rotas.reduce((s, r) => s + r.qtdNotas, 0)
-    const pesoTotal      = rotas.reduce((s, r) => s + r.pesoTotal, 0)
+    const rotasAprovadas  = rotas.filter(r => r.status === 'aprovada').length
+    const rotasEnviadas   = rotas.filter(r => r.status === 'enviada').length
+    const hoje = new Date().toISOString().slice(0, 10)
 
     const todasNFs = rotas.flatMap(r => r.notasFiscais)
-    const nfsVermelho = todasNFs.filter(n => n.cond === 'vermelho').length
-    const hoje = new Date().toISOString().slice(0, 10)
+    const nfsVermelho      = todasNFs.filter(n => n.cond === 'vermelho').length
     const agendamentosHoje = todasNFs.filter(n => n.dataAgendamento === hoje).length
-
     const rotasCapacidadeAlta = rotas.filter(r => (r.ocupacaoPercent ?? 0) > 95)
 
+    // Quando há dados do SIAT, usar nfsPendentes para contagens de tipo de cliente
+    const base = nfsPendentes.length > 0 ? nfsPendentes : todasNFs
     const porTipoCliente: { tipo: ClientType; count: number }[] = [
-      { tipo: 'CD',        count: todasNFs.filter(n => n.tipoCliente === 'CD').length },
-      { tipo: 'Rede',      count: todasNFs.filter(n => n.tipoCliente === 'Rede').length },
-      { tipo: 'Varejo',    count: todasNFs.filter(n => n.tipoCliente === 'Varejo').length },
-      { tipo: 'Reentrega', count: todasNFs.filter(n => n.tipoCliente === 'Reentrega').length },
+      { tipo: 'CD',        count: base.filter(n => n.tipoCliente === 'CD').length },
+      { tipo: 'Rede',      count: base.filter(n => n.tipoCliente === 'Rede').length },
+      { tipo: 'Varejo',    count: base.filter(n => n.tipoCliente === 'Varejo').length },
+      { tipo: 'Reentrega', count: base.filter(n => n.tipoCliente === 'Reentrega').length },
     ]
 
     const veiculosDisponiveis = veiculos.filter(v => v.disponivel_hoje).length
@@ -107,11 +45,12 @@ export default function Page() {
 
     return {
       rotasRascunho, rotasAguardando, rotasAprovadas, rotasEnviadas,
-      totalNFs, pesoTotal, nfsVermelho, agendamentosHoje,
+      pesoTotal: rotas.reduce((s, r) => s + r.pesoTotal, 0),
+      nfsVermelho, agendamentosHoje,
       rotasCapacidadeAlta, porTipoCliente,
       veiculosDisponiveis, veiculosTotal,
     }
-  }, [rotas, veiculos])
+  }, [rotas, veiculos, nfsPendentes])
 
   const rotasTotal = metrics.rotasRascunho + metrics.rotasAguardando + metrics.rotasAprovadas + metrics.rotasEnviadas
 
@@ -168,54 +107,6 @@ export default function Page() {
 
       <div className="px-5 py-4 flex flex-col gap-3 pb-20">
         <ImportBar running={nfImportState.running} step={nfImportState.step} progress={nfImportState.progress} result={importResult} onClose={dismissNFImport} />
-
-        {/* Barra de filtros */}
-        <div className="flex flex-wrap items-end gap-2">
-          <div className="flex flex-col gap-0.5">
-            <span className="text-[9px] text-muted uppercase tracking-[0.05em] pl-0.5">Situação</span>
-            <Select value={situacao} onChange={setSituacao} className="w-auto min-w-[150px]">
-              <option value="">Todas</option>
-              <option value="Aguardando">Aguardando</option>
-              <option value="SAC aberto">SAC aberto</option>
-              <option value="Reentrega">Reentrega</option>
-              <option value="Agendada">Agendada</option>
-              <option value="S/Rota">S/Rota</option>
-              <option value="Em análise">Em análise</option>
-              <option value="Devolver ao fornecedor">Devolver ao fornecedor</option>
-            </Select>
-          </div>
-          <div className="flex flex-col gap-0.5">
-            <span className="text-[9px] text-muted uppercase tracking-[0.05em] pl-0.5">Data de Entrega</span>
-            <input
-              type="date"
-              value={dtAgend}
-              onChange={e => setDtAgend(e.target.value)}
-              className="h-8 border border-[0.5px] border-[var(--border-input)] rounded-lg bg-page px-2 text-xs font-sans outline-none focus:border-primary transition-colors"
-            />
-          </div>
-          <div className="flex flex-col gap-0.5">
-            <span className="text-[9px] text-muted uppercase tracking-[0.05em] pl-0.5">Data de Emissão</span>
-            <input
-              type="date"
-              value={dataEmissao}
-              onChange={e => setDataEmissao(e.target.value)}
-              className="h-8 border border-[0.5px] border-[var(--border-input)] rounded-lg bg-page px-2 text-xs font-sans outline-none focus:border-primary transition-colors"
-            />
-          </div>
-          {hasFilters && (
-            <button
-              onClick={clearFilters}
-              className="h-8 px-2 text-[11px] text-muted hover:text-danger transition-colors cursor-pointer bg-transparent border-none self-end"
-            >
-              Limpar filtros
-            </button>
-          )}
-          {hasFilters && filteredData?.loading && (
-            <svg className="w-3.5 h-3.5 text-primary animate-spin-slow self-end mb-2" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M8 2a6 6 0 1 0 6 6" strokeLinecap="round"/>
-            </svg>
-          )}
-        </div>
 
         {/* Alertas + Status */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
@@ -281,23 +172,21 @@ export default function Page() {
         {/* Métricas */}
         <section aria-label="Métricas operacionais" className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           <MetricCard
-            label={hasFilters ? 'NFs filtradas' : 'NFs no dia'}
-            value={hasFilters && filteredData ? filteredData.totalNFs : (summary ? summary.totalNFs : metrics.totalNFs)}
-            sub={hasFilters
-              ? (filteredData?.loading ? 'consultando...' : `${filteredData?.totalNFs ?? 0} resultado${(filteredData?.totalNFs ?? 0) !== 1 ? 's' : ''}`)
-              : (summary
-                ? `${summary.rotasUnicas} rotas · ${summary.totalLinhas} linhas SIAT`
-                : metrics.totalNFs > 0 ? `${rotas.length} rotas geradas` : 'sem dados SIAT hoje')}
+            label="NFs no dia"
+            value={summary ? summary.totalNFs : nfsPendentes.length || rotas.reduce((s, r) => s + r.qtdNotas, 0)}
+            sub={summary
+              ? `${summary.rotasUnicas} rotas · ${summary.totalLinhas} linhas SIAT`
+              : nfImportState.running
+                ? 'importando SIAT...'
+                : nfsPendentes.length > 0 ? `${nfsPendentes.length} NFs pendentes` : 'sem dados SIAT hoje'}
           />
           <MetricCard
-            label={hasFilters ? 'Peso filtrado' : 'Peso total'}
-            value={hasFilters && filteredData ? formatPeso(filteredData.pesoTotal) : (summary ? `${summary.pesoTotalToneladas}t` : formatPeso(metrics.pesoTotal))}
-            sub={hasFilters
-              ? (filteredData?.loading ? 'consultando...' : `${(filteredData?.pesoTotal ?? 0).toLocaleString('pt-BR')} kg`)
-              : (summary
-                ? `${summary.pesoTotalKg.toLocaleString('pt-BR')} kg`
-                : metrics.pesoTotal > 0 ? `${metrics.pesoTotal.toLocaleString('pt-BR')} kg` : undefined)}
-            gradientBar={hasFilters ? (filteredData?.pesoTotal ?? 0) > 0 : metrics.pesoTotal > 0}
+            label="Peso total"
+            value={summary ? `${summary.pesoTotalToneladas}t` : formatPeso(metrics.pesoTotal)}
+            sub={summary
+              ? `${summary.pesoTotalKg.toLocaleString('pt-BR')} kg`
+              : metrics.pesoTotal > 0 ? `${metrics.pesoTotal.toLocaleString('pt-BR')} kg` : undefined}
+            gradientBar={summary ? summary.pesoTotalKg > 0 : metrics.pesoTotal > 0}
           />
           <div ref={veiculosRef} className="relative">
             <div onClick={() => setShowVeiculos(v => !v)} className="cursor-pointer">
@@ -380,13 +269,13 @@ export default function Page() {
         <Card>
           <CardHeader>
             <span className="text-xs font-medium">Resumo por tipo de cliente</span>
-            <span className="text-[11px] text-muted">{hasFilters ? 'filtrado' : 'hoje'}</span>
+            <span className="text-[11px] text-muted">hoje</span>
           </CardHeader>
           <div className="grid grid-cols-2 sm:grid-cols-4">
-            {(hasFilters && filteredData ? filteredData.porTipoCliente : metrics.porTipoCliente).map((t, i, arr) => (
+            {metrics.porTipoCliente.map((t, i, arr) => (
               <div key={t.tipo} className={`px-3.5 py-2.5 ${i < arr.length - 1 ? 'border-r border-[0.5px] border-[var(--border-faint)]' : ''}`}>
                 <div className="text-[11px] text-muted mb-1">{t.tipo}</div>
-                <div className={`text-[18px] font-medium ${filteredData?.loading ? 'opacity-40' : ''} ${t.tipo === 'Reentrega' ? 'text-warn-mid' : 'text-base'}`}>{t.count}</div>
+                <div className={`text-[18px] font-medium ${t.tipo === 'Reentrega' ? 'text-warn-mid' : 'text-base'}`}>{t.count}</div>
                 <div className="text-[11px] text-muted">NFs</div>
               </div>
             ))}

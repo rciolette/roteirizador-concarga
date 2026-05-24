@@ -3,6 +3,8 @@ import { useState, useEffect } from 'react'
 import { getSupabaseBrowser } from '@/lib/supabase-browser'
 import { cn } from '@/lib/utils'
 import { Btn, Card, CardHeader, TextInput, Select } from '@/components/ui'
+import { useAppData } from '@/components/providers/AppDataProvider'
+import type { NotaFiscal } from '@/types'
 
 const PAGE_SIZE = 100
 
@@ -51,6 +53,28 @@ function CondBadge({ cond }: { cond: string | null | undefined }) {
   )
 }
 
+function nfToRow(nf: NotaFiscal): NfRow {
+  return {
+    id:            nf.id,
+    n_nfs:         parseInt(nf.numnfs, 10) || null,
+    remetente:     null,
+    destinatario:  nf.destinatario,
+    bairro_dest:   nf.bairro   !== '—' ? nf.bairro   : null,
+    bairro:        nf.bairro   !== '—' ? nf.bairro   : null,
+    municipio_dest: nf.municipio !== '—' ? nf.municipio : null,
+    municipio:     nf.municipio !== '—' ? nf.municipio : null,
+    tipo_cliente:  nf.tipoCliente,
+    peso_bruto:    nf.peso,
+    peso_kg:       nf.peso,
+    cond:          nf.cond,
+    grade:         nf.grade && nf.grade !== '—' ? nf.grade : null,
+    placa:         null,
+    reentrega:     nf.indRee,
+    sac:           nf.sac ?? null,
+    regiao:        nf.rota && nf.rota !== '—' ? nf.rota : null,
+  }
+}
+
 function TipoBadge({ tipo }: { tipo: string | null | undefined }) {
   const t = (tipo ?? '').toUpperCase()
   const cls =
@@ -65,6 +89,8 @@ function TipoBadge({ tipo }: { tipo: string | null | undefined }) {
 }
 
 export function NfsPendentesTable() {
+  const { nfsPendentes, nfImportState } = useAppData()
+
   const [rows,    setRows]    = useState<NfRow[]>([])
   const [loading, setLoading] = useState(true)
   const [page,    setPage]    = useState(0)
@@ -75,6 +101,17 @@ export function NfsPendentesTable() {
   const [apenasRee,    setApenasRee]    = useState(false)
 
   useEffect(() => {
+    // Enquanto o SIAT está sendo importado, manter loading
+    if (nfImportState.running) { setLoading(true); return }
+
+    // Se já temos dados do SIAT, usar diretamente (sem consultar Supabase)
+    if (nfsPendentes.length > 0) {
+      setRows(nfsPendentes.map(nfToRow))
+      setLoading(false)
+      return
+    }
+
+    // Fallback: buscar NFs não alocadas salvas no Supabase
     let cancelled = false
     async function load() {
       setLoading(true)
@@ -92,7 +129,7 @@ export function NfsPendentesTable() {
     }
     load()
     return () => { cancelled = true }
-  }, [])
+  }, [nfsPendentes, nfImportState.running])
 
   const filtered = rows.filter(row => {
     if (busca) {
