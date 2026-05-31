@@ -1,9 +1,10 @@
 'use client'
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import {
   Topbar, Card, CardHeader, Btn, StatusPill, WeightBar,
   ImportBar, ConfirmDialog, ConfirmAction, TextArea, Select, TextInput,
 } from '@/components/ui'
+import { exportarCSV, exportarXLSX, rotasParaLinhas } from '@/lib/export'
 import { NotasFiscaisTable } from '@/components/ui/NotasFiscaisTable'
 import { NfsPendentesTable } from '@/components/ui/NfsPendentesTable'
 import { MapaRota } from '@/components/ui/MapaRota'
@@ -560,6 +561,40 @@ function SRotaTable({ rows }: { rows: SiatRow[] }) {
   )
 }
 
+// ── Export Menu ───────────────────────────────────────────────────────────────
+function ExportMenuRotas({ rotas }: { rotas: import('@/types').Rota[] }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [open])
+  const hoje = new Date().toISOString().slice(0, 10)
+  async function doExport(fmt: 'csv' | 'xlsx') {
+    setOpen(false)
+    const rows = rotasParaLinhas(rotas)
+    if (!rows.length) return
+    fmt === 'csv' ? exportarCSV(rows, `rotas_${hoje}`) : exportarXLSX(rows, `rotas_${hoje}`)
+  }
+  return (
+    <div ref={ref} className="relative">
+      <Btn size="sm" onClick={() => setOpen(v => !v)} disabled={!rotas.length}>
+        <svg className="w-3 h-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M8 2v8M5 7l3 3 3-3M3 12h10"/></svg>
+        Exportar
+        <svg className="w-2.5 h-2.5" viewBox="0 0 10 10" fill="currentColor"><path d="M2 3l3 4 3-4H2z"/></svg>
+      </Btn>
+      {open && (
+        <div className="absolute right-0 top-full mt-1 z-50 w-[130px] rounded-lg border border-[0.5px] border-[var(--border-subtle)] bg-white dark:bg-[#1E1E1C] shadow-lg overflow-hidden">
+          <button onClick={() => doExport('csv')} className="w-full text-left px-3 py-2 text-[11px] hover:bg-cream cursor-pointer bg-transparent border-none">CSV</button>
+          <button onClick={() => doExport('xlsx')} className="w-full text-left px-3 py-2 text-[11px] hover:bg-cream cursor-pointer bg-transparent border-none border-t border-[0.5px] border-[var(--border-faint)]">Excel (XLSX)</button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Rotas Page ────────────────────────────────────────────────────────────────
 export default function RotasPage() {
   const { nfImportState, importarNFs, dismissNFImport, nfRows, rotas: routes, setRotas: setRoutes, loadingRotas, motoristas, veiculos, config, refreshVeiculos } = useAppData()
@@ -741,6 +776,7 @@ export default function RotasPage() {
             ? `${routes.length} rotas · ${routes.reduce((a, r) => a + r.qtdNotas, 0)} NFs · ${new Date().toLocaleDateString('pt-BR')}`
             : `Importe o SIAT para carregar as rotas de hoje · ${new Date().toLocaleDateString('pt-BR')}`}
         >
+          <ExportMenuRotas rotas={filtered} />
           <ImportarSIATButton onClick={() => setImportDialog(true)} running={nfImportState.running} label="Importar NFs" loadingLabel="Importando..." />
 
           {generating ? (

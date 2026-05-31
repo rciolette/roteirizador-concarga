@@ -1,10 +1,12 @@
 import type { Rota, RetornoGerarRotas, ClientType, RouteStatus, NotaFiscal } from '@/types'
-import { supabase } from '@/lib/supabase'
+import { getSupabaseBrowser } from '@/lib/supabase-browser'
+
+const sb = () => getSupabaseBrowser()
 
 export type Prioridade = 'padrao' | 'vermelho' | 'menos-veiculos' | 'menor-distancia'
 
 export async function carregarRotasSupabase(data: string): Promise<Rota[]> {
-  const { data: rows, error } = await supabase
+  const { data: rows, error } = await sb()
     .from('rotas')
     .select(`*, notas_fiscais(id, n_nfs, destinatario, municipio, bairro, endereco, cep, peso_kg, tipo_cliente, cond, grade, agendamento, hora_agendamento, reentrega, sac, observacao, sequencia)`)
     .eq('data', data)
@@ -12,7 +14,7 @@ export async function carregarRotasSupabase(data: string): Promise<Rota[]> {
 
   if (error) throw error
 
-  return (rows ?? []).map(r => {
+  return (rows as Record<string, unknown>[] ?? []).map((r: Record<string, unknown>) => {
     const nfs: NotaFiscal[] = ((r.notas_fiscais as Record<string, unknown>[]) ?? []).map(nf => ({
       id:              nf.id as string,
       numnfs:          String(nf.n_nfs),
@@ -184,7 +186,7 @@ export async function salvarRotasSupabase(rotas: Rota[], data: string): Promise<
   const resultado: Rota[] = []
 
   for (const rota of rotas) {
-    const { data: row, error } = await supabase
+    const { data: row, error } = await sb()
       .from('rotas')
       .insert({
         data,
@@ -211,7 +213,7 @@ export async function salvarRotasSupabase(rotas: Rota[], data: string): Promise<
     }
 
     if (rota.notasFiscais.length > 0) {
-      await supabase.from('notas_fiscais').insert(
+      await sb().from('notas_fiscais').insert(
         rota.notasFiscais.map((nf, i) => {
           const agenda   = nf.dataAgendamento || null
           const emissao  = nf.dataEmissao && nf.dataEmissao !== '—' ? nf.dataEmissao : null
@@ -257,7 +259,7 @@ export async function salvarRotasSupabase(rotas: Rota[], data: string): Promise<
 
 export async function salvarNfsNaoAlocadas(nfs: number[], data: string, motivo: string): Promise<void> {
   if (nfs.length === 0) return
-  await supabase.from('nfs_nao_alocadas').insert(
+  await sb().from('nfs_nao_alocadas').insert(
     nfs.map(n => ({ data, n_nfs: n, motivo }))
   )
 }
@@ -268,8 +270,8 @@ export async function atualizarStatusRota(id: string, status: RouteStatus, obser
   if (status === 'enviada')  updates.enviado_em  = new Date().toISOString()
   if (observacao)            updates.observacoes = observacao
 
-  await supabase.from('rotas').update(updates).eq('id', id)
-  await supabase.from('historico_rotas').insert({
+  await sb().from('rotas').update(updates).eq('id', id)
+  await sb().from('historico_rotas').insert({
     rota_id:     id,
     status_para: status,
     usuario:     'operador',
@@ -331,16 +333,87 @@ export async function limparRascunhosDoDia(data: string): Promise<void> {
   // Remove rotas rascunho do dia antes de re-importar.
   // Deleta notas_fiscais primeiro para satisfazer a FK, depois as rotas.
   // Rotas aprovadas/enviadas não são tocadas.
-  const { data: rotasDia } = await supabase
+  const { data: rotasDia } = await sb()
     .from('rotas')
     .select('id')
     .eq('data', data)
     .eq('status', 'rascunho')
 
-  const ids = (rotasDia ?? []).map(r => r.id)
+  const ids = ((rotasDia ?? []) as { id: string }[]).map(r => r.id)
   if (ids.length === 0) return
 
-  await supabase.from('notas_fiscais').delete().in('rota_id', ids)
-  await supabase.from('historico_rotas').delete().in('rota_id', ids)
-  await supabase.from('rotas').delete().in('id', ids)
+  await sb().from('notas_fiscais').delete().in('rota_id', ids)
+  await sb().from('historico_rotas').delete().in('rota_id', ids)
+  await sb().from('rotas').delete().in('id', ids)
+}
+
+export async function carregarRotasPorPeriodo(dataInicio: string, dataFim: string): Promise<Rota[]> {
+  const { data: rows, error } = await sb()
+    .from('rotas')
+    .select(`*, notas_fiscais(id, n_nfs, destinatario, municipio, bairro, endereco, cep, peso_kg, tipo_cliente, cond, grade, agendamento, hora_agendamento, reentrega, sac, observacao, sequencia)`)
+    .gte('data', dataInicio)
+    .lte('data', dataFim)
+    .order('data', { ascending: false })
+    .order('criado_em', { ascending: false })
+
+  if (error) throw error
+
+  return (rows as Record<string, unknown>[] ?? []).map((r: Record<string, unknown>) => {
+    const nfs: NotaFiscal[] = ((r.notas_fiscais as Record<string, unknown>[]) ?? []).map(nf => ({
+      id:              nf.id as string,
+      numnfs:          String(nf.n_nfs),
+      destinatario:    (nf.destinatario as string) ?? '—',
+      municipio:       (nf.municipio   as string) ?? '—',
+      bairro:          (nf.bairro      as string) ?? '—',
+      endereco:        (nf.endereco    as string) ?? '—',
+      cep:             (nf.cep         as string) ?? '',
+      peso:            (nf.peso_kg     as number) ?? 0,
+      qtd:             1,
+      tipoCliente:     ((nf.tipo_cliente as ClientType) ?? 'Varejo'),
+      cond:            ((nf.cond as 'ok' | 'laranja' | 'vermelho') ?? 'ok'),
+      grade:           (nf.grade       as string) ?? '',
+      rota:            r.codigo_rota as string,
+      dataEmissao:     '',
+      dataAgendamento: (nf.agendamento      as string) ?? undefined,
+      horaAgendamento: (nf.hora_agendamento as string) ?? undefined,
+      observacao:      (nf.observacao       as string) ?? undefined,
+      sac:             (nf.sac              as string) ?? undefined,
+      indRee:          (nf.reentrega        as boolean) ?? false,
+    }))
+
+    return {
+      id:              r.id as string,
+      data:            r.data as string,
+      codigoRota:      r.codigo_rota as string,
+      regiao:          r.regiao as string,
+      status:          r.status as RouteStatus,
+      motoristaId:     (r.motorista_id as string) ?? undefined,
+      veiculoId:       (r.veiculo_id   as string) ?? undefined,
+      pesoTotal:       (r.peso_total as number)       ?? 0,
+      ocupacaoPercent: (r.ocupacao_percent as number) ?? 0,
+      qtdNotas:        (r.qtd_notas as number)        ?? 0,
+      linkMaps:        (r.link_maps as string)        ?? undefined,
+      alertas:         (r.alertas  as string[])       ?? [],
+      createdAt:       r.criado_em as string,
+      enviadoEm:       (r.enviado_em as string)       ?? undefined,
+      motorista:       r.motorista_nome ? {
+        id:       (r.motorista_id as string) ?? `m-${r.motorista_nome}`,
+        nome:     r.motorista_nome as string,
+        telefone: (r.motorista_celular as string) ?? '',
+        sigla:    (r.motorista_nome as string).split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase(),
+        status:   'disponivel' as const,
+      } : undefined,
+      veiculo: r.veiculo_placa ? {
+        id:           (r.veiculo_id as string) ?? `v-${r.veiculo_placa}`,
+        placa:        r.veiculo_placa as string,
+        modelo:       r.veiculo_placa as string,
+        tipo:         'VUC' as const,
+        capacidadeKg: 1500,
+        sigla:        (r.veiculo_placa as string).replace(/\W/g, '').slice(-4),
+        status:       'disponivel' as const,
+      } : undefined,
+      notasFiscais: nfs,
+      nfsConcatenadas: nfs.map(n => n.numnfs).join(';') || undefined,
+    }
+  })
 }

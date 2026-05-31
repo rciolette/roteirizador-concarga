@@ -103,6 +103,9 @@ export default function Page() {
           sub={new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
         >
           <ImportarSIATButton onClick={() => setImportDialog(true)} running={nfImportState.running} />
+          <Link href="/rotas">
+            <Btn variant="primary" size="sm">+ Gerar Rotas</Btn>
+          </Link>
         </Topbar>
       </div>
 
@@ -282,6 +285,32 @@ export default function Page() {
             ))}
           </div>
         </Card>
+
+        {/* NFs por situação SIAT */}
+        {nfsPendentes.length > 0 && (
+          <Card>
+            <CardHeader>
+              <span className="text-xs font-medium">NFs pendentes por condição SIAT</span>
+              <span className="text-[11px] text-muted">{nfsPendentes.length} NFs</span>
+            </CardHeader>
+            <div className="grid grid-cols-3">
+              {[
+                { cond: 'vermelho', label: 'Vermelho', dot: 'bg-cond-err',  val: nfsPendentes.filter(n => n.cond === 'vermelho').length, color: 'text-danger' },
+                { cond: 'laranja',  label: 'Laranja',  dot: 'bg-cond-warn', val: nfsPendentes.filter(n => n.cond === 'laranja').length,  color: 'text-warn-mid' },
+                { cond: 'ok',       label: 'OK',       dot: 'bg-cond-ok',   val: nfsPendentes.filter(n => n.cond === 'ok').length,       color: 'text-success' },
+              ].map((s, i, arr) => (
+                <div key={s.cond} className={`px-3.5 py-2.5 ${i < arr.length - 1 ? 'border-r border-[0.5px] border-[var(--border-faint)]' : ''}`}>
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${s.dot}`} />
+                    <span className="text-[11px] text-muted">{s.label}</span>
+                  </div>
+                  <div className={`text-[18px] font-medium ${s.val > 0 ? s.color : 'text-base'}`}>{s.val}</div>
+                  <div className="text-[11px] text-muted">NFs</div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
 
         {/* Notas fiscais pendentes */}
         <NfsPendentesTable />

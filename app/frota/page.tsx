@@ -1,10 +1,11 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import * as XLSX from 'xlsx'
 import Papa from 'papaparse'
 import { Topbar, Card, CardHeader, TextInput, Select, Btn } from '@/components/ui'
 import { Checkbox, BulkBar } from '@/components/ui/SelectionControls'
 import { cn } from '@/lib/utils'
+import { exportarCSV, exportarXLSX, motoristasParaLinhas, veiculosParaLinhas } from '@/lib/export'
 import {
   listarMotoristas, listarVeiculos, listarVinculados,
   atualizarAtivoMotorista, atualizarAtivoVeiculo,
@@ -189,6 +190,38 @@ async function parseArquivoVeiculos(file: File): Promise<string[]> {
 }
 
 // BulkBar e Checkbox importados de @/components/ui/SelectionControls
+
+// ── Export Menu ───────────────────────────────────────────────────────────────
+function ExportMenuFrota({ rows, nomeBase }: { rows: Record<string, unknown>[]; nomeBase: string }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [open])
+  async function doExport(fmt: 'csv' | 'xlsx') {
+    setOpen(false)
+    if (!rows.length) return
+    fmt === 'csv' ? exportarCSV(rows, nomeBase) : exportarXLSX(rows, nomeBase)
+  }
+  return (
+    <div ref={ref} className="relative">
+      <Btn size="sm" onClick={() => setOpen(v => !v)} disabled={!rows.length}>
+        <svg className="w-3 h-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M8 2v8M5 7l3 3 3-3M3 12h10"/></svg>
+        Exportar
+        <svg className="w-2.5 h-2.5" viewBox="0 0 10 10" fill="currentColor"><path d="M2 3l3 4 3-4H2z"/></svg>
+      </Btn>
+      {open && (
+        <div className="absolute right-0 top-full mt-1 z-50 w-[130px] rounded-lg border border-[0.5px] border-[var(--border-subtle)] bg-white dark:bg-[#1E1E1C] shadow-lg overflow-hidden">
+          <button onClick={() => doExport('csv')} className="w-full text-left px-3 py-2 text-[11px] hover:bg-cream cursor-pointer bg-transparent border-none">CSV</button>
+          <button onClick={() => doExport('xlsx')} className="w-full text-left px-3 py-2 text-[11px] hover:bg-cream cursor-pointer bg-transparent border-none border-t border-[0.5px] border-[var(--border-faint)]">Excel (XLSX)</button>
+        </div>
+      )}
+    </div>
+  )
+}
 
 // ═══════════════════════════���══════════════════════════��════════════════════════
 export default function FrotaPage() {
@@ -476,6 +509,7 @@ export default function FrotaPage() {
                 )}
               </div>
               <div className="flex items-center gap-2 flex-wrap justify-end">
+                <ExportMenuFrota rows={motoristasParaLinhas(motoristasFiltrados)} nomeBase="motoristas" />
                 <Btn size="sm" onClick={handleSincronizarSIAT} disabled={syncingM}>
                   {syncingM ? 'Sincronizando...' : '↺ Sincronizar com SIAT'}
                 </Btn>
@@ -578,6 +612,7 @@ export default function FrotaPage() {
                 )}
               </div>
               <div className="flex items-center gap-2 flex-wrap justify-end">
+                <ExportMenuFrota rows={veiculosParaLinhas(veiculosFiltrados)} nomeBase="veiculos" />
                 <TextInput value={buscaV} onChange={v => { setBuscaV(v); setPageV(0) }} placeholder="Placa, modelo, motorista..." style={{ width: 190 }} />
                 <Select value={filtroAtV} onChange={v => { setFiltroAtV(v as typeof filtroAtV); setPageV(0) }} className="w-[130px]">
                   <option value="todos">Todos</option>

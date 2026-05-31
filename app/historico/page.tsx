@@ -1,49 +1,38 @@
 'use client'
-import { useState, useEffect } from 'react'
-import { Topbar, Card, StatusPill, Btn, ImportBar, TextInput } from '@/components/ui'
-import { ImportarSIATButton } from '@/components/ui/ImportarSIATButton'
-import { SiatImportDialog } from '@/components/ui/SiatImportDialog'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { Topbar, Card, StatusPill, Btn, TextInput } from '@/components/ui'
 import { NotasFiscaisTable } from '@/components/ui/NotasFiscaisTable'
 import { MapaRota } from '@/components/ui/MapaRota'
 import { cn, formatPeso } from '@/lib/utils'
 import { useCopyToClipboard } from '@/lib/hooks'
 import { useAppData } from '@/components/providers/AppDataProvider'
-import { carregarRotasSupabase } from '@/lib/webhooks'
-import { Rota, RouteStatus } from '@/types'
+import { carregarRotasPorPeriodo } from '@/lib/webhooks'
+import { exportarCSV, exportarXLSX, rotasParaLinhas } from '@/lib/export'
+import type { Rota, RouteStatus } from '@/types'
 
-// ── Datas dinâmicas ───────────────────────────────────────────────────────────
-const DIAS_PT = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado']
+// ── Datas ─────────────────────────────────────────────────────────────────────
 
-function gerarUltimosDias(n = 7): { data: string; label: string }[] {
-  const dias: { data: string; label: string }[] = []
-  const hoje = new Date()
-  for (let i = 0; i < n; i++) {
-    const d = new Date(hoje)
-    d.setDate(d.getDate() - i)
-    const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-    const dd  = String(d.getDate()).padStart(2, '0')
-    const mm  = String(d.getMonth() + 1).padStart(2, '0')
-    const label = i === 0
-      ? `${dd}/${mm}/${d.getFullYear()} — hoje`
-      : `${dd}/${mm}/${d.getFullYear()} — ${DIAS_PT[d.getDay()]}`
-    dias.push({ data: iso, label })
-  }
-  return dias
+function isoHoje(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
-const DIAS = gerarUltimosDias(7)
+function isoMenos(dias: number): string {
+  const d = new Date()
+  d.setDate(d.getDate() - dias)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
 
 // ── Detalhe Modal ─────────────────────────────────────────────────────────────
+
 function DetalheModal({ rota, onClose }: { rota: Rota; onClose: () => void }) {
   const { copied, copy } = useCopyToClipboard()
-
   return (
     <div
       className="fixed inset-0 bg-black/55 z-[100] flex items-center justify-center"
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
       <div className="animate-fade-in bg-white dark:bg-[#1E1E1C] rounded-xl border border-[0.5px] border-[var(--border-light)] w-[600px] max-w-[95vw] max-h-[85vh] flex flex-col">
-        {/* Header */}
         <div className="px-5 py-4 border-b border-[0.5px] border-[var(--border-subtle)] flex items-center justify-between shrink-0">
           <div>
             <div className="text-[13px] font-medium">{rota.codigoRota}</div>
@@ -61,21 +50,17 @@ function DetalheModal({ rota, onClose }: { rota: Rota; onClose: () => void }) {
             </button>
           </div>
         </div>
-
-        {/* Body */}
         <div className="flex-1 overflow-y-auto px-5 py-4">
           {rota.enviadoEm && (
             <div className="text-[11px] text-success-dark bg-success-bg border border-[0.5px] border-success-border rounded-lg px-3 py-2 mb-3">
               Enviada ao motorista às {new Date(rota.enviadoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
             </div>
           )}
-
           {rota.nfsConcatenadas && (
             <div className="text-[11px] text-muted mb-3 font-mono bg-page px-3 py-2 rounded-lg">
               NFs: {rota.nfsConcatenadas}
             </div>
           )}
-
           {rota.notasFiscais.length > 0 ? (
             <>
               <NotasFiscaisTable notas={rota.notasFiscais} />
@@ -87,8 +72,6 @@ function DetalheModal({ rota, onClose }: { rota: Rota; onClose: () => void }) {
             <p className="text-xs text-muted text-center py-6">Detalhes das NFs não disponíveis para este registro.</p>
           )}
         </div>
-
-        {/* Footer */}
         <div className="px-5 py-3 border-t border-[0.5px] border-[var(--border-subtle)] flex gap-2 justify-end shrink-0">
           {rota.nfsConcatenadas && (
             <Btn size="sm" onClick={() => copy(rota.nfsConcatenadas!)}>
@@ -111,118 +94,205 @@ function DetalheModal({ rota, onClose }: { rota: Rota; onClose: () => void }) {
   )
 }
 
-// ── Historico Page ────────────────────────────────────────────────────────────
+// ── Menu de exportação ────────────────────────────────────────────────────────
+
+function ExportMenu({ rotas, nomeBase }: { rotas: Rota[]; nomeBase: string }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [open])
+
+  async function doExport(fmt: 'csv' | 'xlsx') {
+    setOpen(false)
+    const rows = rotasParaLinhas(rotas)
+    if (rows.length === 0) return
+    fmt === 'csv' ? exportarCSV(rows, nomeBase) : exportarXLSX(rows, nomeBase)
+  }
+
+  return (
+    <div ref={ref} className="relative">
+      <Btn size="sm" onClick={() => setOpen(v => !v)} disabled={rotas.length === 0}>
+        <svg className="w-3 h-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+          <path d="M8 2v8M5 7l3 3 3-3M3 12h10"/>
+        </svg>
+        Exportar
+        <svg className="w-2.5 h-2.5" viewBox="0 0 10 10" fill="currentColor">
+          <path d="M2 3l3 4 3-4H2z"/>
+        </svg>
+      </Btn>
+      {open && (
+        <div className="absolute right-0 top-full mt-1 z-50 w-[130px] rounded-lg border border-[0.5px] border-[var(--border-subtle)] bg-white dark:bg-[#1E1E1C] shadow-lg overflow-hidden">
+          <button
+            onClick={() => doExport('csv')}
+            className="w-full text-left px-3 py-2 text-[11px] hover:bg-cream transition-colors cursor-pointer bg-transparent border-none"
+          >
+            CSV
+          </button>
+          <button
+            onClick={() => doExport('xlsx')}
+            className="w-full text-left px-3 py-2 text-[11px] hover:bg-cream transition-colors cursor-pointer bg-transparent border-none border-t border-[0.5px] border-[var(--border-faint)]"
+          >
+            Excel (XLSX)
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Status filters ────────────────────────────────────────────────────────────
+
 const HIST_STATUS_FILTERS: { label: string; value: RouteStatus | 'todas' }[] = [
-  { label: 'Todas',     value: 'todas' },
-  { label: 'Enviadas',  value: 'enviada' },
-  { label: 'Aprovadas', value: 'aprovada' },
+  { label: 'Todas',      value: 'todas'     },
+  { label: 'Enviadas',   value: 'enviada'   },
+  { label: 'Aprovadas',  value: 'aprovada'  },
   { label: 'Rejeitadas', value: 'rejeitada' },
 ]
 
+// ── HistoricoPage ─────────────────────────────────────────────────────────────
+
 export default function HistoricoPage() {
-  const { nfImportState, importarNFs, dismissNFImport, rotas } = useAppData()
-  const [diaIdx,          setDiaIdx]          = useState(0)
+  const hoje = isoHoje()
+
+  const [dataInicio,      setDataInicio]      = useState(isoMenos(6))
+  const [dataFim,         setDataFim]         = useState(hoje)
   const [statusFilter,    setStatusFilter]    = useState<RouteStatus | 'todas'>('todas')
   const [filtroMotorista, setFiltroMotorista] = useState('')
   const [filtroVeiculo,   setFiltroVeiculo]   = useState('')
   const [rotaSelecionada, setRotaSelecionada] = useState<Rota | null>(null)
-  const [importDialog,    setImportDialog]    = useState(false)
-  const [rotasPorData,    setRotasPorData]    = useState<Record<string, Rota[]>>({})
-  const [loadingDia,      setLoadingDia]      = useState(false)
+  const [rotasPeriodo,    setRotasPeriodo]    = useState<Rota[]>([])
+  const [loading,         setLoading]         = useState(false)
+  const { rotas: rotasHoje } = useAppData()
 
-  const summary = nfImportState.summary
-  const importResult = summary
-    ? { nfs: summary.totalNFs, peso: summary.pesoTotalToneladas, veiculos: summary.veiculosUnicos }
-    : undefined
+  // Carrega o período sempre que as datas mudarem (debounce 400ms)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const carregar = useCallback(async (inicio: string, fim: string) => {
+    if (!inicio || !fim || inicio > fim) return
+    setLoading(true)
+    try {
+      const resultado = await carregarRotasPorPeriodo(inicio, fim)
+      setRotasPeriodo(resultado)
+    } catch {
+      setRotasPeriodo([])
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
-  const dia    = DIAS[diaIdx]
-  const isHoje = diaIdx === 0
-
-  // Busca rotas do Supabase para datas passadas (com cache)
   useEffect(() => {
-    if (isHoje) return
-    if (rotasPorData[dia.data] !== undefined) return
-    setLoadingDia(true)
-    carregarRotasSupabase(dia.data)
-      .then(r => setRotasPorData(prev => ({ ...prev, [dia.data]: r })))
-      .catch(() => setRotasPorData(prev => ({ ...prev, [dia.data]: [] })))
-      .finally(() => setLoadingDia(false))
-  }, [diaIdx]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => carregar(dataInicio, dataFim), 400)
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
+  }, [dataInicio, dataFim, carregar])
 
-  const allItens: Rota[] = isHoje
-    ? rotas
-    : (rotasPorData[dia.data] ?? [])
+  // Dados base: período carregado (inclui hoje se no range) + rotas de hoje do provider
+  const allItens: Rota[] = (() => {
+    // Combina rotas do período com rotas de hoje do AppData (mais atualizadas)
+    const semHoje = rotasPeriodo.filter(r => r.data !== hoje)
+    const incHoje = dataInicio <= hoje && hoje <= dataFim
+    return incHoje ? [...semHoje, ...rotasHoje] : semHoje
+  })()
 
   const itens = allItens.filter(r => {
     if (statusFilter !== 'todas' && r.status !== statusFilter) return false
     if (filtroMotorista) {
-      const q = filtroMotorista.toLowerCase()
-      if (!(r.motorista?.nome ?? '').toLowerCase().includes(q)) return false
+      if (!(r.motorista?.nome ?? '').toLowerCase().includes(filtroMotorista.toLowerCase())) return false
     }
     if (filtroVeiculo) {
       const q = filtroVeiculo.toLowerCase()
-      const placa = (r.veiculo?.placa ?? '').toLowerCase()
-      const tipo  = (r.veiculo?.tipo  ?? '').toLowerCase()
-      if (!placa.includes(q) && !tipo.includes(q)) return false
+      if (!(r.veiculo?.placa ?? '').toLowerCase().includes(q) &&
+          !(r.veiculo?.tipo  ?? '').toLowerCase().includes(q)) return false
     }
     return true
   })
 
-  const rotasQtd = allItens.length
-  const nfsQtd   = allItens.reduce((a, r) => a + r.qtdNotas, 0)
-  const pesoQtd  = allItens.reduce((a, r) => a + r.pesoTotal, 0)
+  // ── KPIs do período filtrado ───────────────────────────────────────────────
+  const kpiBase = allItens // KPIs sem filtro de texto/status (mostram o total do período)
+  const kpiTotal    = kpiBase.length
+  const kpiNfs      = kpiBase.reduce((a, r) => a + r.qtdNotas, 0)
+  const kpiPeso     = kpiBase.reduce((a, r) => a + r.pesoTotal, 0)
+  const kpiEnviadas = kpiBase.filter(r => r.status === 'enviada').length
+  const kpiAprov    = kpiBase.filter(r => r.status === 'aprovada').length
+  const kpiRej      = kpiBase.filter(r => r.status === 'rejeitada').length
+
+  function countStatus(s: RouteStatus | 'todas') {
+    return s === 'todas' ? allItens.length : allItens.filter(r => r.status === s).length
+  }
 
   const hasTextFilter = !!(filtroMotorista || filtroVeiculo)
 
-  function countStatus(s: RouteStatus | 'todas') {
-    const base = s === 'todas' ? allItens : allItens.filter(r => r.status === s)
-    return base.length
-  }
-
-  const emptyMessage = isHoje
-    ? 'Importe o SIAT para ver as rotas de hoje.'
-    : loadingDia
-      ? 'Carregando rotas...'
-      : 'Nenhuma rota encontrada para este dia.'
+  // ── Nome base para exportação ─────────────────────────────────────────────
+  const nomeExport = `rotas_${dataInicio}_${dataFim}`
 
   return (
     <div>
       <div className="sticky top-0 z-10">
-        <Topbar title="Histórico" sub="Rotas finalizadas por dia">
-          <ImportarSIATButton
-            onClick={() => setImportDialog(true)}
-            running={nfImportState.running}
-            label="Importar hoje"
-            loadingLabel="Importando..."
-          />
+        <Topbar title="Histórico" sub="Rotas por período">
+          <ExportMenu rotas={itens} nomeBase={nomeExport} />
         </Topbar>
       </div>
 
-      <div className="px-5 pt-3">
-        <ImportBar running={nfImportState.running} step={nfImportState.step} progress={nfImportState.progress} result={importResult} onClose={dismissNFImport} />
+      {/* Filtros de período */}
+      <div className="px-5 pt-3 pb-0 flex items-center gap-2 flex-wrap">
+        <span className="text-[11px] text-muted whitespace-nowrap">Período:</span>
+        <TextInput
+          type="date"
+          value={dataInicio}
+          onChange={v => setDataInicio(v)}
+          style={{ width: 150 }}
+        />
+        <span className="text-[11px] text-muted">até</span>
+        <TextInput
+          type="date"
+          value={dataFim}
+          onChange={v => setDataFim(v)}
+          style={{ width: 150 }}
+        />
+
+        {/* Atalhos de período */}
+        <div className="flex gap-1 ml-1">
+          {[
+            { label: 'Hoje',    fn: () => { setDataInicio(hoje);        setDataFim(hoje)        } },
+            { label: '7 dias',  fn: () => { setDataInicio(isoMenos(6)); setDataFim(hoje)        } },
+            { label: '30 dias', fn: () => { setDataInicio(isoMenos(29)); setDataFim(hoje)       } },
+          ].map(a => (
+            <button
+              key={a.label}
+              onClick={a.fn}
+              className="px-2.5 py-1 rounded-full text-[11px] font-medium bg-cream text-mid hover:bg-cream-hover hover:text-base transition-colors cursor-pointer border-none"
+            >
+              {a.label}
+            </button>
+          ))}
+        </div>
+
+        {loading && <span className="text-[11px] text-muted">Carregando...</span>}
       </div>
 
-      {/* Filtros de data */}
-      <div className="flex gap-2 px-5 pt-2 overflow-x-auto pb-px">
-        {DIAS.map((d, i) => (
-          <button
-            key={d.data}
-            onClick={() => setDiaIdx(i)}
-            className={cn(
-              'shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer border border-[0.5px]',
-              'transition-colors duration-100',
-              i === diaIdx
-                ? 'bg-base text-white border-base'
-                : 'bg-white dark:bg-[#1E1E1C] text-base border-[var(--border-mid)] hover:bg-cream',
-            )}
-          >
-            {d.label}{i === 0 && rotas.length > 0 ? ' · SIAT' : ''}
-          </button>
+      {/* KPIs do período */}
+      <div className="flex gap-2 px-5 pt-3 pb-0 flex-wrap">
+        {[
+          { label: 'Rotas',      value: kpiTotal,           color: '' },
+          { label: 'NFs',        value: kpiNfs,             color: '' },
+          { label: 'Peso',       value: formatPeso(kpiPeso), color: '' },
+          { label: 'Enviadas',   value: kpiEnviadas,        color: 'text-primary' },
+          { label: 'Aprovadas',  value: kpiAprov,           color: 'text-success' },
+          { label: 'Rejeitadas', value: kpiRej,             color: kpiRej > 0 ? 'text-danger' : '' },
+        ].map(m => (
+          <div key={m.label} className="flex-1 min-w-[80px] bg-white dark:bg-[#1E1E1C] border border-[0.5px] border-[var(--border-card)] rounded-lg px-3 py-2">
+            <div className="text-[10px] text-muted uppercase tracking-[0.04em]">{m.label}</div>
+            <div className={cn('text-lg font-medium mt-0.5', m.color)}>{m.value}</div>
+          </div>
         ))}
       </div>
 
-      {/* Filtros de texto */}
-      <div className="flex gap-2 px-5 pt-2 pb-0 flex-wrap">
+      {/* Filtros de texto + status */}
+      <div className="px-5 pt-2.5 flex items-center gap-2 flex-wrap">
         <TextInput
           value={filtroMotorista}
           onChange={v => setFiltroMotorista(v)}
@@ -245,10 +315,10 @@ export default function HistoricoPage() {
         )}
       </div>
 
-      {/* Filtro de status */}
-      <div className="flex gap-1.5 px-5 pt-2 pb-1 flex-wrap">
+      {/* Pills de status */}
+      <div className="flex gap-1.5 px-5 pt-2 pb-2 flex-wrap">
         {HIST_STATUS_FILTERS.map(f => {
-          const count = countStatus(f.value)
+          const count  = countStatus(f.value)
           const active = statusFilter === f.value
           return (
             <button
@@ -273,20 +343,9 @@ export default function HistoricoPage() {
             </button>
           )
         })}
-      </div>
-
-      {/* Métricas do dia */}
-      <div className="flex gap-3 px-5 py-3">
-        {[
-          { label: 'Rotas', value: rotasQtd },
-          { label: 'NFs',   value: nfsQtd },
-          { label: 'Peso',  value: formatPeso(pesoQtd) },
-        ].map(m => (
-          <div key={m.label} className="flex-1 bg-white dark:bg-[#1E1E1C] border border-[0.5px] border-[var(--border-card)] rounded-lg px-3.5 py-2.5">
-            <div className="text-[11px] text-muted">{m.label}</div>
-            <div className="text-xl font-medium mt-0.5">{m.value}</div>
-          </div>
-        ))}
+        <span className="text-[11px] text-muted self-center ml-1">
+          {itens.length !== allItens.length ? `${itens.length} de ${allItens.length} rotas` : `${itens.length} rota${itens.length !== 1 ? 's' : ''}`}
+        </span>
       </div>
 
       {/* Tabela */}
@@ -295,7 +354,7 @@ export default function HistoricoPage() {
           <table className="w-full border-collapse text-xs">
             <thead>
               <tr className="bg-page">
-                {['Rota', 'Motorista', 'Veículo', 'Peso', 'NFs', 'Status'].map(h => (
+                {['Data', 'Rota', 'Motorista', 'Veículo', 'Peso', 'NFs', 'Status'].map(h => (
                   <th key={h} className="text-left px-3 py-2 text-[11px] text-muted font-medium border-b border-[0.5px] border-[var(--border-subtle)]">
                     {h}
                   </th>
@@ -312,6 +371,7 @@ export default function HistoricoPage() {
                     i % 2 === 0 ? 'bg-white dark:bg-[#1E1E1C] hover:bg-page' : 'bg-page hover:bg-cream',
                   )}
                 >
+                  <td className="px-3 py-[7px] border-b border-[0.5px] border-[var(--border-faint)] text-muted tabular-nums whitespace-nowrap">{rota.data}</td>
                   <td className="px-3 py-[7px] border-b border-[0.5px] border-[var(--border-faint)] font-mono font-medium">{rota.codigoRota}</td>
                   <td className="px-3 py-[7px] border-b border-[0.5px] border-[var(--border-faint)]">{rota.motorista?.nome ?? '—'}</td>
                   <td className="px-3 py-[7px] border-b border-[0.5px] border-[var(--border-faint)] text-muted">{rota.veiculo?.tipo} {rota.veiculo?.placa}</td>
@@ -322,8 +382,8 @@ export default function HistoricoPage() {
               ))}
               {itens.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-3 py-8 text-center text-[12px] text-muted">
-                    {emptyMessage}
+                  <td colSpan={7} className="px-3 py-8 text-center text-[12px] text-muted">
+                    {loading ? 'Carregando rotas...' : 'Nenhuma rota encontrada para este período.'}
                   </td>
                 </tr>
               )}
@@ -331,13 +391,6 @@ export default function HistoricoPage() {
           </table>
         </Card>
       </div>
-
-      {importDialog && (
-        <SiatImportDialog
-          onClose={() => setImportDialog(false)}
-          onConfirm={f => { setImportDialog(false); importarNFs(f) }}
-        />
-      )}
 
       {rotaSelecionada && (
         <DetalheModal rota={rotaSelecionada} onClose={() => setRotaSelecionada(null)} />
