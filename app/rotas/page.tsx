@@ -564,6 +564,8 @@ function SRotaTable({ rows }: { rows: SiatRow[] }) {
 export default function RotasPage() {
   const { nfImportState, importarNFs, dismissNFImport, nfRows, rotas: routes, setRotas: setRoutes, loadingRotas, motoristas, veiculos, config, refreshVeiculos } = useAppData()
   const [filter,         setFilter]         = useState<RouteStatus | 'todos'>('todos')
+  const [busca,          setBusca]          = useState('')
+  const [ordenar,        setOrdenar]        = useState('')
   const [tabPendentes,   setTabPendentes]   = useState<'pendentes' | 'srota'>('pendentes')
 
   const sRotaNfs = useMemo(
@@ -588,7 +590,23 @@ export default function RotasPage() {
     ? { nfs: summary.totalNFs, peso: summary.pesoTotalToneladas, veiculos: summary.veiculosUnicos }
     : undefined
 
-  const filtered  = filter === 'todos' ? routes : routes.filter(r => r.status === filter)
+  const filtered = useMemo(() => {
+    let result = filter === 'todos' ? routes : routes.filter(r => r.status === filter)
+    if (busca) {
+      const q = busca.toLowerCase()
+      result = result.filter(r =>
+        r.codigoRota.toLowerCase().includes(q) ||
+        (r.motorista?.nome ?? '').toLowerCase().includes(q) ||
+        (r.veiculo?.placa ?? '').toLowerCase().includes(q) ||
+        (r.regiao ?? '').toLowerCase().includes(q),
+      )
+    }
+    if (ordenar === 'peso-desc')      result = [...result].sort((a, b) => b.pesoTotal - a.pesoTotal)
+    else if (ordenar === 'nfs-desc')  result = [...result].sort((a, b) => b.qtdNotas - a.qtdNotas)
+    else if (ordenar === 'ocup-desc') result = [...result].sort((a, b) => (b.ocupacaoPercent ?? 0) - (a.ocupacaoPercent ?? 0))
+    else if (ordenar === 'mot-az')    result = [...result].sort((a, b) => (a.motorista?.nome ?? '').localeCompare(b.motorista?.nome ?? ''))
+    return result
+  }, [routes, filter, busca, ordenar])
 
   function countByStatus(s: RouteStatus | 'todos') {
     return s === 'todos' ? routes.length : routes.filter(r => r.status === s).length
@@ -738,34 +756,59 @@ export default function RotasPage() {
         </Topbar>
       </div>
 
-      {/* Filtro em pills */}
-      <div className="px-5 py-2.5 flex gap-1.5 flex-wrap border-b border-[0.5px] border-[var(--border-faint)]">
-        {STATUS_FILTERS.map(f => {
-          const count = countByStatus(f.value)
-          const active = filter === f.value
-          return (
+      {/* Filtros: pills de status + busca + ordenação */}
+      <div className="px-5 py-2.5 flex items-center gap-2 flex-wrap border-b border-[0.5px] border-[var(--border-faint)]">
+        <div className="flex gap-1.5 flex-wrap flex-1 min-w-0">
+          {STATUS_FILTERS.map(f => {
+            const count = countByStatus(f.value)
+            const active = filter === f.value
+            return (
+              <button
+                key={f.value}
+                onClick={() => setFilter(f.value)}
+                className={cn(
+                  'inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-medium transition-colors duration-100',
+                  active
+                    ? 'bg-primary text-white'
+                    : 'bg-cream text-mid hover:bg-cream-hover hover:text-base',
+                )}
+              >
+                {f.label}
+                {count > 0 && (
+                  <span className={cn(
+                    'text-[10px] min-w-[16px] text-center px-1 rounded-full font-medium',
+                    active ? 'bg-white/25 text-white' : 'bg-white dark:bg-[#2A2A28] text-muted',
+                  )}>
+                    {count}
+                  </span>
+                )}
+              </button>
+            )
+          })}
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <TextInput
+            value={busca}
+            onChange={setBusca}
+            placeholder="Rota, motorista, placa…"
+            style={{ width: 200 }}
+          />
+          <Select value={ordenar} onChange={setOrdenar} className="w-[170px]">
+            <option value="">Ordenar por…</option>
+            <option value="peso-desc">Peso (maior primeiro)</option>
+            <option value="nfs-desc">Qtd NFs (maior primeiro)</option>
+            <option value="ocup-desc">Ocupação (maior primeiro)</option>
+            <option value="mot-az">Motorista (A–Z)</option>
+          </Select>
+          {(busca || ordenar) && (
             <button
-              key={f.value}
-              onClick={() => setFilter(f.value)}
-              className={cn(
-                'inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-medium transition-colors duration-100',
-                active
-                  ? 'bg-primary text-white'
-                  : 'bg-cream text-mid hover:bg-cream-hover hover:text-base',
-              )}
+              onClick={() => { setBusca(''); setOrdenar('') }}
+              className="text-[11px] text-muted hover:text-base transition-colors cursor-pointer bg-transparent border-none whitespace-nowrap"
             >
-              {f.label}
-              {count > 0 && (
-                <span className={cn(
-                  'text-[10px] min-w-[16px] text-center px-1 rounded-full font-medium',
-                  active ? 'bg-white/25 text-white' : 'bg-white dark:bg-[#2A2A28] text-muted',
-                )}>
-                  {count}
-                </span>
-              )}
+              Limpar
             </button>
-          )
-        })}
+          )}
+        </div>
       </div>
 
       <div className="px-5 py-4 flex flex-col gap-2.5 pb-20">

@@ -1,8 +1,9 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { Topbar, Card, CardHeader, Btn, StatusPill, TextArea } from '@/components/ui'
+import { Checkbox, BulkBar } from '@/components/ui/SelectionControls'
 import { useAppData } from '@/components/providers/AppDataProvider'
-import { atualizarStatusRota, reprocessarRota } from '@/lib/webhooks'
+import { atualizarStatusRota, reprocessarRota, webhookEnviarMotorista } from '@/lib/webhooks'
 import { formatPeso, cn } from '@/lib/utils'
 import type { Rota, RouteStatus, NotaFiscal } from '@/types'
 import { MapaRota } from '@/components/ui/MapaRota'
@@ -60,13 +61,8 @@ function RouteDrawer({ rota, onClose, onAprovar, onRejeitar }: {
 
   return (
     <>
-      {/* Backdrop */}
       <div className="fixed inset-0 bg-black/40 z-40" onClick={onClose} />
-
-      {/* Panel */}
       <div className="animate-slide-in-right fixed top-0 right-0 h-full w-[480px] max-w-full bg-page z-50 flex flex-col border-l border-[0.5px] border-[var(--border-subtle)] shadow-2xl">
-
-        {/* Cabeçalho */}
         <div className="px-5 py-4 border-b border-[0.5px] border-[var(--border-faint)] flex items-start justify-between gap-3 shrink-0">
           <div className="min-w-0">
             <div className="flex items-center gap-2 mb-1 flex-wrap">
@@ -91,7 +87,6 @@ function RouteDrawer({ rota, onClose, onAprovar, onRejeitar }: {
           </button>
         </div>
 
-        {/* Barra de capacidade */}
         <div className="px-5 py-3 border-b border-[0.5px] border-[var(--border-faint)] shrink-0">
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-[11px] text-muted">Peso total</span>
@@ -104,17 +99,12 @@ function RouteDrawer({ rota, onClose, onAprovar, onRejeitar }: {
           </div>
         </div>
 
-        {/* Conteúdo scrollável */}
         <div className="flex-1 overflow-y-auto">
-
-          {/* Mapa de destinos */}
           {rota.notasFiscais.length > 0 && (
             <div className="px-5 pt-3.5 pb-3 border-b border-[0.5px] border-[var(--border-faint)]">
               <MapaRota nfs={rota.notasFiscais} height="220px" />
             </div>
           )}
-
-          {/* Lista de NFs */}
           <div className="px-5 pt-3.5 pb-3">
             <div className="text-[11px] text-muted font-medium mb-2">
               {rota.qtdNotas} nota{rota.qtdNotas !== 1 ? 's' : ''} fiscal{rota.qtdNotas !== 1 ? 'is' : ''}
@@ -165,7 +155,6 @@ function RouteDrawer({ rota, onClose, onAprovar, onRejeitar }: {
             )}
           </div>
 
-          {/* Observação do aprovador */}
           {isActionable && (
             <div className="px-5 py-3 border-t border-[0.5px] border-[var(--border-faint)]">
               <label className="block text-[11px] text-muted mb-1.5">Observação do aprovador</label>
@@ -179,7 +168,6 @@ function RouteDrawer({ rota, onClose, onAprovar, onRejeitar }: {
           )}
         </div>
 
-        {/* Rodapé fixo com ações */}
         {isActionable && (
           <div className="px-5 py-3.5 border-t border-[0.5px] border-[var(--border-subtle)] flex gap-2 justify-end shrink-0 bg-page">
             <Btn variant="danger-soft" onClick={() => onRejeitar(obs)}>Rejeitar</Btn>
@@ -193,6 +181,49 @@ function RouteDrawer({ rota, onClose, onAprovar, onRejeitar }: {
         )}
       </div>
     </>
+  )
+}
+
+// ── Modal de obs para rejeição em lote ────────────────────────────────────────
+
+function BulkRejectModal({ count, onConfirm, onClose }: {
+  count: number
+  onConfirm: (obs: string) => void
+  onClose: () => void
+}) {
+  const [obs, setObs] = useState('')
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', h)
+    return () => window.removeEventListener('keydown', h)
+  }, [onClose])
+  return (
+    <div
+      className="fixed inset-0 bg-black/55 z-[200] flex items-center justify-center"
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div className="animate-fade-in bg-white dark:bg-[#1E1E1C] rounded-xl border border-[0.5px] border-[var(--border-light)] w-[400px] max-w-[92vw]">
+        <div className="px-5 pt-4 pb-3 border-b border-[0.5px] border-[var(--border-subtle)]">
+          <div className="text-[13px] font-medium">Rejeitar {count} rota{count !== 1 ? 's' : ''}</div>
+          <div className="text-[11px] text-muted mt-0.5">Essa ação não pode ser desfeita.</div>
+        </div>
+        <div className="px-5 py-4">
+          <label className="block text-[11px] text-muted mb-1.5">Observação (aplicada a todas)</label>
+          <TextArea
+            value={obs}
+            onChange={setObs}
+            placeholder="Motivo da rejeição…"
+            rows={3}
+          />
+        </div>
+        <div className="px-5 pb-4 flex gap-2 justify-end">
+          <Btn onClick={onClose}>Cancelar</Btn>
+          <Btn variant="danger-soft" onClick={() => onConfirm(obs)}>
+            Rejeitar {count} rota{count !== 1 ? 's' : ''}
+          </Btn>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -224,11 +255,19 @@ const TIPO_PILL: Record<LogEntry['tipo'], string> = {
 
 export default function AprovacoesPage() {
   const { rotas, setRotas } = useAppData()
-  const [drawerRota,   setDrawerRota]   = useState<Rota | null>(null)
-  const [reprocessing, setReprocessing] = useState<Set<string>>(new Set())
-  const [log,          setLog]          = useState<LogEntry[]>([])
-  const [toast,        setToast]        = useState('')
 
+  const [drawerRota,      setDrawerRota]      = useState<Rota | null>(null)
+  const [reprocessing,    setReprocessing]    = useState<Set<string>>(new Set())
+  const [log,             setLog]             = useState<LogEntry[]>([])
+  const [toast,           setToast]           = useState('')
+
+  // ── Seleção em lote ─────────────────────────────────────────────────────────
+  const [selectedAg,      setSelectedAg]      = useState<Set<string>>(new Set())
+  const [selectedAp,      setSelectedAp]      = useState<Set<string>>(new Set())
+  const [bulking,         setBulking]         = useState(false)
+  const [showRejectModal, setShowRejectModal] = useState(false)
+
+  // ── Helpers ─────────────────────────────────────────────────────────────────
   function addLog(tipo: LogEntry['tipo'], rota: string, descricao: string) {
     setLog(prev => [{
       tipo, rota, descricao,
@@ -274,18 +313,104 @@ export default function AprovacoesPage() {
       showToast(`✓ Reprocessamento solicitado para ${rota.codigoRota}`)
       addLog('reprocessamento', rota.codigoRota, `Reprocessamento solicitado via webhook IA`)
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'erro desconhecido'
-      showToast(`Falha ao reprocessar ${rota.codigoRota}: ${msg}`)
+      showToast(`Falha ao reprocessar: ${err instanceof Error ? err.message : 'erro desconhecido'}`)
     } finally {
       setReprocessing(prev => { const n = new Set(prev); n.delete(rota.id); return n })
     }
   }
 
+  // ── Ações em lote ───────────────────────────────────────────────────────────
+  async function handleBulkAprovar() {
+    const ids = [...selectedAg]
+    setBulking(true)
+    try {
+      await Promise.allSettled(ids.map(id => atualizarStatusRota(id, 'aprovada')))
+      setRotas(prev => prev.map(r => selectedAg.has(r.id) ? { ...r, status: 'aprovada' as RouteStatus } : r))
+      ids.forEach(id => {
+        const r = rotas.find(x => x.id === id)
+        if (r) addLog('aprovacao', r.codigoRota, `Aprovada em lote · ${r.motorista?.nome ?? '—'}`)
+      })
+      setSelectedAg(new Set())
+      showToast(`✓ ${ids.length} rota${ids.length > 1 ? 's' : ''} aprovada${ids.length > 1 ? 's' : ''}`)
+    } finally {
+      setBulking(false)
+    }
+  }
+
+  async function handleBulkRejeitar(obs: string) {
+    const ids = [...selectedAg]
+    setShowRejectModal(false)
+    setBulking(true)
+    try {
+      await Promise.allSettled(ids.map(id => atualizarStatusRota(id, 'rejeitada', obs || undefined)))
+      setRotas(prev => prev.map(r => selectedAg.has(r.id) ? { ...r, status: 'rejeitada' as RouteStatus } : r))
+      ids.forEach(id => {
+        const r = rotas.find(x => x.id === id)
+        if (r) addLog('rejeicao', r.codigoRota, `Rejeitada em lote${obs ? ` · "${obs}"` : ''}`)
+      })
+      setSelectedAg(new Set())
+      showToast(`${ids.length} rota${ids.length > 1 ? 's' : ''} rejeitada${ids.length > 1 ? 's' : ''}`)
+    } finally {
+      setBulking(false)
+    }
+  }
+
+  async function handleBulkEnviar() {
+    const ids = [...selectedAp]
+    setBulking(true)
+    const now = new Date().toISOString()
+    try {
+      await Promise.allSettled(ids.map(async id => {
+        const rota = rotas.find(r => r.id === id)
+        await atualizarStatusRota(id, 'enviada')
+        if (rota?.motorista?.telefone) {
+          await webhookEnviarMotorista({
+            rotaId: id, codigoRota: rota.codigoRota,
+            motoristaNome: rota.motorista.nome, motoristaTel: rota.motorista.telefone,
+            linkMaps: rota.linkMaps, nfsConcatenadas: rota.nfsConcatenadas,
+            qtdNotas: rota.qtdNotas, pesoTotal: rota.pesoTotal,
+          }).catch(() => {})
+        }
+      }))
+      setRotas(prev => prev.map(r =>
+        selectedAp.has(r.id) ? { ...r, status: 'enviada' as RouteStatus, enviadoEm: now, notasFiscais: [] } : r
+      ))
+      ids.forEach(id => {
+        const r = rotas.find(x => x.id === id)
+        if (r) addLog('envio', r.codigoRota, `Enviado em lote para ${r.motorista?.nome ?? '—'}`)
+      })
+      setSelectedAp(new Set())
+      showToast(`✓ ${ids.length} rota${ids.length > 1 ? 's' : ''} enviada${ids.length > 1 ? 's' : ''} ao motorista`)
+    } finally {
+      setBulking(false)
+    }
+  }
+
+  // ── Dados ──────────────────────────────────────────────────────────────────
   const aguardando = rotas.filter(r => r.status === 'aguardando')
   const aprovadas  = rotas.filter(r => r.status === 'aprovada')
   const enviadas   = rotas.filter(r => r.status === 'enviada')
   const toastOk    = toast.startsWith('✓')
 
+  const allAgSel  = aguardando.length > 0 && aguardando.every(r => selectedAg.has(r.id))
+  const someAgSel = aguardando.some(r => selectedAg.has(r.id)) && !allAgSel
+  const allApSel  = aprovadas.length > 0 && aprovadas.every(r => selectedAp.has(r.id))
+  const someApSel = aprovadas.some(r => selectedAp.has(r.id)) && !allApSel
+
+  function toggleAg(id: string) {
+    setSelectedAg(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
+  }
+  function toggleAllAg() {
+    setSelectedAg(allAgSel ? new Set() : new Set(aguardando.map(r => r.id)))
+  }
+  function toggleAp(id: string) {
+    setSelectedAp(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
+  }
+  function toggleAllAp() {
+    setSelectedAp(allApSel ? new Set() : new Set(aprovadas.map(r => r.id)))
+  }
+
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div>
       <div className="sticky top-0 z-10">
@@ -311,35 +436,53 @@ export default function AprovacoesPage() {
         {/* ── Aguardando aprovação ── */}
         <Card>
           <CardHeader>
-            <span className="text-xs font-medium">
-              Aguardando aprovação
-              {aguardando.length > 0 && (
-                <span className="ml-2 text-[10px] font-medium bg-warn-bg text-warn px-2 py-px rounded-full">
-                  {aguardando.length}
-                </span>
-              )}
-            </span>
+            <div className="flex items-center gap-2">
+              <Checkbox checked={allAgSel} indeterminate={someAgSel} onChange={toggleAllAg} />
+              <span className="text-xs font-medium">
+                Aguardando aprovação
+                {aguardando.length > 0 && (
+                  <span className="ml-2 text-[10px] font-medium bg-warn-bg text-warn px-2 py-px rounded-full">
+                    {aguardando.length}
+                  </span>
+                )}
+              </span>
+            </div>
             <span className="text-[11px] text-muted">clique na rota para ver detalhes</span>
           </CardHeader>
+
+          <BulkBar
+            count={selectedAg.size}
+            busy={bulking}
+            onClear={() => setSelectedAg(new Set())}
+            actions={[
+              { label: 'Aprovar selecionadas',  variant: 'success',      onClick: handleBulkAprovar },
+              { label: 'Rejeitar selecionadas', variant: 'danger-soft',  onClick: () => setShowRejectModal(true) },
+            ]}
+          />
+
           {aguardando.length === 0 ? (
             <div className="px-4 py-6 text-xs text-subtle text-center">Nenhuma rota aguardando aprovação.</div>
           ) : (
             <div className="flex flex-col">
               {aguardando.map((rota, i) => {
                 const isReprocessing = reprocessing.has(rota.id)
+                const isSel = selectedAg.has(rota.id)
                 return (
                   <div
                     key={rota.id}
                     className={cn(
-                      'flex items-center gap-3.5 px-4 py-3 cursor-pointer hover:bg-cream dark:hover:bg-[#28282A] transition-colors',
+                      'flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors',
+                      isSel ? 'bg-primary-bg/60 dark:bg-primary/8' : 'hover:bg-cream dark:hover:bg-[#28282A]',
                       i < aguardando.length - 1 && 'border-b border-[0.5px] border-[var(--border-faint)]',
                     )}
                     onClick={e => {
-                      // Não abrir drawer ao clicar nos botões
                       if ((e.target as HTMLElement).closest('button')) return
                       setDrawerRota(rota)
                     }}
                   >
+                    <div onClick={e => e.stopPropagation()}>
+                      <Checkbox checked={isSel} onChange={() => toggleAg(rota.id)} />
+                    </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-0.5">
                         <span className="text-xs font-medium font-mono">{rota.codigoRota}</span>
@@ -357,11 +500,7 @@ export default function AprovacoesPage() {
                       </div>
                     </div>
                     <div className="flex gap-1.5 shrink-0" onClick={e => e.stopPropagation()}>
-                      <Btn
-                        size="sm"
-                        disabled={isReprocessing}
-                        onClick={() => handleReprocessar(rota)}
-                      >
+                      <Btn size="sm" disabled={isReprocessing} onClick={() => handleReprocessar(rota)}>
                         {isReprocessing ? (
                           <svg className="w-3 h-3 animate-spin-slow" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
                             <path d="M8 2a6 6 0 1 0 6 6" strokeLinecap="round"/>
@@ -370,7 +509,7 @@ export default function AprovacoesPage() {
                         {isReprocessing ? 'Processando…' : 'Reprocessar'}
                       </Btn>
                       <Btn size="sm" variant="danger-soft" onClick={() => updateStatus(rota.id, 'rejeitada')}>Rejeitar</Btn>
-                      <Btn size="sm" variant="success" onClick={() => updateStatus(rota.id, 'aprovada')}>Aprovar</Btn>
+                      <Btn size="sm" variant="success"     onClick={() => updateStatus(rota.id, 'aprovada')}>Aprovar</Btn>
                     </div>
                   </div>
                 )
@@ -382,52 +521,72 @@ export default function AprovacoesPage() {
         {/* ── Aprovadas — prontas para envio ── */}
         <Card>
           <CardHeader>
-            <span className="text-xs font-medium">
-              Aprovadas — prontas para envio
-              {aprovadas.length > 0 && (
-                <span className="ml-2 text-[10px] font-medium bg-primary-bg text-primary-dark px-2 py-px rounded-full">
-                  {aprovadas.length}
-                </span>
-              )}
-            </span>
+            <div className="flex items-center gap-2">
+              <Checkbox checked={allApSel} indeterminate={someApSel} onChange={toggleAllAp} />
+              <span className="text-xs font-medium">
+                Aprovadas — prontas para envio
+                {aprovadas.length > 0 && (
+                  <span className="ml-2 text-[10px] font-medium bg-primary-bg text-primary-dark px-2 py-px rounded-full">
+                    {aprovadas.length}
+                  </span>
+                )}
+              </span>
+            </div>
             <span className="text-[11px] text-muted">confirme antes de disparar ao motorista</span>
           </CardHeader>
+
+          <BulkBar
+            count={selectedAp.size}
+            busy={bulking}
+            onClear={() => setSelectedAp(new Set())}
+            actions={[
+              { label: 'Enviar ao motorista', variant: 'primary', onClick: handleBulkEnviar },
+            ]}
+          />
+
           {aprovadas.length === 0 ? (
             <div className="px-4 py-6 text-xs text-subtle text-center">Nenhuma rota aprovada aguardando envio.</div>
           ) : (
             <div className="flex flex-col">
-              {aprovadas.map((rota, i) => (
-                <div
-                  key={rota.id}
-                  className={cn(
-                    'flex items-center gap-3.5 px-4 py-3 cursor-pointer hover:bg-cream dark:hover:bg-[#28282A] transition-colors',
-                    i < aprovadas.length - 1 && 'border-b border-[0.5px] border-[var(--border-faint)]',
-                  )}
-                  onClick={e => {
-                    if ((e.target as HTMLElement).closest('button')) return
-                    setDrawerRota(rota)
-                  }}
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <span className="text-xs font-medium font-mono">{rota.codigoRota}</span>
-                      {rota.regiao && <span className="text-[10px] text-muted">{rota.regiao}</span>}
-                      <StatusPill status={rota.status} />
+              {aprovadas.map((rota, i) => {
+                const isSel = selectedAp.has(rota.id)
+                return (
+                  <div
+                    key={rota.id}
+                    className={cn(
+                      'flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors',
+                      isSel ? 'bg-primary-bg/60 dark:bg-primary/8' : 'hover:bg-cream dark:hover:bg-[#28282A]',
+                      i < aprovadas.length - 1 && 'border-b border-[0.5px] border-[var(--border-faint)]',
+                    )}
+                    onClick={e => {
+                      if ((e.target as HTMLElement).closest('button')) return
+                      setDrawerRota(rota)
+                    }}
+                  >
+                    <div onClick={e => e.stopPropagation()}>
+                      <Checkbox checked={isSel} onChange={() => toggleAp(rota.id)} />
                     </div>
-                    <div className="text-[11px] text-muted">
-                      {rota.motorista?.nome ?? '—'} · {rota.motorista?.telefone ?? '—'} · {formatPeso(rota.pesoTotal)} · {rota.qtdNotas} NFs
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span className="text-xs font-medium font-mono">{rota.codigoRota}</span>
+                        {rota.regiao && <span className="text-[10px] text-muted">{rota.regiao}</span>}
+                        <StatusPill status={rota.status} />
+                      </div>
+                      <div className="text-[11px] text-muted">
+                        {rota.motorista?.nome ?? '—'} · {rota.motorista?.telefone ?? '—'} · {formatPeso(rota.pesoTotal)} · {rota.qtdNotas} NFs
+                      </div>
+                    </div>
+                    <div onClick={e => e.stopPropagation()}>
+                      <Btn size="sm" variant="primary" onClick={() => updateStatus(rota.id, 'enviada')}>
+                        <svg className="w-[11px] h-[11px]" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                          <path d="M2 8l12-6-6 12V8H2z"/>
+                        </svg>
+                        Enviar
+                      </Btn>
                     </div>
                   </div>
-                  <div onClick={e => e.stopPropagation()}>
-                    <Btn size="sm" variant="primary" onClick={() => updateStatus(rota.id, 'enviada')}>
-                      <svg className="w-[11px] h-[11px]" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                        <path d="M2 8l12-6-6 12V8H2z"/>
-                      </svg>
-                      Enviar ao motorista
-                    </Btn>
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </Card>
@@ -495,6 +654,15 @@ export default function AprovacoesPage() {
           onClose={() => setDrawerRota(null)}
           onAprovar={obs => updateStatus(drawerRota.id, 'aprovada', obs || undefined)}
           onRejeitar={obs => updateStatus(drawerRota.id, 'rejeitada', obs || undefined)}
+        />
+      )}
+
+      {/* ── Modal rejeição em lote ── */}
+      {showRejectModal && (
+        <BulkRejectModal
+          count={selectedAg.size}
+          onConfirm={handleBulkRejeitar}
+          onClose={() => setShowRejectModal(false)}
         />
       )}
     </div>
