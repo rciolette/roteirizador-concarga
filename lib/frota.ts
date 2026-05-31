@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { getSupabaseBrowser } from '@/lib/supabase-browser'
 import { tipoVeiculoFromSiat } from '@/lib/siat'
 import type { Veiculo, Motorista } from '@/types'
 
@@ -42,9 +42,8 @@ export interface VinculadoDaFrota {
 
 const PAGE = 1000
 
-async function fetchAllPages<T>(
-  buildQuery: (from: number, to: number) => ReturnType<ReturnType<typeof supabase.from>['select']>,
-): Promise<T[]> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function fetchAllPages<T>(buildQuery: (from: number, to: number) => any): Promise<T[]> {
   const result: T[] = []
   let from = 0
   while (true) {
@@ -58,8 +57,9 @@ async function fetchAllPages<T>(
 }
 
 export async function listarMotoristas(): Promise<MotoristaDaFrota[]> {
+  const sb = getSupabaseBrowser()
   const rows = await fetchAllPages<Record<string, unknown>>(
-    (from, to) => supabase
+    (from, to) => sb
       .from('motoristas')
       .select('*')
       .order('nome', { ascending: true })
@@ -78,8 +78,9 @@ export async function listarMotoristas(): Promise<MotoristaDaFrota[]> {
 }
 
 export async function listarVeiculos(): Promise<VeiculoDaFrota[]> {
+  const sb = getSupabaseBrowser()
   const rows = await fetchAllPages<Record<string, unknown>>(
-    (from, to) => supabase
+    (from, to) => sb
       .from('veiculos')
       .select('*, motoristas(nome, celular, sigla)')
       .order('placa', { ascending: true })
@@ -105,8 +106,9 @@ export async function listarVeiculos(): Promise<VeiculoDaFrota[]> {
 }
 
 export async function listarVinculados(): Promise<VinculadoDaFrota[]> {
+  const sb = getSupabaseBrowser()
   const rows = await fetchAllPages<Record<string, unknown>>(
-    (from, to) => supabase
+    (from, to) => sb
       .from('veiculos')
       .select('*, motoristas(nome, celular, sigla)')
       .eq('ativo', true)
@@ -163,27 +165,27 @@ export function motoristaDaFrotaToMotorista(m: MotoristaDaFrota): Motorista {
 }
 
 export async function atualizarAtivoMotorista(id: string, ativo: boolean): Promise<void> {
-  const { error } = await supabase.from('motoristas').update({ ativo }).eq('id', id)
+  const { error } = await getSupabaseBrowser().from('motoristas').update({ ativo }).eq('id', id)
   if (error) throw error
 }
 
 export async function atualizarAtivoVeiculo(id: string, ativo: boolean): Promise<void> {
-  const { error } = await supabase.from('veiculos').update({ ativo }).eq('id', id)
+  const { error } = await getSupabaseBrowser().from('veiculos').update({ ativo }).eq('id', id)
   if (error) throw error
 }
 
 export async function atualizarDisponivelHoje(id: string, disponivel: boolean): Promise<void> {
-  const { error } = await supabase.from('veiculos').update({ disponivel_hoje: disponivel }).eq('id', id)
+  const { error } = await getSupabaseBrowser().from('veiculos').update({ disponivel_hoje: disponivel }).eq('id', id)
   if (error) throw error
 }
 
 export async function resetarDisponivelHoje(): Promise<void> {
-  const { error } = await supabase.from('veiculos').update({ disponivel_hoje: false }).not('id', 'is', null)
+  const { error } = await getSupabaseBrowser().from('veiculos').update({ disponivel_hoje: false }).not('id', 'is', null)
   if (error) throw error
 }
 
 export async function marcarDisponiveisHoje(ids: string[]): Promise<void> {
   if (ids.length === 0) return
-  const { error } = await supabase.from('veiculos').update({ disponivel_hoje: true }).in('id', ids)
+  const { error } = await getSupabaseBrowser().from('veiculos').update({ disponivel_hoje: true }).in('id', ids)
   if (error) throw error
 }
