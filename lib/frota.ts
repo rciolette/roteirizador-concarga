@@ -189,3 +189,21 @@ export async function marcarDisponiveisHoje(ids: string[]): Promise<void> {
   const { error } = await getSupabaseBrowser().from('veiculos').update({ disponivel_hoje: true }).in('id', ids)
   if (error) throw error
 }
+
+export async function desmarcarDisponiveisHoje(ids: string[]): Promise<void> {
+  if (ids.length === 0) return
+  const { error } = await getSupabaseBrowser().from('veiculos').update({ disponivel_hoje: false }).in('id', ids)
+  if (error) throw error
+}
+
+export async function atualizarAtivoBulkMotoristas(ids: string[], ativo: boolean): Promise<void> {
+  if (ids.length === 0) return
+  const { error } = await getSupabaseBrowser().from('motoristas').update({ ativo }).in('id', ids)
+  if (error) throw error
+}
+
+export async function atualizarAtivoBulkVeiculos(ids: string[], ativo: boolean): Promise<void> {
+  if (ids.length === 0) return
+  const { error } = await getSupabaseBrowser().from('veiculos').update({ ativo }).in('id', ids)
+  if (error) throw error
+}
