@@ -13,18 +13,46 @@ import {
 
 type Tab = 'motoristas' | 'veiculos' | 'vinculados'
 
-const PAGE_SIZE = 100
+const PAGE_SIZE_DEFAULT = 100
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100, 200]
 
-function Paginacao({ page, totalItems, totalPages, onChange }: { page: number; totalItems: number; totalPages: number; onChange: (p: number) => void }) {
-  if (totalPages <= 1) return null
-  const from = page * PAGE_SIZE + 1
-  const to   = Math.min((page + 1) * PAGE_SIZE, totalItems)
+function Paginacao({
+  page, totalItems, totalPages, pageSize, onPageSizeChange, onChange,
+}: {
+  page: number; totalItems: number; totalPages: number; onChange: (p: number) => void
+  pageSize?: number; onPageSizeChange?: (s: number) => void
+}) {
+  const ps = pageSize ?? PAGE_SIZE_DEFAULT
+  if (totalPages <= 1 && !onPageSizeChange) return null
+  const from = totalItems === 0 ? 0 : page * ps + 1
+  const to   = Math.min((page + 1) * ps, totalItems)
   return (
-    <div className="flex items-center justify-between px-4 py-2.5 border-t border-[0.5px] border-[var(--border-faint)]">
-      <span className="text-[11px] text-muted">{from}–{to} de {totalItems}</span>
-      <div className="flex gap-1.5">
-        <Btn size="sm" onClick={() => onChange(page - 1)} disabled={page === 0}>← Anterior</Btn>
-        <Btn size="sm" onClick={() => onChange(page + 1)} disabled={page >= totalPages - 1}>Próxima →</Btn>
+    <div className="flex items-center justify-between px-4 py-2.5 border-t border-[0.5px] border-[var(--border-faint)] flex-wrap gap-2">
+      <span className="text-[11px] text-muted">
+        {totalItems === 0 ? '0 registros' : `${from}–${to} de ${totalItems}`}
+      </span>
+      <div className="flex items-center gap-2">
+        {onPageSizeChange && (
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] text-muted whitespace-nowrap">por página</span>
+            <select
+              value={ps}
+              onChange={e => { onPageSizeChange(Number(e.target.value)) }}
+              className="h-6 border border-[0.5px] border-[var(--border-input)] rounded text-[11px] text-base bg-page px-1.5 cursor-pointer outline-none focus:border-primary"
+            >
+              {PAGE_SIZE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+        )}
+        {totalPages > 1 && (
+          <div className="flex gap-1.5">
+            <Btn size="sm" onClick={() => onChange(page - 1)} disabled={page === 0}>← Ant.</Btn>
+            <span className="text-[11px] text-muted self-center tabular-nums whitespace-nowrap">
+              {page + 1} / {totalPages}
+            </span>
+            <Btn size="sm" onClick={() => onChange(page + 1)} disabled={page >= totalPages - 1}>Próx. →</Btn>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -176,10 +204,14 @@ export default function FrotaPage() {
   const [toastM,    setToastM]    = useState('')
   const [syncingM,  setSyncingM]  = useState(false)
 
-  const [busca,      setBusca]      = useState('')
+  const [busca,       setBusca]       = useState('')
+  const [filtroAtivo, setFiltroAtivo] = useState<'todos' | 'ativos' | 'inativos'>('todos')
+  const [pageSizeM,   setPageSizeM]   = useState(25)
+
   const [buscaV,     setBuscaV]     = useState('')
   const [filtroSiat, setFiltroSiat] = useState('Ativo')
   const [filtroDisp, setFiltroDisp] = useState<'todos' | 'sim' | 'nao'>('todos')
+  const [pageSizeV,  setPageSizeV]  = useState(25)
 
   const [pageM,  setPageM]  = useState(0)
   const [pageV,  setPageV]  = useState(0)
@@ -273,11 +305,16 @@ export default function FrotaPage() {
     }
   }
 
-  const motoristasFiltrados = motoristas.filter(m =>
-    m.nome.toLowerCase().includes(busca.toLowerCase()),
-  )
-  const totalPagesM  = Math.ceil(motoristasFiltrados.length / PAGE_SIZE)
-  const paginatedM   = motoristasFiltrados.slice(pageM * PAGE_SIZE, (pageM + 1) * PAGE_SIZE)
+  const motoristasFiltrados = motoristas.filter(m => {
+    if (busca && !m.nome.toLowerCase().includes(busca.toLowerCase()) &&
+        !(m.sigla ?? '').toLowerCase().includes(busca.toLowerCase()) &&
+        !(m.codigo_siat ?? '').toLowerCase().includes(busca.toLowerCase())) return false
+    if (filtroAtivo === 'ativos'   && !m.ativo) return false
+    if (filtroAtivo === 'inativos' &&  m.ativo) return false
+    return true
+  })
+  const totalPagesM  = Math.max(1, Math.ceil(motoristasFiltrados.length / pageSizeM))
+  const paginatedM   = motoristasFiltrados.slice(pageM * pageSizeM, (pageM + 1) * pageSizeM)
 
   const situacoesSiat = [...new Set(veiculos.map(v => v.situacao_siat).filter(Boolean))]
   const veiculosFiltrados = veiculos.filter(v => {
@@ -294,11 +331,11 @@ export default function FrotaPage() {
     if (filtroDisp === 'nao' && v.disponivel_hoje)  return false
     return true
   })
-  const totalPagesV  = Math.ceil(veiculosFiltrados.length / PAGE_SIZE)
-  const paginatedV   = veiculosFiltrados.slice(pageV * PAGE_SIZE, (pageV + 1) * PAGE_SIZE)
+  const totalPagesV  = Math.max(1, Math.ceil(veiculosFiltrados.length / pageSizeV))
+  const paginatedV   = veiculosFiltrados.slice(pageV * pageSizeV, (pageV + 1) * pageSizeV)
 
-  const totalPagesVi = Math.ceil(vinculados.length / PAGE_SIZE)
-  const paginatedVi  = vinculados.slice(pageVi * PAGE_SIZE, (pageVi + 1) * PAGE_SIZE)
+  const totalPagesVi = Math.max(1, Math.ceil(vinculados.length / PAGE_SIZE_DEFAULT))
+  const paginatedVi  = vinculados.slice(pageVi * PAGE_SIZE_DEFAULT, (pageVi + 1) * PAGE_SIZE_DEFAULT)
 
   const qtdDisponiveis = veiculos.filter(v => v.disponivel_hoje).length
 
@@ -338,19 +375,30 @@ export default function FrotaPage() {
         {tab === 'motoristas' && (
           <Card>
             <CardHeader>
-              <div className="text-xs font-medium text-base">
-                Motoristas
+              <div className="flex items-center gap-3 flex-wrap">
+                <span className="text-xs font-medium text-base">Motoristas</span>
                 {motoristas.length > 0 && (
-                  <span className="ml-2 text-[10px] font-normal text-muted">
+                  <span className="text-[10px] text-muted">
                     {motoristasFiltrados.length} de {motoristas.length}
                   </span>
                 )}
+                {motoristas.length > 0 && (
+                  <span className="text-[10px] text-muted">
+                    · {motoristas.filter(m => m.ativo).length} ativos
+                    · {motoristas.filter(m => !m.ativo).length} inativos
+                  </span>
+                )}
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap justify-end">
                 <Btn size="sm" onClick={handleSincronizarSIAT} disabled={syncingM}>
                   {syncingM ? 'Sincronizando...' : '↺ Sincronizar com SIAT'}
                 </Btn>
-                <TextInput value={busca} onChange={v => { setBusca(v); setPageM(0) }} placeholder="Buscar por nome..." style={{ width: 200 }} />
+                <Select value={filtroAtivo} onChange={v => { setFiltroAtivo(v as 'todos' | 'ativos' | 'inativos'); setPageM(0) }} className="w-[130px]">
+                  <option value="todos">Todos</option>
+                  <option value="ativos">Somente ativos</option>
+                  <option value="inativos">Somente inativos</option>
+                </Select>
+                <TextInput value={busca} onChange={v => { setBusca(v); setPageM(0) }} placeholder="Nome, sigla ou SIAT..." style={{ width: 200 }} />
               </div>
             </CardHeader>
 
@@ -365,7 +413,7 @@ export default function FrotaPage() {
 
             {loadingM ? <TableSkeleton cols={7} /> : motoristasFiltrados.length === 0 ? (
               <div className="py-10 text-center text-subtle text-[13px]">
-                {busca ? 'Nenhum motorista encontrado.' : 'Nenhum motorista cadastrado.'}
+                {busca || filtroAtivo !== 'todos' ? 'Nenhum motorista com esses filtros.' : 'Nenhum motorista cadastrado. Use "Sincronizar com SIAT".'}
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -391,7 +439,7 @@ export default function FrotaPage() {
                 </table>
               </div>
             )}
-            <Paginacao page={pageM} totalItems={motoristasFiltrados.length} totalPages={totalPagesM} onChange={setPageM} />
+            <Paginacao page={pageM} totalItems={motoristasFiltrados.length} totalPages={totalPagesM} onChange={setPageM} pageSize={pageSizeM} onPageSizeChange={s => { setPageSizeM(s); setPageM(0) }} />
           </Card>
         )}
 
@@ -483,7 +531,7 @@ export default function FrotaPage() {
                 </table>
               </div>
             )}
-            <Paginacao page={pageV} totalItems={veiculosFiltrados.length} totalPages={totalPagesV} onChange={setPageV} />
+            <Paginacao page={pageV} totalItems={veiculosFiltrados.length} totalPages={totalPagesV} onChange={setPageV} pageSize={pageSizeV} onPageSizeChange={s => { setPageSizeV(s); setPageV(0) }} />
           </Card>
         )}
 
