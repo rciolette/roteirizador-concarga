@@ -5,6 +5,7 @@ import { Topbar, MetricCard, Card, CardHeader, Btn, ImportBar } from '@/componen
 import { ImportarSIATButton } from '@/components/ui/ImportarSIATButton'
 import { SiatImportDialog } from '@/components/ui/SiatImportDialog'
 import { NfsPendentesTable } from '@/components/ui/NfsPendentesTable'
+import { MapaDashboard } from '@/components/ui/MapaDashboard'
 import { formatPeso } from '@/lib/utils'
 import { useAppData } from '@/components/providers/AppDataProvider'
 import type { ClientType } from '@/types'
@@ -284,6 +285,9 @@ export default function Page() {
 
         {/* Notas fiscais pendentes */}
         <NfsPendentesTable />
+
+        {/* Mapa de rotas */}
+        <MapaDashboard />
 
         {/* CTA */}
         <Link href={metrics.rotasAguardando > 0 ? '/rotas/acoes' : '/rotas'}>
