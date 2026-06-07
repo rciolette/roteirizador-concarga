@@ -26,6 +26,28 @@ interface NfRow {
   reentrega: boolean | null
   sac: string | number | null
   regiao: string | null
+  observacao: string | null
+}
+
+function ObsBadge({ obs }: { obs: string | null | undefined }) {
+  if (!obs) return null
+  const upper = obs.toUpperCase()
+  const isRestr = upper.includes('RESTR') || upper.includes('RES DESC') || upper.includes('RES.DESC')
+  const isSac   = upper.includes('SAC') || upper.includes('SOL SAC') || upper.includes('SOLUÇÃO')
+  const cls = isRestr
+    ? 'bg-danger-bg text-danger border-[0.5px] border-danger/20'
+    : isSac
+      ? 'bg-warn-bg text-warn border-[0.5px] border-warn/20'
+      : 'bg-cream text-muted border-[0.5px] border-[var(--border-subtle)]'
+  const label = isRestr ? 'Res' : isSac ? 'SAC' : 'Obs'
+  return (
+    <span
+      className={cn('inline-flex items-center px-1.5 py-px rounded text-[9px] font-medium cursor-default whitespace-nowrap', cls)}
+      title={obs}
+    >
+      {label}
+    </span>
+  )
 }
 
 function CondBadge({ cond }: { cond: string | null | undefined }) {
@@ -72,6 +94,7 @@ function nfToRow(nf: NotaFiscal): NfRow {
     reentrega:     nf.indRee,
     sac:           nf.sac ?? null,
     regiao:        nf.rota && nf.rota !== '—' ? nf.rota : null,
+    observacao:    nf.observacao ?? null,
   }
 }
 
@@ -245,6 +268,7 @@ export function NfsPendentesTable() {
                 <th className={thCls}>Placa</th>
                 <th className={thCls}>Ree</th>
                 <th className={thCls}>SAC</th>
+                <th className={thCls}>Obs</th>
               </tr>
             </thead>
             <tbody>
@@ -276,6 +300,9 @@ export function NfsPendentesTable() {
                         {row.sac}
                       </span>
                     )}
+                  </td>
+                  <td className={tdCls}>
+                    <ObsBadge obs={row.observacao} />
                   </td>
                 </tr>
               ))}
