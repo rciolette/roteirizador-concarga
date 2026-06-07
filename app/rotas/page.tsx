@@ -7,6 +7,7 @@ import {
 import { exportarCSV, exportarXLSX, rotasParaLinhas } from '@/lib/export'
 import { NotasFiscaisTable } from '@/components/ui/NotasFiscaisTable'
 import { NfsPendentesTable } from '@/components/ui/NfsPendentesTable'
+import { AgendadosHojeTable } from '@/components/ui/AgendadosHojeTable'
 import { MapaRota } from '@/components/ui/MapaRota'
 import { ImportarSIATButton } from '@/components/ui/ImportarSIATButton'
 import { SiatImportDialog } from '@/components/ui/SiatImportDialog'
@@ -601,7 +602,7 @@ export default function RotasPage() {
   const [filter,         setFilter]         = useState<RouteStatus | 'todos'>('todos')
   const [busca,          setBusca]          = useState('')
   const [ordenar,        setOrdenar]        = useState('')
-  const [tabPendentes,   setTabPendentes]   = useState<'pendentes' | 'srota'>('pendentes')
+  const [tabPendentes,   setTabPendentes]   = useState<'pendentes' | 'srota' | 'agendados'>('pendentes')
 
   const sRotaNfs = useMemo(
     () => nfRows.filter(r => String(r.ROTA || '').toUpperCase().includes('S/ROTA')),
@@ -889,10 +890,14 @@ export default function RotasPage() {
         {routes.length === 0 && !nfImportState.running && (
           <>
             <div className="flex gap-1.5">
-              {(['pendentes', 'srota'] as const).map(tab => {
+              {(['pendentes', 'agendados', 'srota'] as const).map(tab => {
                 const active = tabPendentes === tab
-                const label  = tab === 'pendentes' ? 'Pendentes' : 'S/Rota'
-                const count  = tab === 'srota' ? sRotaNfs.length : 0
+                const label  = tab === 'pendentes' ? 'Pendentes' : tab === 'agendados' ? 'Agendados de hoje' : 'S/Rota'
+                const count  = tab === 'srota'
+                  ? sRotaNfs.length
+                  : tab === 'agendados'
+                    ? nfRows.filter(r => r.DataAgendamento && String(r.DataAgendamento).slice(0, 10) <= new Date().toISOString().slice(0, 10)).length
+                    : 0
                 return (
                   <button
                     key={tab}
@@ -906,7 +911,11 @@ export default function RotasPage() {
                     {count > 0 && (
                       <span className={cn(
                         'text-[10px] min-w-[16px] text-center px-1 rounded-full font-medium',
-                        active ? 'bg-white/25 text-white' : 'bg-white dark:bg-[#2A2A28] text-muted',
+                        active
+                          ? 'bg-white/25 text-white'
+                          : tab === 'agendados'
+                            ? 'bg-danger-bg text-danger'
+                            : 'bg-white dark:bg-[#2A2A28] text-muted',
                       )}>
                         {count}
                       </span>
@@ -915,7 +924,9 @@ export default function RotasPage() {
                 )
               })}
             </div>
-            {tabPendentes === 'pendentes' ? <NfsPendentesTable /> : <SRotaTable rows={sRotaNfs} />}
+            {tabPendentes === 'pendentes' && <NfsPendentesTable />}
+            {tabPendentes === 'agendados' && <AgendadosHojeTable />}
+            {tabPendentes === 'srota'     && <SRotaTable rows={sRotaNfs} />}
           </>
         )}
 
