@@ -1,8 +1,12 @@
 'use client'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { getSupabaseBrowser } from '@/lib/supabase-browser'
 import { Btn, Card, CardHeader, TextInput, Select } from '@/components/ui'
 import { cn } from '@/lib/utils'
+
+function normalizar(s: string): string {
+  return s.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+}
 
 interface GradeCidade {
   id:     string
@@ -54,6 +58,39 @@ export function GradeCidadesTable() {
   // ── Excluir ──────────────────────────────────────────────────────────────────
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
   const [deleting,      setDeleting]      = useState<string | null>(null)
+
+  // ── Deduplicar ───────────────────────────────────────────────────────────────
+  const [normMode,    setNormMode]    = useState(false)
+  const [normLoading, setNormLoading] = useState(false)
+  const [normDone,    setNormDone]    = useState<number | null>(null)
+
+  const duplicatas = useMemo(() => {
+    const grupos = new Map<string, GradeCidade[]>()
+    for (const r of rows) {
+      const key = normalizar(r.cidade)
+      if (!grupos.has(key)) grupos.set(key, [])
+      grupos.get(key)!.push(r)
+    }
+    return Array.from(grupos.values()).filter(g => g.length > 1)
+  }, [rows])
+
+  async function handleDeduplicar() {
+    if (duplicatas.length === 0) return
+    setNormLoading(true)
+    const sb = getSupabaseBrowser()
+    const idsParaRemover: string[] = []
+    for (const grupo of duplicatas) {
+      // manter o primeiro (menor id), remover os demais
+      const [, ...resto] = grupo
+      idsParaRemover.push(...resto.map(r => r.id))
+    }
+    await sb.from('grade_cidades').delete().in('id', idsParaRemover)
+    setRows(prev => prev.filter(r => !idsParaRemover.includes(r.id)))
+    setNormDone(idsParaRemover.length)
+    setNormMode(false)
+    setNormLoading(false)
+    setTimeout(() => setNormDone(null), 4000)
+  }
 
   useEffect(() => { load() }, [])
 
@@ -149,20 +186,69 @@ export function GradeCidadesTable() {
     <Card>
       <CardHeader>
         <div>
-          <div className="text-xs font-medium">Tabela de cidades e frequências de entrega</div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium">Tabela de cidades e frequências de entrega</span>
+            {duplicatas.length > 0 && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-warn-bg text-warn font-medium">
+                {duplicatas.length} dup.
+              </span>
+            )}
+            {normDone !== null && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-success-bg text-success font-medium">
+                ✓ {normDone} removida{normDone !== 1 ? 's' : ''}
+              </span>
+            )}
+          </div>
           <div className="text-[11px] text-muted mt-0.5">
             Define em quais dias cada cidade recebe entrega. Consultada pelo agente IA ao gerar rotas.
           </div>
         </div>
-        <Btn
-          size="sm"
-          variant="primary"
-          onClick={() => { setAddMode(true); setAddError(''); setEditId(null) }}
-          disabled={addMode}
-        >
-          + Adicionar cidade
-        </Btn>
+        <div className="flex items-center gap-2">
+          {duplicatas.length > 0 && !normMode && (
+            <Btn size="sm" variant="warn-soft" onClick={() => setNormMode(true)}>
+              Deduplicar
+            </Btn>
+          )}
+          <Btn
+            size="sm"
+            variant="primary"
+            onClick={() => { setAddMode(true); setAddError(''); setEditId(null) }}
+            disabled={addMode}
+          >
+            + Adicionar cidade
+          </Btn>
+        </div>
       </CardHeader>
+
+      {/* Painel de deduplicação */}
+      {normMode && (
+        <div className="px-4 py-3 border-b border-[0.5px] border-warn bg-warn-bg/30">
+          <div className="text-[11px] font-medium text-warn mb-1.5">
+            {duplicatas.length} grupo{duplicatas.length !== 1 ? 's' : ''} com nomes duplicados detectado{duplicatas.length !== 1 ? 's' : ''}
+          </div>
+          <div className="flex flex-wrap gap-1.5 mb-2.5 max-h-[80px] overflow-y-auto">
+            {duplicatas.map(grupo => (
+              <span key={grupo[0].id} className="text-[10px] px-2 py-0.5 rounded bg-warn-bg text-warn border border-warn/30 whitespace-nowrap">
+                {grupo[0].cidade} ({grupo.length}×)
+              </span>
+            ))}
+          </div>
+          <div className="text-[10px] text-muted mb-2">
+            Será mantida a primeira entrada de cada grupo. As demais serão excluídas permanentemente.
+          </div>
+          <div className="flex items-center gap-2">
+            <Btn size="sm" variant="danger-soft" onClick={handleDeduplicar} disabled={normLoading}>
+              {normLoading ? '…' : `Remover ${duplicatas.reduce((acc, g) => acc + g.length - 1, 0)} duplicata${duplicatas.reduce((acc, g) => acc + g.length - 1, 0) !== 1 ? 's' : ''}`}
+            </Btn>
+            <button
+              onClick={() => setNormMode(false)}
+              className="text-[11px] text-muted hover:text-base cursor-pointer bg-transparent border-none transition-colors px-1"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Controles */}
       <div className="px-4 py-2.5 flex flex-wrap items-center gap-2 border-b border-[0.5px] border-[var(--border-faint)]">
