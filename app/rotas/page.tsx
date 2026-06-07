@@ -277,6 +277,142 @@ function GerarRotasDialog({ onClose, onConfirm, motoristas, veiculos }: {
   )
 }
 
+// ── Carga por Veículo (equivalente à aba "Previsão carros" da planilha) ───────
+function CargaPorVeiculoPanel({ rotas }: { rotas: Rota[] }) {
+  const [aberto, setAberto] = useState(true)
+
+  type RowVeiculo = {
+    placa: string
+    motorista: string
+    tipo: string
+    pesoTotal: number
+    capacidade: number
+    qtdNfs: number
+    qtdRotas: number
+  }
+
+  const rows: RowVeiculo[] = useMemo(() => {
+    const map = new Map<string, RowVeiculo>()
+    for (const r of rotas) {
+      if (!r.veiculo) continue
+      const placa = r.veiculo.placa
+      const existing = map.get(placa)
+      if (existing) {
+        existing.pesoTotal += r.pesoTotal
+        existing.qtdNfs    += r.qtdNotas
+        existing.qtdRotas  += 1
+      } else {
+        map.set(placa, {
+          placa,
+          motorista:  r.motorista?.nome ?? '—',
+          tipo:       r.veiculo.tipo,
+          pesoTotal:  r.pesoTotal,
+          capacidade: r.veiculo.capacidadeKg || 1500,
+          qtdNfs:     r.qtdNotas,
+          qtdRotas:   1,
+        })
+      }
+    }
+    return [...map.values()].sort((a, b) => b.pesoTotal - a.pesoTotal)
+  }, [rotas])
+
+  if (rows.length === 0) return null
+
+  const thCls = 'text-left text-[10px] text-muted font-medium px-2.5 py-1.5 border-b border-[0.5px] border-[var(--border-subtle)] bg-page whitespace-nowrap'
+  const tdCls = 'px-2.5 py-[5px] border-b border-[0.5px] border-[var(--border-faint)] text-[11px]'
+
+  return (
+    <Card>
+      <CardHeader>
+        <button
+          onClick={() => setAberto(v => !v)}
+          className="flex items-center gap-2 cursor-pointer bg-transparent border-none p-0 w-full text-left"
+        >
+          <span className="text-xs font-medium">Carga por veículo</span>
+          <span className="text-[10px] text-muted">· {rows.length} veículos</span>
+          <svg
+            className={cn('w-3 h-3 text-muted ml-auto transition-transform duration-150', aberto && 'rotate-180')}
+            viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"
+          >
+            <path d="M4 6l4 4 4-4"/>
+          </svg>
+        </button>
+      </CardHeader>
+
+      {aberto && (
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse">
+            <thead>
+              <tr>
+                <th className={thCls}>Motorista</th>
+                <th className={thCls}>Placa</th>
+                <th className={thCls}>Tipo</th>
+                <th className={cn(thCls, 'text-right')}>Peso</th>
+                <th className={cn(thCls, 'text-right')}>Cap.</th>
+                <th className={thCls + ' min-w-[120px]'}>Ocupação</th>
+                <th className={cn(thCls, 'text-right')}>NFs</th>
+                <th className={cn(thCls, 'text-right')}>Rotas</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, i) => {
+                const pct      = Math.min(100, Math.round((row.pesoTotal / row.capacidade) * 100))
+                const barColor = pct >= 95 ? 'bg-danger-mid' : pct >= 80 ? 'bg-warn-mid' : 'bg-primary'
+                const pctColor = pct >= 95 ? 'text-danger' : pct >= 80 ? 'text-warn-mid' : 'text-success-dark'
+                return (
+                  <tr key={row.placa} className={i % 2 === 0 ? 'bg-white dark:bg-[#1E1E1C]' : 'bg-page'}>
+                    <td className={cn(tdCls, 'max-w-[140px] truncate')} title={row.motorista}>{row.motorista}</td>
+                    <td className={cn(tdCls, 'font-mono whitespace-nowrap')}>{row.placa}</td>
+                    <td className={cn(tdCls, 'text-muted whitespace-nowrap')}>{row.tipo}</td>
+                    <td className={cn(tdCls, 'tabular-nums text-right whitespace-nowrap font-medium')}>
+                      {row.pesoTotal.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} kg
+                    </td>
+                    <td className={cn(tdCls, 'tabular-nums text-right whitespace-nowrap text-muted')}>
+                      {row.capacidade.toLocaleString('pt-BR')} kg
+                    </td>
+                    <td className={tdCls}>
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 h-[4px] bg-cream-hover rounded-full overflow-hidden min-w-[60px]">
+                          <div
+                            className={cn('h-full rounded-full transition-[width] duration-300', barColor)}
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                        <span className={cn('text-[10px] font-medium tabular-nums shrink-0 w-[30px] text-right', pctColor)}>
+                          {pct}%
+                        </span>
+                      </div>
+                    </td>
+                    <td className={cn(tdCls, 'tabular-nums text-right')}>{row.qtdNfs}</td>
+                    <td className={cn(tdCls, 'tabular-nums text-right')}>{row.qtdRotas}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+            <tfoot>
+              <tr className="bg-page">
+                <td colSpan={3} className="px-2.5 py-1.5 text-[10px] text-muted font-medium border-t border-[0.5px] border-[var(--border-subtle)]">
+                  Total
+                </td>
+                <td className="px-2.5 py-1.5 text-[10px] font-medium tabular-nums text-right border-t border-[0.5px] border-[var(--border-subtle)] whitespace-nowrap">
+                  {rows.reduce((s, r) => s + r.pesoTotal, 0).toLocaleString('pt-BR', { maximumFractionDigits: 0 })} kg
+                </td>
+                <td colSpan={2} className="border-t border-[0.5px] border-[var(--border-subtle)]" />
+                <td className="px-2.5 py-1.5 text-[10px] font-medium tabular-nums text-right border-t border-[0.5px] border-[var(--border-subtle)]">
+                  {rows.reduce((s, r) => s + r.qtdNfs, 0)}
+                </td>
+                <td className="px-2.5 py-1.5 text-[10px] font-medium tabular-nums text-right border-t border-[0.5px] border-[var(--border-subtle)]">
+                  {rows.reduce((s, r) => s + r.qtdRotas, 0)}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
+    </Card>
+  )
+}
+
 // ── Route Card ────────────────────────────────────────────────────────────────
 const AVATAR_CLS = [
   'bg-primary-bg text-primary-dark',
@@ -874,6 +1010,8 @@ export default function RotasPage() {
             </div>
           </div>
         )}
+
+        {routes.length > 0 && <CargaPorVeiculoPanel rotas={routes} />}
 
         <div className="flex flex-col gap-2.5">
           {filtered.map(rota => (

@@ -41,15 +41,21 @@ export default function Page() {
       { tipo: 'Reentrega', count: base.filter(n => n.tipoCliente === 'Reentrega').length },
     ]
 
-    const veiculosDisponiveis = veiculos.filter(v => v.disponivel_hoje).length
+    const marcadosHoje        = veiculos.filter(v => v.disponivel_hoje).length
     const veiculosTotal       = veiculos.length
+    // Se nenhum veículo foi marcado como disponível hoje via /frota,
+    // usa o status 'disponivel' como fallback para não mostrar 0.
+    const veiculosDisponiveis = marcadosHoje > 0
+      ? marcadosHoje
+      : veiculos.filter(v => v.status === 'disponivel').length
+    const usandoFallbackDisp  = marcadosHoje === 0 && veiculosTotal > 0
 
     return {
       rotasRascunho, rotasAguardando, rotasAprovadas, rotasEnviadas,
       pesoTotal: rotas.reduce((s, r) => s + r.pesoTotal, 0),
       nfsVermelho, agendamentosHoje,
       rotasCapacidadeAlta, porTipoCliente,
-      veiculosDisponiveis, veiculosTotal,
+      veiculosDisponiveis, veiculosTotal, usandoFallbackDisp,
     }
   }, [rotas, veiculos, nfsPendentes])
 
@@ -140,7 +146,9 @@ export default function Page() {
               </div>
               <div className="flex items-center gap-2.5 px-3.5 py-2 text-xs opacity-70">
                 <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${metrics.veiculosDisponiveis > 0 ? 'bg-cond-ok' : 'bg-subtle'}`} />
-                <span className="flex-1">{metrics.veiculosDisponiveis} veículos disponíveis hoje</span>
+                <span className="flex-1">
+                  {metrics.veiculosDisponiveis} veículos {metrics.usandoFallbackDisp ? 'ativos (nenhum marcado hoje)' : 'disponíveis hoje'}
+                </span>
                 <span className="text-[11px] shrink-0">{metrics.veiculosTotal} total</span>
               </div>
             </Card>
@@ -195,11 +203,13 @@ export default function Page() {
           <div ref={veiculosRef} className="relative">
             <div onClick={() => setShowVeiculos(v => !v)} className="cursor-pointer">
               <MetricCard
-                label="Veículos disponíveis"
+                label={metrics.usandoFallbackDisp ? 'Veículos ativos (status)' : 'Veículos disponíveis hoje'}
                 value={metrics.veiculosDisponiveis}
-                sub={`${metrics.veiculosTotal} na frota · clique para ver`}
+                sub={metrics.usandoFallbackDisp
+                  ? `Marque disponíveis em /frota · ${metrics.veiculosTotal} total`
+                  : `${metrics.veiculosTotal} na frota · clique para ver`}
                 capacity={metrics.veiculosTotal > 0
-                  ? { used: metrics.veiculosDisponiveis, total: metrics.veiculosTotal, label: `${metrics.veiculosDisponiveis} / ${metrics.veiculosTotal} hoje` }
+                  ? { used: metrics.veiculosDisponiveis, total: metrics.veiculosTotal, label: `${metrics.veiculosDisponiveis} / ${metrics.veiculosTotal}` }
                   : undefined}
                 valueColor="#3B6D11"
               />
