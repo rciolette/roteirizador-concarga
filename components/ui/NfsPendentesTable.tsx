@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { getSupabaseBrowser } from '@/lib/supabase-browser'
 import { cn } from '@/lib/utils'
 import { Btn, Card, CardHeader, TextInput, Select } from '@/components/ui'
@@ -94,11 +94,41 @@ export function NfsPendentesTable() {
   const [rows,    setRows]    = useState<NfRow[]>([])
   const [loading, setLoading] = useState(true)
   const [page,    setPage]    = useState(0)
-  const [busca,        setBusca]        = useState('')
-  const [tipoFiltro,   setTipoFiltro]   = useState('Todos')
-  const [gradeFiltro,  setGradeFiltro]  = useState('Todos')
-  const [condFiltro,   setCondFiltro]   = useState('Todos')
-  const [apenasRee,    setApenasRee]    = useState(false)
+  const [busca,          setBusca]          = useState('')
+  const [tipoFiltro,     setTipoFiltro]     = useState('Todos')
+  const [gradeFiltro,    setGradeFiltro]    = useState('Todos')
+  const [condFiltro,     setCondFiltro]     = useState('Todos')
+  const [bairroFiltro,   setBairroFiltro]   = useState('Todos')
+  const [municipioFiltro,setMunicipioFiltro]= useState('Todos')
+  const [rotaFiltro,     setRotaFiltro]     = useState('Todos')
+  const [apenasRee,      setApenasRee]      = useState(false)
+
+  function resetFiltros() {
+    setBusca(''); setTipoFiltro('Todos'); setGradeFiltro('Todos'); setCondFiltro('Todos')
+    setBairroFiltro('Todos'); setMunicipioFiltro('Todos'); setRotaFiltro('Todos')
+    setApenasRee(false); setPage(0)
+  }
+  const temFiltroAtivo = busca || tipoFiltro !== 'Todos' || gradeFiltro !== 'Todos' ||
+    condFiltro !== 'Todos' || bairroFiltro !== 'Todos' || municipioFiltro !== 'Todos' ||
+    rotaFiltro !== 'Todos' || apenasRee
+
+  const opBairros = useMemo(() => {
+    const s = new Set<string>()
+    for (const r of rows) { const v = r.bairro_dest ?? r.bairro; if (v) s.add(v) }
+    return Array.from(s).sort()
+  }, [rows])
+
+  const opMunicipios = useMemo(() => {
+    const s = new Set<string>()
+    for (const r of rows) { const v = r.municipio_dest ?? r.municipio; if (v) s.add(v) }
+    return Array.from(s).sort()
+  }, [rows])
+
+  const opRotas = useMemo(() => {
+    const s = new Set<string>()
+    for (const r of rows) { if (r.regiao) s.add(r.regiao) }
+    return Array.from(s).sort()
+  }, [rows])
 
   useEffect(() => {
     // Enquanto o SIAT está sendo importado, manter loading
@@ -136,6 +166,9 @@ export function NfsPendentesTable() {
       const q = busca.toLowerCase()
       if (
         !(row.destinatario ?? '').toLowerCase().includes(q) &&
+        !(row.remetente    ?? '').toLowerCase().includes(q) &&
+        !(row.bairro_dest  ?? row.bairro   ?? '').toLowerCase().includes(q) &&
+        !(row.municipio_dest ?? row.municipio ?? '').toLowerCase().includes(q) &&
         !String(row.n_nfs ?? '').includes(q)
       ) return false
     }
@@ -147,9 +180,30 @@ export function NfsPendentesTable() {
       if (condFiltro === 'Laranja'  && c !== 'laranja')  return false
       if (condFiltro === 'ok'       && c !== 'ok' && c !== '') return false
     }
+    if (bairroFiltro !== 'Todos') {
+      const b = row.bairro_dest ?? row.bairro ?? ''
+      if (b !== bairroFiltro) return false
+    }
+    if (municipioFiltro !== 'Todos') {
+      const m = row.municipio_dest ?? row.municipio ?? ''
+      if (m !== municipioFiltro) return false
+    }
+    if (rotaFiltro !== 'Todos' && (row.regiao ?? '') !== rotaFiltro) return false
     if (apenasRee && !row.reentrega) return false
     return true
   })
+
+  const kpi = useMemo(() => {
+    let peso = 0, vermelho = 0, laranja = 0
+    for (const r of filtered) {
+      peso += r.peso_bruto ?? r.peso_kg ?? 0
+      const c = (r.cond ?? '').toLowerCase()
+      if (c === 'vermelho') vermelho++
+      else if (c === 'laranja') laranja++
+    }
+    return { peso, vermelho, laranja }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtered.length, rows])
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
   const paginated  = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
@@ -171,13 +225,13 @@ export function NfsPendentesTable() {
         </div>
       </CardHeader>
 
-      {/* Filtros */}
+      {/* Filtros — linha 1 */}
       <div className="px-4 py-2.5 flex flex-wrap items-center gap-2 border-b border-[0.5px] border-[var(--border-faint)]">
-        <div className="flex-1 min-w-[160px] max-w-[220px]">
+        <div className="flex-1 min-w-[160px] max-w-[240px]">
           <TextInput
             value={busca}
             onChange={v => { setBusca(v); setPage(0) }}
-            placeholder="Buscar destinatário ou NF…"
+            placeholder="Buscar dest., bairro, município, NF…"
           />
         </div>
         <Select value={tipoFiltro} onChange={v => { setTipoFiltro(v); setPage(0) }}>
@@ -209,9 +263,58 @@ export function NfsPendentesTable() {
             onChange={e => { setApenasRee(e.target.checked); setPage(0) }}
             className="w-3.5 h-3.5 accent-primary"
           />
-          <span className="text-[11px] text-muted whitespace-nowrap">Apenas Reentregas</span>
+          <span className="text-[11px] text-muted whitespace-nowrap">Reentregas</span>
         </label>
       </div>
+
+      {/* Filtros — linha 2: Bairro, Município, Rota */}
+      <div className="px-4 py-2 flex flex-wrap items-center gap-2 border-b border-[0.5px] border-[var(--border-faint)] bg-page/50">
+        <Select value={bairroFiltro} onChange={v => { setBairroFiltro(v); setPage(0) }} className="min-w-[130px]">
+          <option value="Todos">Bairro</option>
+          {opBairros.map(b => <option key={b} value={b}>{b}</option>)}
+        </Select>
+        <Select value={municipioFiltro} onChange={v => { setMunicipioFiltro(v); setPage(0) }} className="min-w-[130px]">
+          <option value="Todos">Município</option>
+          {opMunicipios.map(m => <option key={m} value={m}>{m}</option>)}
+        </Select>
+        <Select value={rotaFiltro} onChange={v => { setRotaFiltro(v); setPage(0) }} className="min-w-[130px]">
+          <option value="Todos">Rota/Região</option>
+          {opRotas.map(r => <option key={r} value={r}>{r}</option>)}
+        </Select>
+        {temFiltroAtivo && (
+          <button
+            onClick={resetFiltros}
+            className="text-[11px] text-muted hover:text-danger transition-colors cursor-pointer bg-transparent border-none whitespace-nowrap ml-auto"
+          >
+            Limpar filtros
+          </button>
+        )}
+      </div>
+
+      {/* KPI strip — totais reativos */}
+      {!loading && filtered.length > 0 && (
+        <div className="px-4 py-2 flex items-center gap-4 border-b border-[0.5px] border-[var(--border-faint)] bg-cream/50 flex-wrap">
+          <span className="text-[11px] text-mid font-medium">{filtered.length} NFs</span>
+          <span className="text-[10px] text-muted">
+            Peso: <span className="font-medium text-mid">{(kpi.peso / 1000).toFixed(2)} t</span>
+          </span>
+          {kpi.vermelho > 0 && (
+            <span className="text-[10px] text-danger font-medium">
+              {kpi.vermelho} vermelho{kpi.vermelho > 1 ? 's' : ''}
+            </span>
+          )}
+          {kpi.laranja > 0 && (
+            <span className="text-[10px] text-warn font-medium">
+              {kpi.laranja} laranja{kpi.laranja > 1 ? 's' : ''}
+            </span>
+          )}
+          {filtered.length < rows.length && (
+            <span className="text-[10px] text-subtle ml-auto">
+              {rows.length - filtered.length} ocultas por filtro
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Tabela */}
       <div className="overflow-x-auto">
