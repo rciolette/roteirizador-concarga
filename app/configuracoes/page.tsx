@@ -106,6 +106,16 @@ export default function ConfiguracoesPage() {
     initialRender.current = true
   }
 
+  function handleRestaurarPadrao() {
+    setCfg(DEFAULT_CONFIG)
+    setGlobalConfig(DEFAULT_CONFIG)
+    salvarConfig(DEFAULT_CONFIG)
+    setHasChanges(false)
+    initialRender.current = true
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2000)
+  }
+
   function handleSave() {
     setGlobalConfig(cfg)
     salvarConfig(cfg)
@@ -121,6 +131,9 @@ export default function ConfiguracoesPage() {
       <div className="sticky top-0 z-10">
         <Topbar title="Configurações" sub="Conexão, regras, frota e instruções da IA">
           <ImportarSIATButton onClick={() => setImportDialog(true)} running={nfImportState.running} label="Importar NFs" loadingLabel="Importando..." />
+          <Btn onClick={handleRestaurarPadrao}>
+            Restaurar padrões
+          </Btn>
           <Btn variant="primary" onClick={handleSave}>
             {saved ? '✓ Salvo!' : 'Salvar configurações'}
           </Btn>
