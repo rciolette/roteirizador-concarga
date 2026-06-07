@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { getSupabaseBrowser } from '@/lib/supabase-browser'
 import { cn } from '@/lib/utils'
 import { Btn, Card, CardHeader, TextInput, Select } from '@/components/ui'
@@ -88,12 +88,40 @@ function TipoBadge({ tipo }: { tipo: string | null | undefined }) {
   return <span className={cn('text-[10px] px-1.5 py-px rounded-full font-medium', cls)}>{tipo}</span>
 }
 
+type CondPriority = 0 | 1 | 2
+function condPriority(cond: string | null | undefined): CondPriority {
+  const c = (cond ?? '').toLowerCase()
+  if (c === 'vermelho') return 2
+  if (c === 'laranja')  return 1
+  return 0
+}
+function condFromPriority(p: CondPriority): string {
+  if (p === 2) return 'vermelho'
+  if (p === 1) return 'laranja'
+  return 'ok'
+}
+
+type RowDestinatario = {
+  key: string
+  destinatario: string
+  bairro: string
+  municipio: string
+  tipo_cliente: string
+  cond: string
+  qtdNfs: number
+  pesoTotal: number
+  temRee: boolean
+  temSac: boolean
+  placa: string
+}
+
 export function NfsPendentesTable() {
   const { nfsPendentes, nfImportState } = useAppData()
 
   const [rows,    setRows]    = useState<NfRow[]>([])
   const [loading, setLoading] = useState(true)
   const [page,    setPage]    = useState(0)
+  const [vista,        setVista]        = useState<'nfs' | 'destinatario'>('nfs')
   const [busca,        setBusca]        = useState('')
   const [tipoFiltro,   setTipoFiltro]   = useState('Todos')
   const [gradeFiltro,  setGradeFiltro]  = useState('Todos')
@@ -151,6 +179,44 @@ export function NfsPendentesTable() {
     return true
   })
 
+  const rowsDestinatario = useMemo<RowDestinatario[]>(() => {
+    const map = new Map<string, RowDestinatario>()
+    for (const row of filtered) {
+      const dest  = row.destinatario ?? '—'
+      const bairro = row.bairro_dest ?? row.bairro ?? '—'
+      const mun   = row.municipio_dest ?? row.municipio ?? '—'
+      const key   = `${dest}|${bairro}|${mun}`.toLowerCase()
+      const peso  = row.peso_bruto ?? row.peso_kg ?? 0
+      const existing = map.get(key)
+      if (existing) {
+        existing.qtdNfs++
+        existing.pesoTotal += peso
+        const p = condPriority(row.cond)
+        if (p > condPriority(existing.cond)) existing.cond = condFromPriority(p)
+        if (row.reentrega) existing.temRee = true
+        if (row.sac != null && Number(row.sac) > 0) existing.temSac = true
+        if (existing.placa !== (row.placa ?? '—') && existing.placa !== 'Múltiplas') {
+          existing.placa = 'Múltiplas'
+        }
+      } else {
+        map.set(key, {
+          key,
+          destinatario:  dest,
+          bairro,
+          municipio:     mun,
+          tipo_cliente:  row.tipo_cliente ?? '—',
+          cond:          condFromPriority(condPriority(row.cond)),
+          qtdNfs:        1,
+          pesoTotal:     peso,
+          temRee:        !!row.reentrega,
+          temSac:        row.sac != null && Number(row.sac) > 0,
+          placa:         row.placa ?? '—',
+        })
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => condPriority(b.cond) - condPriority(a.cond))
+  }, [filtered])
+
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
   const paginated  = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
   const hoje = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
@@ -161,13 +227,39 @@ export function NfsPendentesTable() {
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <span className="text-xs font-medium">Notas fiscais pendentes — {hoje}</span>
           {!loading && (
             <span className="text-[10px] px-2 py-0.5 rounded-full bg-cream text-muted font-medium">
-              {filtered.length} NFs
+              {vista === 'nfs'
+                ? `${filtered.length} NFs`
+                : `${rowsDestinatario.length} destinatários · ${filtered.length} NFs`}
             </span>
           )}
+          <div className="ml-auto flex rounded-md overflow-hidden border border-[var(--border-subtle)]">
+            <button
+              onClick={() => setVista('nfs')}
+              className={cn(
+                'px-2.5 py-1 text-[11px] font-medium transition-colors',
+                vista === 'nfs'
+                  ? 'bg-primary text-white'
+                  : 'bg-white dark:bg-[#1E1E1C] text-muted hover:bg-page'
+              )}
+            >
+              Por NF
+            </button>
+            <button
+              onClick={() => setVista('destinatario')}
+              className={cn(
+                'px-2.5 py-1 text-[11px] font-medium border-l border-[var(--border-subtle)] transition-colors',
+                vista === 'destinatario'
+                  ? 'bg-primary text-white'
+                  : 'bg-white dark:bg-[#1E1E1C] text-muted hover:bg-page'
+              )}
+            >
+              Por destinatário
+            </button>
+          </div>
         </div>
       </CardHeader>
 
@@ -228,7 +320,62 @@ export function NfsPendentesTable() {
               ? 'Nenhuma NF pendente encontrada. Importe o SIAT para carregar as notas do dia.'
               : 'Nenhuma NF corresponde aos filtros selecionados.'}
           </div>
+        ) : vista === 'destinatario' ? (
+          /* ── Vista consolidada por destinatário (equivalente aba "Resumo") ── */
+          <table className="w-full border-collapse">
+            <thead>
+              <tr>
+                <th className={thCls}>Destinatário</th>
+                <th className={thCls}>Bairro</th>
+                <th className={thCls}>Município</th>
+                <th className={thCls}>Tipo</th>
+                <th className={thCls}>COND</th>
+                <th className={cn(thCls, 'text-right')}>NFs</th>
+                <th className={cn(thCls, 'text-right')}>Peso total (kg)</th>
+                <th className={thCls}>Placa</th>
+                <th className={thCls}>Ree</th>
+                <th className={thCls}>SAC</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rowsDestinatario.map((row, i) => (
+                <tr key={row.key} className={i % 2 === 0 ? 'bg-white dark:bg-[#1E1E1C]' : 'bg-page'}>
+                  <td className={cn(tdCls, 'max-w-[200px] truncate font-medium')} title={row.destinatario}>{row.destinatario}</td>
+                  <td className={cn(tdCls, 'max-w-[120px] truncate text-muted')}>{row.bairro}</td>
+                  <td className={cn(tdCls, 'whitespace-nowrap text-muted')}>{row.municipio}</td>
+                  <td className={tdCls}><TipoBadge tipo={row.tipo_cliente} /></td>
+                  <td className={tdCls}><CondBadge cond={row.cond} /></td>
+                  <td className={cn(tdCls, 'text-right tabular-nums font-medium')}>{row.qtdNfs}</td>
+                  <td className={cn(tdCls, 'text-right tabular-nums')}>{row.pesoTotal.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</td>
+                  <td className={cn(tdCls, 'font-mono text-[10px] whitespace-nowrap')}>{row.placa}</td>
+                  <td className={cn(tdCls, 'text-center')}>
+                    {row.temRee && <span className="text-warn text-sm" title="Reentrega">↩</span>}
+                  </td>
+                  <td className={tdCls}>
+                    {row.temSac && (
+                      <span className="text-[10px] px-1.5 py-px rounded-full font-medium bg-warn-bg text-warn">SAC</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="border-t border-[var(--border-subtle)] bg-cream">
+                <td colSpan={5} className={cn(tdCls, 'font-medium text-muted')}>
+                  {rowsDestinatario.length} destinatários
+                </td>
+                <td className={cn(tdCls, 'text-right font-medium tabular-nums')}>
+                  {filtered.length}
+                </td>
+                <td className={cn(tdCls, 'text-right font-medium tabular-nums')}>
+                  {rowsDestinatario.reduce((s, r) => s + r.pesoTotal, 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}
+                </td>
+                <td colSpan={3} />
+              </tr>
+            </tfoot>
+          </table>
         ) : (
+          /* ── Vista padrão por NF ── */
           <table className="w-full border-collapse">
             <thead>
               <tr>
@@ -284,8 +431,8 @@ export function NfsPendentesTable() {
         )}
       </div>
 
-      {/* Paginação */}
-      {totalPages > 1 && (
+      {/* Paginação — só na vista por NF */}
+      {vista === 'nfs' && totalPages > 1 && (
         <div className="flex items-center justify-between px-4 py-2.5 border-t border-[0.5px] border-[var(--border-faint)]">
           <span className="text-[11px] text-muted">
             {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, filtered.length)} de {filtered.length}
