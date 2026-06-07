@@ -13,7 +13,7 @@ import { SiatImportDialog } from '@/components/ui/SiatImportDialog'
 import { webhookGerarRotas, mapRetornoGerarRotas, salvarRotasSupabase, salvarNfsNaoAlocadas, atualizarStatusRota, webhookEnviarMotorista, Prioridade, MotoristaPayload, VeiculoDisponivel } from '@/lib/webhooks'
 import { derivarCond } from '@/lib/siat'
 import type { SiatRow } from '@/lib/siat'
-import type { Veiculo, Motorista } from '@/types'
+import type { Veiculo, Motorista, NotaFiscal } from '@/types'
 import { cn, formatPeso } from '@/lib/utils'
 import { useCopyToClipboard } from '@/lib/hooks'
 import { useAppData } from '@/components/providers/AppDataProvider'
@@ -277,6 +277,43 @@ function GerarRotasDialog({ onClose, onConfirm, motoristas, veiculos }: {
   )
 }
 
+// ── Google Maps multi-parada ──────────────────────────────────────────────────
+function enderecoMaps(nf: NotaFiscal): string {
+  const parts: string[] = []
+  if (nf.endereco && nf.endereco !== '—') parts.push(nf.endereco)
+  if (nf.bairro   && nf.bairro   !== '—') parts.push(nf.bairro)
+  if (nf.municipio && nf.municipio !== '—') parts.push(nf.municipio)
+  parts.push('MG')
+  return parts.join(', ')
+}
+
+function priNF(nf: NotaFiscal, hoje: string): number {
+  if (nf.dataAgendamento && nf.dataAgendamento <= hoje) return 0
+  if (nf.sac || nf.indRee) return 1
+  if (nf.cond === 'vermelho') return 2
+  if (nf.cond === 'laranja')  return 3
+  return 4
+}
+
+function gerarLinkMapsLocal(nfs: NotaFiscal[]): string | null {
+  if (!nfs.length) return null
+  const hoje = new Date().toISOString().slice(0, 10)
+  const sorted = [...nfs].sort((a, b) => {
+    const d = priNF(a, hoje) - priNF(b, hoje)
+    if (d !== 0) return d
+    return a.dataEmissao.localeCompare(b.dataEmissao)
+  })
+  const seen = new Set<string>()
+  const stops: string[] = []
+  for (const nf of sorted) {
+    const addr = enderecoMaps(nf)
+    if (!seen.has(addr)) { seen.add(addr); stops.push(addr) }
+  }
+  const sliced = stops.slice(0, 25)
+  if (!sliced.length) return null
+  return 'https://www.google.com/maps/dir/' + sliced.map(encodeURIComponent).join('/')
+}
+
 // ── Route Card ────────────────────────────────────────────────────────────────
 const AVATAR_CLS = [
   'bg-primary-bg text-primary-dark',
@@ -293,6 +330,7 @@ function RouteCard({ rota, onUpdateStatus, onAskConfirm }: {
 }) {
   const [expanded, setExpanded] = useState(false)
   const { copied, copy } = useCopyToClipboard()
+  const mapsLink    = rota.linkMaps || (rota.notasFiscais.length > 0 ? gerarLinkMapsLocal(rota.notasFiscais) : null)
   const capacidade  = rota.veiculo?.capacidadeKg || 1500
   const pct         = rota.ocupacaoPercent ?? Math.min(100, Math.round((rota.pesoTotal / capacidade) * 100))
   const barColor    = pct >= 95 ? 'bg-danger-mid' : pct >= 80 ? 'bg-warn-mid' : 'bg-primary'
@@ -454,13 +492,13 @@ function RouteCard({ rota, onUpdateStatus, onAskConfirm }: {
           )}
 
           <div className="flex gap-1.5 mt-3 pt-2.5 border-t border-[0.5px] border-[var(--border-subtle)] flex-wrap">
-            {(rota.status === 'aprovada' || rota.status === 'enviada') && (
-              <Btn size="sm" onClick={() => rota.linkMaps && window.open(rota.linkMaps, '_blank')} disabled={!rota.linkMaps}>
+            {mapsLink && (
+              <Btn size="sm" onClick={() => window.open(mapsLink, '_blank')}>
                 <svg className="w-[11px] h-[11px]" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
                   <path d="M8 2C5.8 2 4 3.8 4 6c0 3.3 4 8 4 8s4-4.7 4-8c0-2.2-1.8-4-4-4z"/>
                   <circle cx="8" cy="6" r="1.5"/>
                 </svg>
-                Ver mapa
+                {rota.linkMaps ? 'Ver mapa (IA)' : `Ver mapa (${rota.notasFiscais.length} paradas)`}
               </Btn>
             )}
             {rota.status === 'enviada' && rota.nfsConcatenadas && (
