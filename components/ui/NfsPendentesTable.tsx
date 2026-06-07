@@ -26,6 +26,18 @@ interface NfRow {
   reentrega: boolean | null
   sac: string | number | null
   regiao: string | null
+  data_emissao: string | null
+  data_agendamento: string | null
+  hora_agendamento: string | null
+  qtd_caixas: number | null
+  valor: number | null
+}
+
+function fmtData(iso: string | null | undefined): string {
+  if (!iso || iso === '—') return '—'
+  const parts = iso.split('-')
+  if (parts.length < 3) return iso
+  return `${parts[2]}/${parts[1]}`
 }
 
 function CondBadge({ cond }: { cond: string | null | undefined }) {
@@ -55,23 +67,28 @@ function CondBadge({ cond }: { cond: string | null | undefined }) {
 
 function nfToRow(nf: NotaFiscal): NfRow {
   return {
-    id:            nf.id,
-    n_nfs:         parseInt(nf.numnfs, 10) || null,
-    remetente:     null,
-    destinatario:  nf.destinatario,
-    bairro_dest:   nf.bairro   !== '—' ? nf.bairro   : null,
-    bairro:        nf.bairro   !== '—' ? nf.bairro   : null,
-    municipio_dest: nf.municipio !== '—' ? nf.municipio : null,
-    municipio:     nf.municipio !== '—' ? nf.municipio : null,
-    tipo_cliente:  nf.tipoCliente,
-    peso_bruto:    nf.peso,
-    peso_kg:       nf.peso,
-    cond:          nf.cond,
-    grade:         nf.grade && nf.grade !== '—' ? nf.grade : null,
-    placa:         null,
-    reentrega:     nf.indRee,
-    sac:           nf.sac ?? null,
-    regiao:        nf.rota && nf.rota !== '—' ? nf.rota : null,
+    id:               nf.id,
+    n_nfs:            parseInt(nf.numnfs, 10) || null,
+    remetente:        null,
+    destinatario:     nf.destinatario,
+    bairro_dest:      nf.bairro   !== '—' ? nf.bairro   : null,
+    bairro:           nf.bairro   !== '—' ? nf.bairro   : null,
+    municipio_dest:   nf.municipio !== '—' ? nf.municipio : null,
+    municipio:        nf.municipio !== '—' ? nf.municipio : null,
+    tipo_cliente:     nf.tipoCliente,
+    peso_bruto:       nf.peso,
+    peso_kg:          nf.peso,
+    cond:             nf.cond,
+    grade:            nf.grade && nf.grade !== '—' ? nf.grade : null,
+    placa:            null,
+    reentrega:        nf.indRee,
+    sac:              nf.sac ?? null,
+    regiao:           nf.rota && nf.rota !== '—' ? nf.rota : null,
+    data_emissao:     nf.dataEmissao !== '—' ? nf.dataEmissao : null,
+    data_agendamento: nf.dataAgendamento ?? null,
+    hora_agendamento: nf.horaAgendamento ?? null,
+    qtd_caixas:       nf.qtd ?? null,
+    valor:            nf.valor ?? null,
   }
 }
 
@@ -245,6 +262,11 @@ export function NfsPendentesTable() {
                 <th className={thCls}>Placa</th>
                 <th className={thCls}>Ree</th>
                 <th className={thCls}>SAC</th>
+                <th className={cn(thCls, 'text-right')}>Dt Emissão</th>
+                <th className={cn(thCls, 'text-right')}>Dt Agend</th>
+                <th className={thCls}>Hr Agend</th>
+                <th className={cn(thCls, 'text-right')}>Qtd cx</th>
+                <th className={cn(thCls, 'text-right')}>Valor (R$)</th>
               </tr>
             </thead>
             <tbody>
@@ -276,6 +298,19 @@ export function NfsPendentesTable() {
                         {row.sac}
                       </span>
                     )}
+                  </td>
+                  <td className={cn(tdCls, 'tabular-nums text-right text-muted whitespace-nowrap')}>{fmtData(row.data_emissao)}</td>
+                  <td className={cn(tdCls, 'tabular-nums text-right whitespace-nowrap', row.data_agendamento ? 'font-medium text-primary-dark' : 'text-muted')}>
+                    {fmtData(row.data_agendamento)}
+                  </td>
+                  <td className={cn(tdCls, 'tabular-nums whitespace-nowrap text-muted font-mono text-[10px]')}>
+                    {row.hora_agendamento ? row.hora_agendamento.slice(0, 5) : '—'}
+                  </td>
+                  <td className={cn(tdCls, 'tabular-nums text-right text-muted')}>{row.qtd_caixas ?? '—'}</td>
+                  <td className={cn(tdCls, 'tabular-nums text-right whitespace-nowrap text-muted')}>
+                    {row.valor != null
+                      ? row.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                      : '—'}
                   </td>
                 </tr>
               ))}
