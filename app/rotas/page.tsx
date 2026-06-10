@@ -296,7 +296,7 @@ function priNF(nf: NotaFiscal, hoje: string): number {
   return 4
 }
 
-function gerarLinkMapsLocal(nfs: NotaFiscal[]): string | null {
+function gerarLinkMapsLocal(nfs: NotaFiscal[], enderecoOrigem?: string | null): string | null {
   if (!nfs.length) return null
   const hoje = new Date().toISOString().slice(0, 10)
   const sorted = [...nfs].sort((a, b) => {
@@ -310,9 +310,12 @@ function gerarLinkMapsLocal(nfs: NotaFiscal[]): string | null {
     const addr = enderecoMaps(nf)
     if (!seen.has(addr)) { seen.add(addr); stops.push(addr) }
   }
-  const sliced = stops.slice(0, 25)
+  // máx 25 paradas; se houver origem, ela consome 1 slot
+  const maxParadas = enderecoOrigem ? 24 : 25
+  const sliced = stops.slice(0, maxParadas)
   if (!sliced.length) return null
-  return 'https://www.google.com/maps/dir/' + sliced.map(encodeURIComponent).join('/')
+  const pontos = enderecoOrigem ? [enderecoOrigem, ...sliced] : sliced
+  return 'https://www.google.com/maps/dir/' + pontos.map(encodeURIComponent).join('/')
 }
 
 // ── Route Card ────────────────────────────────────────────────────────────────
@@ -324,14 +327,15 @@ const AVATAR_CLS = [
   'bg-warn-bg text-warn',
 ]
 
-function RouteCard({ rota, onUpdateStatus, onAskConfirm }: {
+function RouteCard({ rota, onUpdateStatus, onAskConfirm, enderecoOrigem }: {
   rota: Rota
   onUpdateStatus: (id: string, status: RouteStatus) => void
   onAskConfirm: (action: ConfirmAction, execute: () => void) => void
+  enderecoOrigem?: string | null
 }) {
   const [expanded, setExpanded] = useState(false)
   const { copied, copy } = useCopyToClipboard()
-  const mapsLink    = rota.linkMaps || (rota.notasFiscais.length > 0 ? gerarLinkMapsLocal(rota.notasFiscais) : null)
+  const mapsLink    = rota.linkMaps || (rota.notasFiscais.length > 0 ? gerarLinkMapsLocal(rota.notasFiscais, enderecoOrigem) : null)
   const capacidade  = rota.veiculo?.capacidadeKg || 1500
   const pct         = rota.ocupacaoPercent ?? Math.min(100, Math.round((rota.pesoTotal / capacidade) * 100))
   const barColor    = pct >= 95 ? 'bg-danger-mid' : pct >= 80 ? 'bg-warn-mid' : 'bg-primary'
@@ -488,7 +492,7 @@ function RouteCard({ rota, onUpdateStatus, onAskConfirm }: {
 
           {rota.notasFiscais.length > 0 && (
             <div className="mt-3">
-              <MapaRota nfs={rota.notasFiscais} height="260px" />
+              <MapaRota nfs={rota.notasFiscais} height="260px" originAddress={enderecoOrigem ?? undefined} />
             </div>
           )}
 
@@ -658,6 +662,19 @@ export default function RotasPage() {
   const [log,            setLog]            = useState<LogEntry[]>([])
   const [pendingConfirm, setPendingConfirm] = useState<{ action: ConfirmAction; execute: () => void } | null>(null)
   const [importDialog,   setImportDialog]   = useState(false)
+  const [enderecoOrigem, setEnderecoOrigem] = useState<string | null>(null)
+
+  useEffect(() => {
+    fetch('/api/empresa')
+      .then(r => r.json())
+      .then(d => {
+        const e = d.empresa
+        if (!e) return
+        const partes = [e.endereco, e.cidade, e.uf].filter(Boolean)
+        if (partes.length) setEnderecoOrigem(partes.join(', '))
+      })
+      .catch(() => {})
+  }, [])
 
   const summary = nfImportState.summary
   const importResult = summary
@@ -921,6 +938,7 @@ export default function RotasPage() {
               rota={rota}
               onUpdateStatus={updateRouteStatus}
               onAskConfirm={(action, execute) => setPendingConfirm({ action, execute })}
+              enderecoOrigem={enderecoOrigem}
             />
           ))}
         </div>

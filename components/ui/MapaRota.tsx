@@ -20,9 +20,10 @@ export interface MapaRotaProps {
   nfs: NotaFiscal[]
   height?: string
   className?: string
+  originAddress?: string
 }
 
-export function MapaRota({ nfs, height = '280px', className }: MapaRotaProps) {
+export function MapaRota({ nfs, height = '280px', className, originAddress }: MapaRotaProps) {
   if (!API_KEY) {
     return (
       <div
@@ -45,10 +46,10 @@ export function MapaRota({ nfs, height = '280px', className }: MapaRotaProps) {
 
   if (nfs.length === 0) return null
 
-  return <MapaRotaInner nfs={nfs.slice(0, MAX_PINS)} height={height} className={className} />
+  return <MapaRotaInner nfs={nfs.slice(0, MAX_PINS)} height={height} className={className} originAddress={originAddress} />
 }
 
-function MapaRotaInner({ nfs, height = '280px', className }: MapaRotaProps) {
+function MapaRotaInner({ nfs, height = '280px', className, originAddress }: MapaRotaProps) {
   const { isLoaded, loadError } = useJsApiLoader({
     id: 'google-map-script',
     googleMapsApiKey: API_KEY,
@@ -56,33 +57,32 @@ function MapaRotaInner({ nfs, height = '280px', className }: MapaRotaProps) {
   })
 
   const mapRef = useRef<google.maps.Map | null>(null)
-  const [coords, setCoords]       = useState<(LatLng | null)[]>([])
-  const [geocoding, setGeocoding] = useState(false)
-  const [directions, setDirections] = useState<google.maps.DirectionsResult | null>(null)
-  const [activePin, setActivePin] = useState<number | null>(null)
+  const [coords, setCoords]           = useState<(LatLng | null)[]>([])
+  const [originCoord, setOriginCoord] = useState<LatLng | null>(null)
+  const [geocoding, setGeocoding]     = useState(false)
+  const [directions, setDirections]   = useState<google.maps.DirectionsResult | null>(null)
+  const [activePin, setActivePin]     = useState<number | null>(null)
 
   const onLoad    = useCallback((map: google.maps.Map) => { mapRef.current = map }, [])
   const onUnmount = useCallback(() => { mapRef.current = null }, [])
 
-  // Geocodifica endereços usando municipio + bairro + cep (com cache de sessão)
+  // Geocodifica endereços das NFs + endereço de origem (CD)
   useEffect(() => {
     if (!isLoaded || nfs.length === 0) return
 
     setGeocoding(true)
     setCoords([])
+    setOriginCoord(null)
     setDirections(null)
     setActivePin(null)
 
     const geocoder = new google.maps.Geocoder()
 
-    const promises = nfs.map(nf => {
-      const address = [nf.municipio, nf.bairro, nf.cep].filter(Boolean).join(', ')
-
+    function geocodeAddress(address: string): Promise<LatLng | null> {
       if (geocodeCache.has(address)) {
         const cached = geocodeCache.get(address)
         return Promise.resolve(cached ?? null)
       }
-
       return new Promise<LatLng | null>(resolve => {
         geocoder.geocode({ address }, (results, status) => {
           if (status === 'OK' && results?.[0]) {
@@ -96,40 +96,52 @@ function MapaRotaInner({ nfs, height = '280px', className }: MapaRotaProps) {
           }
         })
       })
+    }
+
+    const nfPromises = nfs.map(nf => {
+      const address = [nf.municipio, nf.bairro, nf.cep].filter(Boolean).join(', ')
+      return geocodeAddress(address)
     })
 
-    Promise.all(promises).then(results => {
-      setCoords(results)
+    const originPromise = originAddress ? geocodeAddress(originAddress) : Promise.resolve(null)
+
+    Promise.all([originPromise, Promise.all(nfPromises)]).then(([origCoord, nfCoords]) => {
+      setOriginCoord(origCoord)
+      setCoords(nfCoords)
       setGeocoding(false)
 
-      const valid = results.filter((c): c is LatLng => c !== null)
-      if (valid.length > 0 && mapRef.current) {
+      const allValid: LatLng[] = []
+      if (origCoord) allValid.push(origCoord)
+      nfCoords.forEach(c => { if (c) allValid.push(c) })
+
+      if (allValid.length > 0 && mapRef.current) {
         const bounds = new google.maps.LatLngBounds()
-        valid.forEach(c => bounds.extend(c))
+        allValid.forEach(c => bounds.extend(c))
         mapRef.current.fitBounds(bounds, 48)
       }
     })
-  }, [isLoaded, nfs])
+  }, [isLoaded, nfs, originAddress])
 
-  // Traça rota (silencioso se a chave não tiver permissão para Directions API)
+  // Traça rota — usa originCoord como ponto de partida quando disponível
   useEffect(() => {
-    const valid = coords.filter((c): c is LatLng => c !== null)
-    if (!isLoaded || valid.length < 2) return
+    const validNfs   = coords.filter((c): c is LatLng => c !== null)
+    const allPoints  = originCoord ? [originCoord, ...validNfs] : validNfs
+    if (!isLoaded || allPoints.length < 2) return
 
     const service = new google.maps.DirectionsService()
     service.route(
       {
-        origin:           valid[0],
-        destination:      valid[valid.length - 1],
-        waypoints:        valid.slice(1, -1).slice(0, 23).map(loc => ({ location: loc, stopover: true })),
-        travelMode:       google.maps.TravelMode.DRIVING,
+        origin:            allPoints[0],
+        destination:       allPoints[allPoints.length - 1],
+        waypoints:         allPoints.slice(1, -1).slice(0, 23).map(loc => ({ location: loc, stopover: true })),
+        travelMode:        google.maps.TravelMode.DRIVING,
         optimizeWaypoints: false,
       },
       (result, status) => {
         if (status === 'OK' && result) setDirections(result)
       },
     )
-  }, [isLoaded, coords])
+  }, [isLoaded, coords, originCoord])
 
   // ── Skeleton enquanto carrega API ou geocodifica ───────────────────────────
   if (loadError) {
@@ -179,6 +191,22 @@ function MapaRotaInner({ nfs, height = '280px', className }: MapaRotaProps) {
         {/* Polyline da rota — sem os markers padrão A/B/C */}
         {directions && (
           <DirectionsRenderer directions={directions} options={{ suppressMarkers: true }} />
+        )}
+
+        {/* Marcador de origem (CD) */}
+        {originCoord && (
+          <Marker
+            position={originCoord}
+            label={{ text: 'CD', color: 'white', fontWeight: 'bold', fontSize: '10px' }}
+            icon={{
+              path: google.maps.SymbolPath.CIRCLE,
+              scale: 14,
+              fillColor: '#1B4F8A',
+              fillOpacity: 1,
+              strokeColor: '#ffffff',
+              strokeWeight: 2,
+            }}
+          />
         )}
 
         {/* Markers numerados: coords[i] pode ser null se geocodificação falhou */}
