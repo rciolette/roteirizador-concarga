@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { queryVeiculosDisponiveis } from '@/lib/siat-db'
+import type { SiatRow } from '@/lib/siat'
 
 function getAdminSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -24,7 +25,61 @@ function chunked<T>(arr: T[], size: number): T[][] {
   return result
 }
 
-export async function syncFrotaDoSiat(): Promise<{ motoristas: number; veiculos: number }> {
+// Verifica se a situação SIAT indica veículo disponível (não em manutenção/bloqueado).
+function situacaoEhDisponivel(sit: string | null | undefined): boolean {
+  if (!sit) return true
+  const s = String(sit).toUpperCase()
+  return !s.includes('MANUT') && !s.includes('MANUTENÇÃO') &&
+         !s.includes('INDISPON') && !s.includes('BLOQ') && !s.includes('INATIV')
+}
+
+// Seed da tabela veiculo_disponibilidade com sugestão do SIAT para hoje.
+// ignoreDuplicates=true: preserva confirmações feitas pelo operador (origem='operador').
+export async function seedDisponibilidadeHoje(
+  rows: SiatRow[],
+  adminClient?: ReturnType<typeof getAdminSupabase>,
+): Promise<number> {
+  const admin = adminClient ?? getAdminSupabase()
+  const hoje = new Date().toISOString().slice(0, 10)
+
+  const placasDisp = rows
+    .filter(r => r.Placa && situacaoEhDisponivel(r.Situacao))
+    .map(r => String(r.Placa!).trim().toUpperCase())
+
+  if (placasDisp.length === 0) return 0
+
+  // Buscar IDs dos veículos pelas placas
+  const { data: veics } = await admin
+    .from('veiculos')
+    .select('id, placa')
+    .in('placa', placasDisp)
+
+  const placaToId = new Map<string, string>()
+  for (const v of veics ?? []) placaToId.set(v.placa as string, v.id as string)
+
+  const payload = placasDisp
+    .map(placa => {
+      const veiculoId = placaToId.get(placa)
+      if (!veiculoId) return null
+      return { veiculo_id: veiculoId, data: hoje, disponivel: true, origem: 'siat_sugerido' as const }
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null)
+
+  if (payload.length === 0) return 0
+
+  // ignoreDuplicates preserva registros com origem='operador' já existentes
+  const { error } = await admin.from('veiculo_disponibilidade')
+    .upsert(payload, { onConflict: 'veiculo_id,data', ignoreDuplicates: true })
+  if (error) throw new Error(`Seed disponibilidade: ${error.message}`)
+
+  // Sincroniza cache em veiculos
+  const ids = payload.map(p => p.veiculo_id)
+  await admin.from('veiculos').update({ disponivel_hoje: true }).in('id', ids)
+
+  return payload.length
+}
+
+export async function syncFrotaDoSiat(): Promise<{ motoristas: number; veiculos: number; disponibilidade: number }> {
   const rows = await queryVeiculosDisponiveis()
   const admin = getAdminSupabase()
 
@@ -71,7 +126,7 @@ export async function syncFrotaDoSiat(): Promise<{ motoristas: number; veiculos:
     }
   }
 
-  // 4. Upsert veículos em lotes
+  // 4. Upsert veículos em lotes (INNER JOIN garante que rows já têm motorista)
   const veiculosPayload = rows
     .filter(r => r.Placa)
     .map(row => {
@@ -89,6 +144,7 @@ export async function syncFrotaDoSiat(): Promise<{ motoristas: number; veiculos:
         codigo_siat_motorista: cod,
         motorista_id:          cod ? (motoristaIdMap.get(cod) ?? null) : null,
         ativo:                 true,
+        updated_at:            new Date().toISOString(),
       }
     })
 
@@ -99,5 +155,8 @@ export async function syncFrotaDoSiat(): Promise<{ motoristas: number; veiculos:
     if (error) throw new Error(`Erro ao sincronizar veículos: ${error.message}`)
   }
 
-  return { motoristas: motoristasPayload.length, veiculos: veiculosPayload.length }
+  // 5. Seed disponibilidade do dia com sugestão do SIAT
+  const disponibilidade = await seedDisponibilidadeHoje(rows, admin)
+
+  return { motoristas: motoristasPayload.length, veiculos: veiculosPayload.length, disponibilidade }
 }
