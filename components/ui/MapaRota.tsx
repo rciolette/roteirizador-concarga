@@ -4,25 +4,21 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { GoogleMap, useJsApiLoader, Marker, InfoWindow, DirectionsRenderer } from '@react-google-maps/api'
 import type { NotaFiscal } from '@/types'
 import { cn } from '@/lib/utils'
+import { geocodeMany, addrKey, type LatLng } from '@/lib/geocode'
 
-const API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? ''
-// Fora do componente para evitar recarregamento da API a cada render
+const API_KEY   = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? ''
 const LIBRARIES: ('places' | 'geometry')[] = []
 const BH_CENTER = { lat: -19.9167, lng: -43.9345 }
-const MAX_PINS = 25
-
-// Cache de sessão: evita chamadas repetidas à Geocoding API para o mesmo endereço
-const geocodeCache = new Map<string, { lat: number; lng: number } | null>()
-
-interface LatLng { lat: number; lng: number }
+const MAX_PINS  = 25
 
 export interface MapaRotaProps {
   nfs: NotaFiscal[]
   height?: string
   className?: string
+  originAddress?: string
 }
 
-export function MapaRota({ nfs, height = '280px', className }: MapaRotaProps) {
+export function MapaRota({ nfs, height = '280px', className, originAddress }: MapaRotaProps) {
   if (!API_KEY) {
     return (
       <div
@@ -45,10 +41,10 @@ export function MapaRota({ nfs, height = '280px', className }: MapaRotaProps) {
 
   if (nfs.length === 0) return null
 
-  return <MapaRotaInner nfs={nfs.slice(0, MAX_PINS)} height={height} className={className} />
+  return <MapaRotaInner nfs={nfs.slice(0, MAX_PINS)} height={height} className={className} originAddress={originAddress} />
 }
 
-function MapaRotaInner({ nfs, height = '280px', className }: MapaRotaProps) {
+function MapaRotaInner({ nfs, height = '280px', className, originAddress }: MapaRotaProps) {
   const { isLoaded, loadError } = useJsApiLoader({
     id: 'google-map-script',
     googleMapsApiKey: API_KEY,
@@ -56,80 +52,68 @@ function MapaRotaInner({ nfs, height = '280px', className }: MapaRotaProps) {
   })
 
   const mapRef = useRef<google.maps.Map | null>(null)
-  const [coords, setCoords]       = useState<(LatLng | null)[]>([])
-  const [geocoding, setGeocoding] = useState(false)
-  const [directions, setDirections] = useState<google.maps.DirectionsResult | null>(null)
-  const [activePin, setActivePin] = useState<number | null>(null)
+  const [coords, setCoords]           = useState<(LatLng | null)[]>([])
+  const [originCoord, setOriginCoord] = useState<LatLng | null>(null)
+  const [geocoding, setGeocoding]     = useState(false)
+  const [directions, setDirections]   = useState<google.maps.DirectionsResult | null>(null)
+  const [activePin, setActivePin]     = useState<number | null>(null)
 
   const onLoad    = useCallback((map: google.maps.Map) => { mapRef.current = map }, [])
   const onUnmount = useCallback(() => { mapRef.current = null }, [])
 
-  // Geocodifica endereços usando municipio + bairro + cep (com cache de sessão)
+  // Geocodifica endereços das NFs + endereço de origem (CD) via cache persistente
   useEffect(() => {
     if (!isLoaded || nfs.length === 0) return
 
     setGeocoding(true)
     setCoords([])
+    setOriginCoord(null)
     setDirections(null)
     setActivePin(null)
 
-    const geocoder = new google.maps.Geocoder()
+    const nfAddrs    = nfs.map(nf => addrKey([nf.municipio, nf.bairro, nf.cep]))
+    const allAddrs   = originAddress ? [originAddress, ...nfAddrs] : nfAddrs
 
-    const promises = nfs.map(nf => {
-      const address = [nf.municipio, nf.bairro, nf.cep].filter(Boolean).join(', ')
+    geocodeMany(allAddrs).then(coordMap => {
+      const origCoord = originAddress ? (coordMap.get(originAddress) ?? null) : null
+      const nfCoords  = nfAddrs.map(addr => coordMap.get(addr) ?? null)
 
-      if (geocodeCache.has(address)) {
-        const cached = geocodeCache.get(address)
-        return Promise.resolve(cached ?? null)
-      }
-
-      return new Promise<LatLng | null>(resolve => {
-        geocoder.geocode({ address }, (results, status) => {
-          if (status === 'OK' && results?.[0]) {
-            const loc = results[0].geometry.location
-            const result: LatLng = { lat: loc.lat(), lng: loc.lng() }
-            geocodeCache.set(address, result)
-            resolve(result)
-          } else {
-            geocodeCache.set(address, null)
-            resolve(null)
-          }
-        })
-      })
-    })
-
-    Promise.all(promises).then(results => {
-      setCoords(results)
+      setOriginCoord(origCoord)
+      setCoords(nfCoords)
       setGeocoding(false)
 
-      const valid = results.filter((c): c is LatLng => c !== null)
-      if (valid.length > 0 && mapRef.current) {
+      const allValid: LatLng[] = []
+      if (origCoord) allValid.push(origCoord)
+      nfCoords.forEach(c => { if (c) allValid.push(c) })
+
+      if (allValid.length > 0 && mapRef.current) {
         const bounds = new google.maps.LatLngBounds()
-        valid.forEach(c => bounds.extend(c))
+        allValid.forEach(c => bounds.extend(c))
         mapRef.current.fitBounds(bounds, 48)
       }
     })
-  }, [isLoaded, nfs])
+  }, [isLoaded, nfs, originAddress])
 
-  // Traça rota (silencioso se a chave não tiver permissão para Directions API)
+  // Traça rota — usa originCoord como ponto de partida quando disponível
   useEffect(() => {
-    const valid = coords.filter((c): c is LatLng => c !== null)
-    if (!isLoaded || valid.length < 2) return
+    const validNfs  = coords.filter((c): c is LatLng => c !== null)
+    const allPoints = originCoord ? [originCoord, ...validNfs] : validNfs
+    if (!isLoaded || allPoints.length < 2) return
 
     const service = new google.maps.DirectionsService()
     service.route(
       {
-        origin:           valid[0],
-        destination:      valid[valid.length - 1],
-        waypoints:        valid.slice(1, -1).slice(0, 23).map(loc => ({ location: loc, stopover: true })),
-        travelMode:       google.maps.TravelMode.DRIVING,
+        origin:            allPoints[0],
+        destination:       allPoints[allPoints.length - 1],
+        waypoints:         allPoints.slice(1, -1).slice(0, 23).map(loc => ({ location: loc, stopover: true })),
+        travelMode:        google.maps.TravelMode.DRIVING,
         optimizeWaypoints: false,
       },
       (result, status) => {
         if (status === 'OK' && result) setDirections(result)
       },
     )
-  }, [isLoaded, coords])
+  }, [isLoaded, coords, originCoord])
 
   // ── Skeleton enquanto carrega API ou geocodifica ───────────────────────────
   if (loadError) {
@@ -158,7 +142,7 @@ function MapaRotaInner({ nfs, height = '280px', className }: MapaRotaProps) {
     )
   }
 
-  const center = coords.find((c): c is LatLng => c !== null) ?? BH_CENTER
+  const center = originCoord ?? coords.find((c): c is LatLng => c !== null) ?? BH_CENTER
 
   return (
     <div className={cn('relative rounded-lg overflow-hidden border border-[0.5px] border-[var(--border-subtle)]', className)}>
@@ -179,6 +163,22 @@ function MapaRotaInner({ nfs, height = '280px', className }: MapaRotaProps) {
         {/* Polyline da rota — sem os markers padrão A/B/C */}
         {directions && (
           <DirectionsRenderer directions={directions} options={{ suppressMarkers: true }} />
+        )}
+
+        {/* Marcador de origem (CD) */}
+        {originCoord && (
+          <Marker
+            position={originCoord}
+            label={{ text: 'CD', color: 'white', fontWeight: 'bold', fontSize: '10px' }}
+            icon={{
+              path: google.maps.SymbolPath.CIRCLE,
+              scale: 14,
+              fillColor: '#1B4F8A',
+              fillOpacity: 1,
+              strokeColor: '#ffffff',
+              strokeWeight: 2,
+            }}
+          />
         )}
 
         {/* Markers numerados: coords[i] pode ser null se geocodificação falhou */}

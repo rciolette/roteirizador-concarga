@@ -12,8 +12,9 @@ import { ImportarSIATButton } from '@/components/ui/ImportarSIATButton'
 import { SiatImportDialog } from '@/components/ui/SiatImportDialog'
 import { webhookGerarRotas, mapRetornoGerarRotas, salvarRotasSupabase, salvarNfsNaoAlocadas, atualizarStatusRota, webhookEnviarMotorista, Prioridade, MotoristaPayload, VeiculoDisponivel } from '@/lib/webhooks'
 import { derivarCond } from '@/lib/siat'
+import { listarCapacidades, type CapacidadeVeiculo } from '@/lib/frota'
 import type { SiatRow } from '@/lib/siat'
-import type { Veiculo, Motorista } from '@/types'
+import type { Veiculo, Motorista, NotaFiscal } from '@/types'
 import { cn, formatPeso } from '@/lib/utils'
 import { useCopyToClipboard } from '@/lib/hooks'
 import { useAppData } from '@/components/providers/AppDataProvider'
@@ -277,6 +278,45 @@ function GerarRotasDialog({ onClose, onConfirm, motoristas, veiculos }: {
   )
 }
 
+// ── Maps helpers ─────────────────────────────────────────────────────────────
+function enderecoMaps(nf: NotaFiscal): string {
+  const parts: string[] = []
+  if (nf.endereco && nf.endereco !== '—') parts.push(nf.endereco)
+  if (nf.bairro   && nf.bairro   !== '—') parts.push(nf.bairro)
+  if (nf.municipio && nf.municipio !== '—') parts.push(nf.municipio)
+  parts.push('MG')
+  return parts.join(', ')
+}
+
+function priNF(nf: NotaFiscal, hoje: string): number {
+  if (nf.dataAgendamento && nf.dataAgendamento <= hoje) return 0
+  if (nf.sac || nf.indRee) return 1
+  if (nf.cond === 'vermelho') return 2
+  if (nf.cond === 'laranja')  return 3
+  return 4
+}
+
+function gerarLinkMapsLocal(nfs: NotaFiscal[], enderecoOrigem?: string | null): string | null {
+  if (!nfs.length) return null
+  const hoje = new Date().toISOString().slice(0, 10)
+  const sorted = [...nfs].sort((a, b) => {
+    const d = priNF(a, hoje) - priNF(b, hoje)
+    if (d !== 0) return d
+    return a.dataEmissao.localeCompare(b.dataEmissao)
+  })
+  const seen = new Set<string>()
+  const stops: string[] = []
+  for (const nf of sorted) {
+    const addr = enderecoMaps(nf)
+    if (!seen.has(addr)) { seen.add(addr); stops.push(addr) }
+  }
+  const maxParadas = enderecoOrigem ? 24 : 25
+  const sliced = stops.slice(0, maxParadas)
+  if (!sliced.length) return null
+  const pontos = enderecoOrigem ? [enderecoOrigem, ...sliced] : sliced
+  return 'https://www.google.com/maps/dir/' + pontos.map(encodeURIComponent).join('/')
+}
+
 // ── Route Card ────────────────────────────────────────────────────────────────
 const AVATAR_CLS = [
   'bg-primary-bg text-primary-dark',
@@ -286,13 +326,15 @@ const AVATAR_CLS = [
   'bg-warn-bg text-warn',
 ]
 
-function RouteCard({ rota, onUpdateStatus, onAskConfirm }: {
+function RouteCard({ rota, onUpdateStatus, onAskConfirm, enderecoOrigem }: {
   rota: Rota
-  onUpdateStatus: (id: string, status: RouteStatus) => void
+  onUpdateStatus: (id: string, status: RouteStatus, linkMaps?: string) => void
   onAskConfirm: (action: ConfirmAction, execute: () => void) => void
+  enderecoOrigem?: string | null
 }) {
   const [expanded, setExpanded] = useState(false)
   const { copied, copy } = useCopyToClipboard()
+  const mapsLink    = rota.linkMaps || (rota.notasFiscais.length > 0 ? gerarLinkMapsLocal(rota.notasFiscais, enderecoOrigem) : null)
   const capacidade  = rota.veiculo?.capacidadeKg || 1500
   const pct         = rota.ocupacaoPercent ?? Math.min(100, Math.round((rota.pesoTotal / capacidade) * 100))
   const barColor    = pct >= 95 ? 'bg-danger-mid' : pct >= 80 ? 'bg-warn-mid' : 'bg-primary'
@@ -410,10 +452,11 @@ function RouteCard({ rota, onUpdateStatus, onAskConfirm }: {
               details: [
                 ...detalhes,
                 { label: 'Telefone', value: rota.motorista?.telefone ?? '—' },
+                { label: 'Link Maps', value: mapsLink ? `${rota.notasFiscais.length} paradas` : '—' },
               ],
               confirmLabel: 'Confirmar envio',
               confirmVariant: 'primary',
-            }, () => onUpdateStatus(rota.id, 'enviada'))}>
+            }, () => onUpdateStatus(rota.id, 'enviada', mapsLink ?? undefined))}>
               <svg className="w-[11px] h-[11px]" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
                 <path d="M2 8l12-6-6 12V8H2z"/>
               </svg>
@@ -449,18 +492,18 @@ function RouteCard({ rota, onUpdateStatus, onAskConfirm }: {
 
           {rota.notasFiscais.length > 0 && (
             <div className="mt-3">
-              <MapaRota nfs={rota.notasFiscais} height="260px" />
+              <MapaRota nfs={rota.notasFiscais} height="260px" originAddress={enderecoOrigem ?? undefined} />
             </div>
           )}
 
           <div className="flex gap-1.5 mt-3 pt-2.5 border-t border-[0.5px] border-[var(--border-subtle)] flex-wrap">
-            {(rota.status === 'aprovada' || rota.status === 'enviada') && (
-              <Btn size="sm" onClick={() => rota.linkMaps && window.open(rota.linkMaps, '_blank')} disabled={!rota.linkMaps}>
+            {mapsLink && (
+              <Btn size="sm" onClick={() => window.open(mapsLink, '_blank')}>
                 <svg className="w-[11px] h-[11px]" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
                   <path d="M8 2C5.8 2 4 3.8 4 6c0 3.3 4 8 4 8s4-4.7 4-8c0-2.2-1.8-4-4-4z"/>
                   <circle cx="8" cy="6" r="1.5"/>
                 </svg>
-                Ver mapa
+                {rota.linkMaps ? 'Ver mapa (IA)' : `Ver mapa (${rota.notasFiscais.length} paradas)`}
               </Btn>
             )}
             {rota.status === 'enviada' && rota.nfsConcatenadas && (
@@ -619,6 +662,25 @@ export default function RotasPage() {
   const [log,            setLog]            = useState<LogEntry[]>([])
   const [pendingConfirm, setPendingConfirm] = useState<{ action: ConfirmAction; execute: () => void } | null>(null)
   const [importDialog,   setImportDialog]   = useState(false)
+  const [enderecoOrigem, setEnderecoOrigem] = useState<string | null>(null)
+  const [capacidades,    setCapacidades]    = useState<CapacidadeVeiculo[]>([])
+  const [showPrevisao,   setShowPrevisao]   = useState(false)
+
+  useEffect(() => {
+    fetch('/api/empresa')
+      .then(r => r.json())
+      .then(d => {
+        const e = d.empresa
+        if (!e) return
+        const partes = [e.endereco, e.cidade, e.uf].filter(Boolean)
+        if (partes.length) setEnderecoOrigem(partes.join(', '))
+      })
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    listarCapacidades().then(setCapacidades).catch(() => {})
+  }, [])
 
   const summary = nfImportState.summary
   const importResult = summary
@@ -660,7 +722,7 @@ export default function RotasPage() {
     setTimeout(() => setToast(''), 4000)
   }
 
-  function updateRouteStatus(id: string, status: RouteStatus) {
+  function updateRouteStatus(id: string, status: RouteStatus, linkMaps?: string) {
     const rota = routes.find(r => r.id === id)
     setRoutes(prev => prev.map(r =>
       r.id === id
@@ -674,7 +736,7 @@ export default function RotasPage() {
         codigoRota:      rota.codigoRota,
         motoristaNome:   rota.motorista.nome,
         motoristaTel:    rota.motorista.telefone,
-        linkMaps:        rota.linkMaps,
+        linkMaps:        rota.linkMaps ?? linkMaps,
         nfsConcatenadas: rota.nfsConcatenadas,
         qtdNotas:        rota.qtdNotas,
         pesoTotal:       rota.pesoTotal,
@@ -882,9 +944,86 @@ export default function RotasPage() {
               rota={rota}
               onUpdateStatus={updateRouteStatus}
               onAskConfirm={(action, execute) => setPendingConfirm({ action, execute })}
+              enderecoOrigem={enderecoOrigem}
             />
           ))}
         </div>
+
+        {/* Previsão de cargas */}
+        {routes.length > 0 && (() => {
+          const linhas = routes
+            .filter(r => r.veiculo)
+            .map(r => {
+              const v   = r.veiculo!
+              const cap = capacidades.find(c => c.tipo === v.tipo)
+              const ocup = v.capacidadeKg > 0 ? Math.round((r.pesoTotal / v.capacidadeKg) * 100) : null
+              const limite = cap?.ocupacao_max_percent ?? 100
+              const alerta = ocup !== null && ocup > limite
+              return { rota: r, v, ocup, limite, alerta }
+            })
+          const nAlertas = linhas.filter(l => l.alerta).length
+          return (
+            <Card>
+              <CardHeader>
+                <button
+                  onClick={() => setShowPrevisao(p => !p)}
+                  className="flex items-center gap-2 text-xs font-medium text-base cursor-pointer bg-transparent border-none w-full text-left"
+                >
+                  <svg className={cn('w-3 h-3 text-muted transition-transform', showPrevisao && 'rotate-90')} viewBox="0 0 10 10" fill="currentColor"><path d="M3 2l4 3-4 3V2z"/></svg>
+                  Previsão de cargas
+                  {nAlertas > 0 && (
+                    <span className="ml-1 px-1.5 py-px rounded-full text-[10px] font-medium bg-danger-bg text-danger">
+                      {nAlertas} acima do limite
+                    </span>
+                  )}
+                </button>
+              </CardHeader>
+              {showPrevisao && (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-[0.5px] border-[var(--border-subtle)]">
+                        {['Rota', 'Motorista', 'Placa', 'Tipo', 'Peso (kg)', 'Cap. (kg)', '% Ocupação'].map(h => (
+                          <th key={h} className="text-left px-4 py-2.5 text-[11px] text-muted font-medium whitespace-nowrap">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {linhas.map(({ rota, v, ocup, limite, alerta }, i) => (
+                        <tr key={rota.id} className={cn(
+                          'border-b border-[0.5px] border-[var(--border-faint)]',
+                          alerta ? 'bg-danger-bg/40' : i % 2 !== 0 ? 'bg-cream/40' : '',
+                        )}>
+                          <td className="px-4 py-2.5 text-xs font-mono font-medium text-base">{rota.codigoRota}</td>
+                          <td className="px-4 py-2.5 text-xs text-muted">{rota.motorista?.nome ?? '—'}</td>
+                          <td className="px-4 py-2.5 text-xs font-mono text-base">{v.placa}</td>
+                          <td className="px-4 py-2.5 text-xs text-muted">{v.tipo}</td>
+                          <td className="px-4 py-2.5 text-xs tabular-nums text-right text-muted">
+                            {rota.pesoTotal.toLocaleString('pt-BR')}
+                          </td>
+                          <td className="px-4 py-2.5 text-xs tabular-nums text-right text-muted">
+                            {v.capacidadeKg ? v.capacidadeKg.toLocaleString('pt-BR') : '—'}
+                          </td>
+                          <td className="px-4 py-2.5">
+                            {ocup !== null ? (
+                              <span className={cn(
+                                'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap',
+                                alerta ? 'bg-danger-bg text-danger' : ocup >= limite * 0.85 ? 'bg-warn-bg text-warn' : 'bg-success-bg text-success-dark',
+                              )}>
+                                {alerta && <span className="w-[5px] h-[5px] rounded-full shrink-0 bg-danger" />}
+                                {ocup}%{alerta ? ` (lim. ${limite}%)` : ''}
+                              </span>
+                            ) : '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Card>
+          )
+        })()}
 
         {routes.length === 0 && !nfImportState.running && (
           <>
