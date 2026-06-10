@@ -22,6 +22,7 @@ export interface NotaFiscal {
   observacao?: string
   sac?: string
   indRee: boolean
+  valor?: number
 }
 
 export interface Veiculo {

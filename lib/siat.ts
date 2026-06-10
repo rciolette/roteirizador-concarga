@@ -200,6 +200,7 @@ export function siatRowsToNotasPendentes(rows: SiatRow[]): NotaFiscal[] {
       observacao:       row.Observacao     ?? undefined,
       sac:              row.SAC            ?? undefined,
       indRee:           reentrega,
+      valor:            typeof row.Valor === 'number' ? row.Valor : undefined,
     })
   }
 
@@ -275,6 +276,7 @@ export function siatRowsToRotas(
         observacao:      row.Observacao     ?? undefined,
         sac:             row.SAC            ?? undefined,
         indRee:          reentrega,
+        valor:           typeof row.Valor === 'number' ? row.Valor : undefined,
       }
     })
 

@@ -775,11 +775,38 @@ export default function FrotaPage() {
         {tab === 'vinculados' && (
           <Card>
             <CardHeader>
-              <div className="text-xs font-medium text-base">
-                Vinculados
-                {vinculados.length > 0 && <span className="ml-2 text-[10px] font-normal text-muted">{vinculados.length} registros</span>}
+              <div>
+                <div className="text-xs font-medium text-base">
+                  Vinculados
+                  {vinculados.length > 0 && <span className="ml-2 text-[10px] font-normal text-muted">{vinculados.length} registros</span>}
+                </div>
+                <div className="text-[11px] text-muted">Todos os veículos com motorista vinculado</div>
               </div>
-              <div className="text-[11px] text-muted">Todos os veículos com motorista vinculado</div>
+              {vinculados.length > 0 && (
+                <Btn
+                  size="sm"
+                  variant="primary"
+                  onClick={async () => {
+                    try {
+                      await resetarDisponivelHoje()
+                      const ids = vinculados.map(v => v.id)
+                      await marcarDisponiveisHoje(ids)
+                      setVeiculos(prev => {
+                        const idSet = new Set(ids)
+                        return prev.map(v => ({ ...v, disponivel_hoje: idSet.has(v.id) }))
+                      })
+                      showToastV(`✓ ${ids.length} veículos da frota padrão marcados como disponíveis hoje`)
+                    } catch {
+                      showToastV('Erro ao marcar frota padrão')
+                    }
+                  }}
+                >
+                  <svg className="w-[11px] h-[11px]" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <path d="M3 8l3.5 3.5L13 5"/>
+                  </svg>
+                  Marcar frota padrão disponível hoje
+                </Btn>
+              )}
             </CardHeader>
 
             {loadingVi ? <TableSkeleton cols={7} /> : vinculados.length === 0 ? (
