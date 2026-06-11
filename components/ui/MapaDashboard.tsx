@@ -1,16 +1,22 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { GoogleMap, useJsApiLoader, Marker, InfoWindow } from '@react-google-maps/api'
+import {
+  GoogleMap,
+  useJsApiLoader,
+  Marker,
+  MarkerClustererF,
+  InfoWindow,
+} from '@react-google-maps/api'
 import { useAppData } from '@/components/providers/AppDataProvider'
-import type { Rota, NotaFiscal } from '@/types'
+import type { Rota, NotaFiscal, CondStatus } from '@/types'
 import { Card, CardHeader } from '@/components/ui'
 import { cn } from '@/lib/utils'
+import { geocodeMany, addrKey, type LatLng } from '@/lib/geocode'
 
-const API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? ''
+const API_KEY   = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? ''
 const LIBRARIES: ('places' | 'geometry')[] = []
 const BH_CENTER = { lat: -19.9167, lng: -43.9345 }
-const geocodeCache = new Map<string, { lat: number; lng: number } | null>()
 
 const ROTA_COLORS = [
   '#1B4F8A',
@@ -23,15 +29,31 @@ const ROTA_COLORS = [
   '#059669',
 ]
 
-interface LatLng { lat: number; lng: number }
+const COND_COLORS: Record<CondStatus, string> = {
+  vermelho: '#DC2626',
+  laranja:  '#F97316',
+  ok:       '#4B83C0',
+}
 
-interface PinInfo {
-  rotaId: string
+// Limite de pins abaixo do qual o clustering não é necessário
+const CLUSTER_THRESHOLD = 20
+
+interface PinRota {
+  kind:    'rota'
+  rotaId:  string
   rotaIdx: number
-  nfIdx: number
-  nf: NotaFiscal
+  nfIdx:   number
+  nf:      NotaFiscal
+  coord:   LatLng
+}
+
+interface PinPendente {
+  kind:  'pendente'
+  nf:    NotaFiscal
   coord: LatLng
 }
+
+type PinInfo = PinRota | PinPendente
 
 function todayISO(): string {
   return new Date().toISOString().slice(0, 10)
@@ -39,7 +61,7 @@ function todayISO(): string {
 
 export function MapaDashboard() {
   const { rotas, loadingRotas } = useAppData()
-  const today = todayISO()
+  const today     = todayISO()
   const rotasHoje = rotas.filter(r => r.data === today && r.status !== 'rascunho')
 
   if (!API_KEY) {
@@ -84,14 +106,16 @@ export function MapaDashboard() {
 }
 
 function MapaDashboardInner({ rotas }: { rotas: Rota[] }) {
+  const { nfsPendentes } = useAppData()
+
   const { isLoaded, loadError } = useJsApiLoader({
-    id: 'google-map-script',
+    id:              'google-map-script',
     googleMapsApiKey: API_KEY,
-    libraries: LIBRARIES,
+    libraries:       LIBRARIES,
   })
 
-  const mapRef = useRef<google.maps.Map | null>(null)
-  const [pins, setPins] = useState<PinInfo[]>([])
+  const mapRef             = useRef<google.maps.Map | null>(null)
+  const [pins, setPins]    = useState<PinInfo[]>([])
   const [geocoding, setGeocoding] = useState(false)
   const [activePin, setActivePin] = useState<PinInfo | null>(null)
   const [selectedRotaId, setSelectedRotaId] = useState<string | null>(null)
@@ -100,44 +124,58 @@ function MapaDashboardInner({ rotas }: { rotas: Rota[] }) {
   const onUnmount = useCallback(() => { mapRef.current = null }, [])
 
   useEffect(() => {
-    if (!isLoaded || rotas.length === 0) {
-      setPins([])
-      return
-    }
+    if (!isLoaded) return
 
     setGeocoding(true)
     setActivePin(null)
 
-    const geocoder = new google.maps.Geocoder()
-    const tasks: Promise<PinInfo | null>[] = []
+    // Coleta todos os endereços a geocodificar
+    type PendingItem =
+      | { kind: 'rota'; rotaId: string; rotaIdx: number; nfIdx: number; nf: NotaFiscal; addr: string }
+      | { kind: 'pendente'; nf: NotaFiscal; addr: string }
 
-    rotas.forEach((rota, rotaIdx) => {
-      rota.notasFiscais.forEach((nf, nfIdx) => {
-        const address = [nf.municipio, nf.bairro, nf.cep].filter(Boolean).join(', ')
+    const items: PendingItem[] = []
 
-        tasks.push(new Promise(resolve => {
-          if (geocodeCache.has(address)) {
-            const cached = geocodeCache.get(address)
-            resolve(cached ? { rotaId: rota.id, rotaIdx, nfIdx, nf, coord: cached } : null)
-            return
-          }
-          geocoder.geocode({ address }, (results, status) => {
-            if (status === 'OK' && results?.[0]) {
-              const loc = results[0].geometry.location
-              const coord: LatLng = { lat: loc.lat(), lng: loc.lng() }
-              geocodeCache.set(address, coord)
-              resolve({ rotaId: rota.id, rotaIdx, nfIdx, nf, coord })
-            } else {
-              geocodeCache.set(address, null)
-              resolve(null)
-            }
+    if (rotas.length > 0) {
+      rotas.forEach((rota, rotaIdx) => {
+        rota.notasFiscais.forEach((nf, nfIdx) => {
+          items.push({
+            kind: 'rota', rotaId: rota.id, rotaIdx, nfIdx, nf,
+            addr: addrKey([nf.municipio, nf.bairro, nf.cep]),
           })
-        }))
+        })
       })
-    })
+    } else {
+      nfsPendentes.forEach(nf => {
+        items.push({
+          kind: 'pendente', nf,
+          addr: addrKey([nf.municipio, nf.bairro, nf.cep]),
+        })
+      })
+    }
 
-    Promise.all(tasks).then(results => {
-      const valid = results.filter((p): p is PinInfo => p !== null)
+    if (!items.length) {
+      setPins([])
+      setGeocoding(false)
+      return
+    }
+
+    const addresses = [...new Set(items.map(i => i.addr).filter(Boolean))]
+
+    geocodeMany(addresses).then(coordMap => {
+      const valid: PinInfo[] = []
+
+      for (const item of items) {
+        const coord = item.addr ? coordMap.get(item.addr) : null
+        if (!coord) continue
+
+        if (item.kind === 'rota') {
+          valid.push({ kind: 'rota', rotaId: item.rotaId, rotaIdx: item.rotaIdx, nfIdx: item.nfIdx, nf: item.nf, coord })
+        } else {
+          valid.push({ kind: 'pendente', nf: item.nf, coord })
+        }
+      }
+
       setPins(valid)
       setGeocoding(false)
 
@@ -147,7 +185,7 @@ function MapaDashboardInner({ rotas }: { rotas: Rota[] }) {
         mapRef.current.fitBounds(bounds, 48)
       }
     })
-  }, [isLoaded, rotas])
+  }, [isLoaded, rotas, nfsPendentes])
 
   if (loadError) {
     return (
@@ -161,56 +199,69 @@ function MapaDashboardInner({ rotas }: { rotas: Rota[] }) {
     return <div className="h-[500px] bg-cream-hover animate-pulse rounded-b-lg" />
   }
 
-  if (rotas.length === 0) {
+  const semDados = rotas.length === 0 && nfsPendentes.length === 0
+  if (semDados) {
     return (
       <div className="flex items-center justify-center h-[500px] text-[13px] text-muted">
-        Nenhuma rota gerada para hoje
+        Nenhuma rota ou NF carregada para hoje
       </div>
     )
   }
 
+  const useClustering = pins.length >= CLUSTER_THRESHOLD
+
+  function pinMarkerProps(pin: PinInfo) {
+    const key      = pin.kind === 'rota' ? `r-${pin.rotaId}-${pin.nfIdx}` : `p-${pin.nf.id}`
+    const color    = pin.kind === 'rota' ? ROTA_COLORS[pin.rotaIdx % ROTA_COLORS.length] : COND_COLORS[pin.nf.cond]
+    const label    = pin.kind === 'rota' ? String(pin.nfIdx + 1) : '·'
+    const isDimmed = pin.kind === 'rota' && selectedRotaId !== null && pin.rotaId !== selectedRotaId
+    return { key, color, label, isDimmed }
+  }
+
   return (
     <div className="flex overflow-hidden rounded-b-lg" style={{ height: '500px' }}>
-      {/* Sidebar com lista de rotas */}
-      <div className="w-[188px] shrink-0 border-r border-[0.5px] border-[var(--border-faint)] overflow-y-auto flex flex-col">
-        <div className="px-3 py-[7px] border-b border-[0.5px] border-[var(--border-faint)] sticky top-0 bg-white dark:bg-[#1E1E1C]">
-          <span className="text-[10px] uppercase tracking-[0.06em] text-muted font-medium">Rotas do dia</span>
-        </div>
-        <button
-          className={cn(
-            'w-full text-left px-3 py-2 text-[11px] border-b border-[0.5px] border-[var(--border-faint)] transition-colors cursor-pointer bg-transparent',
-            selectedRotaId === null
-              ? 'bg-primary-bg text-primary font-medium'
-              : 'text-muted hover:bg-cream',
-          )}
-          onClick={() => setSelectedRotaId(null)}
-        >
-          Todas as rotas
-        </button>
-        {rotas.map((rota, idx) => {
-          const color = ROTA_COLORS[idx % ROTA_COLORS.length]
-          const isSelected = selectedRotaId === rota.id
-          return (
-            <button
-              key={rota.id}
-              className={cn(
-                'w-full text-left px-3 py-2 border-b border-[0.5px] border-[var(--border-faint)] transition-colors cursor-pointer bg-transparent flex items-center gap-2',
-                isSelected ? 'bg-cream text-base font-medium' : 'text-muted hover:bg-cream',
-              )}
-              onClick={() => setSelectedRotaId(prev => prev === rota.id ? null : rota.id)}
-            >
-              <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
-              <div className="flex-1 min-w-0 text-[11px]">
-                <div className="truncate">{rota.codigoRota}</div>
-                {rota.motorista?.nome && (
-                  <div className="text-[10px] text-muted truncate">{rota.motorista.nome}</div>
+      {/* Sidebar com lista de rotas (só quando há rotas) */}
+      {rotas.length > 0 && (
+        <div className="w-[188px] shrink-0 border-r border-[0.5px] border-[var(--border-faint)] overflow-y-auto flex flex-col">
+          <div className="px-3 py-[7px] border-b border-[0.5px] border-[var(--border-faint)] sticky top-0 bg-white dark:bg-[#1E1E1C]">
+            <span className="text-[10px] uppercase tracking-[0.06em] text-muted font-medium">Rotas do dia</span>
+          </div>
+          <button
+            className={cn(
+              'w-full text-left px-3 py-2 text-[11px] border-b border-[0.5px] border-[var(--border-faint)] transition-colors cursor-pointer bg-transparent',
+              selectedRotaId === null
+                ? 'bg-primary-bg text-primary font-medium'
+                : 'text-muted hover:bg-cream',
+            )}
+            onClick={() => setSelectedRotaId(null)}
+          >
+            Todas as rotas
+          </button>
+          {rotas.map((rota, idx) => {
+            const color      = ROTA_COLORS[idx % ROTA_COLORS.length]
+            const isSelected = selectedRotaId === rota.id
+            return (
+              <button
+                key={rota.id}
+                className={cn(
+                  'w-full text-left px-3 py-2 border-b border-[0.5px] border-[var(--border-faint)] transition-colors cursor-pointer bg-transparent flex items-center gap-2',
+                  isSelected ? 'bg-cream text-base font-medium' : 'text-muted hover:bg-cream',
                 )}
-              </div>
-              <span className="text-[10px] text-muted shrink-0">{rota.qtdNotas}</span>
-            </button>
-          )
-        })}
-      </div>
+                onClick={() => setSelectedRotaId(prev => prev === rota.id ? null : rota.id)}
+              >
+                <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                <div className="flex-1 min-w-0 text-[11px]">
+                  <div className="truncate">{rota.codigoRota}</div>
+                  {rota.motorista?.nome && (
+                    <div className="text-[10px] text-muted truncate">{rota.motorista.nome}</div>
+                  )}
+                </div>
+                <span className="text-[10px] text-muted shrink-0">{rota.qtdNotas}</span>
+              </button>
+            )
+          })}
+        </div>
+      )}
 
       {/* Área do mapa */}
       <div className="flex-1 relative">
@@ -228,34 +279,58 @@ function MapaDashboardInner({ rotas }: { rotas: Rota[] }) {
             clickableIcons:    false,
           }}
         >
-          {pins.map(pin => {
-            const color    = ROTA_COLORS[pin.rotaIdx % ROTA_COLORS.length]
-            const isDimmed = selectedRotaId !== null && pin.rotaId !== selectedRotaId
-
-            return (
-              <Marker
-                key={`${pin.rotaId}-${pin.nfIdx}`}
-                position={pin.coord}
-                opacity={isDimmed ? 0.2 : 1}
-                label={{
-                  text:       String(pin.nfIdx + 1),
-                  color:      'white',
-                  fontWeight: 'bold',
-                  fontSize:   '11px',
-                }}
-                icon={{
-                  path:        google.maps.SymbolPath.CIRCLE,
-                  fillColor:   color,
-                  fillOpacity: 1,
-                  strokeColor: 'white',
-                  strokeWeight: 2,
-                  scale:       14,
-                  labelOrigin: new google.maps.Point(0, 0),
-                }}
-                onClick={() => setActivePin(prev => prev === pin ? null : pin)}
-              />
-            )
-          })}
+          {useClustering ? (
+            <MarkerClustererF>
+              {(clusterer) => (
+                <>
+                  {pins.map(pin => {
+                    const { key, color, label, isDimmed } = pinMarkerProps(pin)
+                    return (
+                      <Marker
+                        key={key}
+                        position={pin.coord}
+                        opacity={isDimmed ? 0.2 : 1}
+                        clusterer={clusterer}
+                        label={{ text: label, color: 'white', fontWeight: 'bold', fontSize: '11px' }}
+                        icon={{
+                          path:         google.maps.SymbolPath.CIRCLE,
+                          fillColor:    color,
+                          fillOpacity:  1,
+                          strokeColor:  'white',
+                          strokeWeight: 2,
+                          scale:        14,
+                          labelOrigin:  new google.maps.Point(0, 0),
+                        }}
+                        onClick={() => setActivePin(prev => prev === pin ? null : pin)}
+                      />
+                    )
+                  })}
+                </>
+              )}
+            </MarkerClustererF>
+          ) : (
+            pins.map(pin => {
+              const { key, color, label, isDimmed } = pinMarkerProps(pin)
+              return (
+                <Marker
+                  key={key}
+                  position={pin.coord}
+                  opacity={isDimmed ? 0.2 : 1}
+                  label={{ text: label, color: 'white', fontWeight: 'bold', fontSize: '11px' }}
+                  icon={{
+                    path:         google.maps.SymbolPath.CIRCLE,
+                    fillColor:    color,
+                    fillOpacity:  1,
+                    strokeColor:  'white',
+                    strokeWeight: 2,
+                    scale:        14,
+                    labelOrigin:  new google.maps.Point(0, 0),
+                  }}
+                  onClick={() => setActivePin(prev => prev === pin ? null : pin)}
+                />
+              )
+            })
+          )}
 
           {activePin && (
             <InfoWindow position={activePin.coord} onCloseClick={() => setActivePin(null)}>
@@ -263,20 +338,39 @@ function MapaDashboardInner({ rotas }: { rotas: Rota[] }) {
                 <div style={{ fontWeight: 700, marginBottom: '2px' }}>
                   NF {activePin.nf.numnfs}
                 </div>
-                <div style={{ fontSize: '11px', color: '#6B7280', marginBottom: '2px' }}>
-                  Seq. {activePin.nfIdx + 1} · {activePin.nf.municipio}
-                </div>
+                {activePin.kind === 'rota' && (
+                  <div style={{ fontSize: '11px', color: '#6B7280', marginBottom: '2px' }}>
+                    Seq. {activePin.nfIdx + 1} · {activePin.nf.municipio}
+                  </div>
+                )}
+                {activePin.kind === 'pendente' && (
+                  <div style={{ fontSize: '11px', color: '#6B7280', marginBottom: '2px' }}>
+                    Pendente · {activePin.nf.municipio}
+                  </div>
+                )}
                 <div style={{ color: '#374151' }}>{activePin.nf.destinatario}</div>
-                {activePin.nf.endereco && (
+                {activePin.nf.endereco && activePin.nf.endereco !== '—' && (
                   <div style={{ color: '#6B7280', fontSize: '11px', marginTop: '2px' }}>
                     {activePin.nf.endereco}
-                    {activePin.nf.bairro ? `, ${activePin.nf.bairro}` : ''}
+                    {activePin.nf.bairro && activePin.nf.bairro !== '—' ? `, ${activePin.nf.bairro}` : ''}
                   </div>
                 )}
               </div>
             </InfoWindow>
           )}
         </GoogleMap>
+
+        {/* Legenda COND (só quando exibindo NFs pendentes) */}
+        {rotas.length === 0 && nfsPendentes.length > 0 && (
+          <div className="absolute bottom-3 left-3 flex items-center gap-2 bg-white/90 dark:bg-[#1E1E1C]/90 rounded-lg px-2.5 py-1.5 text-[10px] shadow-sm">
+            {(['vermelho', 'laranja', 'ok'] as CondStatus[]).map(c => (
+              <span key={c} className="flex items-center gap-1">
+                <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ backgroundColor: COND_COLORS[c] }} />
+                {c === 'vermelho' ? 'Verm.' : c === 'laranja' ? 'Lar.' : 'OK'}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )

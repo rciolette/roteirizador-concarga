@@ -31,17 +31,18 @@ interface Empresa {
   razao_social:  string | null
   nome_fantasia: string | null
   cnpj:          string | null
-  telefone:      string | null
-  email:         string | null
+  endereco:      string | null
   cidade:        string | null
   uf:            string | null
+  telefone:      string | null
+  email:         string | null
 }
 
 export default function ConfiguracoesPage() {
   const { nfImportState, importarNFs, dismissNFImport, config: globalConfig, setConfig: setGlobalConfig } = useAppData()
   const { pode } = useAuth()
   const [cfg, setCfg] = useState<AppConfig>(globalConfig)
-  const [empresa, setEmpresa] = useState<Empresa>({ razao_social: '', nome_fantasia: '', cnpj: '', telefone: '', email: '', cidade: '', uf: '' })
+  const [empresa, setEmpresa] = useState<Empresa>({ razao_social: '', nome_fantasia: '', cnpj: '', endereco: '', cidade: '', uf: '', telefone: '', email: '' })
   const [savingEmpresa, setSavingEmpresa] = useState(false)
   const [msgEmpresa, setMsgEmpresa] = useState('')
   const [webhooks, setWebhooks] = useState<WebhookConfig>({
@@ -106,6 +107,16 @@ export default function ConfiguracoesPage() {
     initialRender.current = true
   }
 
+  function handleRestaurarPadrao() {
+    setCfg(DEFAULT_CONFIG)
+    setGlobalConfig(DEFAULT_CONFIG)
+    salvarConfig(DEFAULT_CONFIG)
+    setHasChanges(false)
+    initialRender.current = true
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2000)
+  }
+
   function handleSave() {
     setGlobalConfig(cfg)
     salvarConfig(cfg)
@@ -121,6 +132,9 @@ export default function ConfiguracoesPage() {
       <div className="sticky top-0 z-10">
         <Topbar title="Configurações" sub="Conexão, regras, frota e instruções da IA">
           <ImportarSIATButton onClick={() => setImportDialog(true)} running={nfImportState.running} label="Importar NFs" loadingLabel="Importando..." />
+          <Btn onClick={handleRestaurarPadrao}>
+            Restaurar padrões
+          </Btn>
           <Btn variant="primary" onClick={handleSave}>
             {saved ? '✓ Salvo!' : 'Salvar configurações'}
           </Btn>
@@ -307,7 +321,6 @@ export default function ConfiguracoesPage() {
                   { label: 'CNPJ',            key: 'cnpj'          as const },
                   { label: 'Telefone',        key: 'telefone'      as const },
                   { label: 'E-mail',          key: 'email'         as const },
-                  { label: 'Cidade',          key: 'cidade'        as const },
                 ] as const).map(f => (
                   <div key={f.key}>
                     <Label>{f.label}</Label>
@@ -317,12 +330,28 @@ export default function ConfiguracoesPage() {
                     />
                   </div>
                 ))}
+              </div>
+              <div>
+                <Label>Endereço completo (logradouro, número, bairro)</Label>
+                <TextInput
+                  value={empresa.endereco ?? ''}
+                  onChange={v => setEmpresa(p => ({ ...p, endereco: v }))}
+                  placeholder="Ex: Av. Oiapoque, 1234, Bairro Industrial"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>Cidade</Label>
+                  <TextInput
+                    value={empresa.cidade ?? ''}
+                    onChange={v => setEmpresa(p => ({ ...p, cidade: v }))}
+                  />
+                </div>
                 <div>
                   <Label>UF</Label>
                   <TextInput
                     value={empresa.uf ?? ''}
                     onChange={v => setEmpresa(p => ({ ...p, uf: v }))}
-                    style={{ width: 80 }}
                   />
                 </div>
               </div>

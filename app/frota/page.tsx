@@ -108,12 +108,19 @@ function SituacaoBadge({ situacao }: { situacao: string }) {
   )
 }
 
-function VeiculoStatusBadge({ situacaoSiat, disponivelHoje }: { situacaoSiat: string; disponivelHoje: boolean }) {
+function VeiculoStatusBadge({ situacaoSiat, disponivelHoje, origem }: {
+  situacaoSiat: string
+  disponivelHoje: boolean
+  origem: 'siat_sugerido' | 'operador' | null
+}) {
   if (disponivelHoje) {
     return (
       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap bg-teal-bg text-[#085041]">
         <span className="w-[5px] h-[5px] rounded-full shrink-0 bg-teal" />
         Disponível hoje
+        {origem === 'siat_sugerido' && (
+          <span className="ml-0.5 px-1 rounded text-[9px] bg-teal/20 text-[#085041]">SIAT</span>
+        )}
       </span>
     )
   }
@@ -237,6 +244,7 @@ export default function FrotaPage() {
   const [toastV,    setToastV]    = useState('')
   const [toastM,    setToastM]    = useState('')
   const [syncingM,  setSyncingM]  = useState(false)
+  const [seedingV,  setSeedingV]  = useState(false)
 
   // ── Filtros motoristas ────────────────────────────────────────────���─────────
   const [busca,       setBusca]       = useState('')
@@ -302,6 +310,23 @@ export default function FrotaPage() {
     }
   }
 
+  // ── Seed disponibilidade via SIAT ──────────────────────────────────────────
+  async function handleSeedSIAT() {
+    setSeedingV(true)
+    try {
+      const res  = await fetch('/api/seed-disponibilidade', { method: 'POST' })
+      const json = await res.json() as { ok?: boolean; seeded?: number; error?: string }
+      if (!res.ok) throw new Error(json.error ?? 'Erro desconhecido')
+      const veics = await listarVeiculos()
+      setVeiculos(veics)
+      showToastV(`✓ ${json.seeded} veículo${(json.seeded ?? 0) !== 1 ? 's' : ''} com sugestão SIAT aplicada`)
+    } catch (err) {
+      showToastV(`Erro: ${err instanceof Error ? err.message : 'falha'}`)
+    } finally {
+      setSeedingV(false)
+    }
+  }
+
   // ── Toggles individuais ─────────────────────────────────────────────────────
   const toggleMotorista = useCallback(async (id: string, ativo: boolean) => {
     setMotoristas(prev => prev.map(m => m.id === id ? { ...m, ativo } : m))
@@ -316,9 +341,13 @@ export default function FrotaPage() {
   }, [])
 
   const toggleDisponivelHoje = useCallback(async (id: string, disponivel: boolean) => {
-    setVeiculos(prev => prev.map(v => v.id === id ? { ...v, disponivel_hoje: disponivel } : v))
+    setVeiculos(prev => prev.map(v => v.id === id
+      ? { ...v, disponivel_hoje: disponivel, disponibilidade_origem: disponivel ? 'operador' as const : null }
+      : v))
     try { await atualizarDisponivelHoje(id, disponivel) }
-    catch { setVeiculos(prev => prev.map(v => v.id === id ? { ...v, disponivel_hoje: !disponivel } : v)) }
+    catch { setVeiculos(prev => prev.map(v => v.id === id
+      ? { ...v, disponivel_hoje: !disponivel, disponibilidade_origem: null }
+      : v)) }
   }, [])
 
   // ── Bulk motoristas ─────────────────────────────────────────────────────────
@@ -344,7 +373,9 @@ export default function FrotaPage() {
     try {
       if (disponivel) await marcarDisponiveisHoje(ids)
       else            await desmarcarDisponiveisHoje(ids)
-      setVeiculos(prev => prev.map(v => selectedV.has(v.id) ? { ...v, disponivel_hoje: disponivel } : v))
+      setVeiculos(prev => prev.map(v => selectedV.has(v.id)
+        ? { ...v, disponivel_hoje: disponivel, disponibilidade_origem: disponivel ? 'operador' as const : null }
+        : v))
       setSelectedV(new Set())
       showToastV(`${ids.length} veículo${ids.length > 1 ? 's' : ''} ${disponivel ? 'marcado' : 'desmarcado'}${ids.length > 1 ? 's' : ''} como disponível`)
     } catch (err) {
@@ -380,7 +411,11 @@ export default function FrotaPage() {
       await resetarDisponivelHoje()
       const ids = veiculos.filter(v => placasSet.has(v.placa.toUpperCase().trim())).map(v => v.id)
       await marcarDisponiveisHoje(ids)
-      setVeiculos(prev => prev.map(v => ({ ...v, disponivel_hoje: placasSet.has(v.placa.toUpperCase().trim()) })))
+      setVeiculos(prev => prev.map(v => ({
+        ...v,
+        disponivel_hoje: placasSet.has(v.placa.toUpperCase().trim()),
+        disponibilidade_origem: placasSet.has(v.placa.toUpperCase().trim()) ? 'operador' as const : null,
+      })))
       showToastV(`${ids.length} veículo${ids.length !== 1 ? 's' : ''} disponível${ids.length !== 1 ? 'is' : ''} hoje`)
     } catch {
       showToastV('Erro ao importar arquivo')
@@ -390,7 +425,7 @@ export default function FrotaPage() {
   async function handleResetarDisponibilidade() {
     try {
       await resetarDisponivelHoje()
-      setVeiculos(prev => prev.map(v => ({ ...v, disponivel_hoje: false })))
+      setVeiculos(prev => prev.map(v => ({ ...v, disponivel_hoje: false, disponibilidade_origem: null })))
       showToastV('Disponibilidade do dia resetada')
     } catch {
       showToastV('Erro ao resetar')
@@ -635,6 +670,9 @@ export default function FrotaPage() {
                   CSV/XLSX
                   <input type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={handleImportarDisponibilidade} />
                 </label>
+                <Btn size="sm" onClick={handleSeedSIAT} disabled={seedingV}>
+                  {seedingV ? 'Carregando…' : '⇩ Sugestão SIAT'}
+                </Btn>
                 <Btn size="sm" onClick={handleResetarDisponibilidade}>Resetar dia</Btn>
               </div>
             </CardHeader>
@@ -710,7 +748,7 @@ export default function FrotaPage() {
                           {v.volume_m3 ? v.volume_m3.toLocaleString('pt-BR') : '—'}
                         </td>
                         <td className="px-4 py-2.5" onClick={e => e.stopPropagation()}>
-                          <VeiculoStatusBadge situacaoSiat={v.situacao_siat} disponivelHoje={v.disponivel_hoje} />
+                          <VeiculoStatusBadge situacaoSiat={v.situacao_siat} disponivelHoje={v.disponivel_hoje} origem={v.disponibilidade_origem} />
                         </td>
                         <TD>{v.motorista_nome ?? <span className="italic">—</span>}</TD>
                         <td className="px-4 py-2.5" onClick={e => e.stopPropagation()}>
@@ -737,11 +775,38 @@ export default function FrotaPage() {
         {tab === 'vinculados' && (
           <Card>
             <CardHeader>
-              <div className="text-xs font-medium text-base">
-                Vinculados
-                {vinculados.length > 0 && <span className="ml-2 text-[10px] font-normal text-muted">{vinculados.length} registros</span>}
+              <div>
+                <div className="text-xs font-medium text-base">
+                  Vinculados
+                  {vinculados.length > 0 && <span className="ml-2 text-[10px] font-normal text-muted">{vinculados.length} registros</span>}
+                </div>
+                <div className="text-[11px] text-muted">Todos os veículos com motorista vinculado</div>
               </div>
-              <div className="text-[11px] text-muted">Todos os veículos com motorista vinculado</div>
+              {vinculados.length > 0 && (
+                <Btn
+                  size="sm"
+                  variant="primary"
+                  onClick={async () => {
+                    try {
+                      await resetarDisponivelHoje()
+                      const ids = vinculados.map(v => v.id)
+                      await marcarDisponiveisHoje(ids)
+                      setVeiculos(prev => {
+                        const idSet = new Set(ids)
+                        return prev.map(v => ({ ...v, disponivel_hoje: idSet.has(v.id) }))
+                      })
+                      showToastV(`✓ ${ids.length} veículos da frota padrão marcados como disponíveis hoje`)
+                    } catch {
+                      showToastV('Erro ao marcar frota padrão')
+                    }
+                  }}
+                >
+                  <svg className="w-[11px] h-[11px]" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <path d="M3 8l3.5 3.5L13 5"/>
+                  </svg>
+                  Marcar frota padrão disponível hoje
+                </Btn>
+              )}
             </CardHeader>
 
             {loadingVi ? <TableSkeleton cols={7} /> : vinculados.length === 0 ? (

@@ -122,8 +122,22 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       console.log('[NF DEBUG] pendentes:', siatRowsToNotasPendentes(rows).length)
       const summary = summarizeSiat(rows)
 
+      const pendentes = siatRowsToNotasPendentes(rows)
       setNfRows(rows)
-      setNfsPendentes(siatRowsToNotasPendentes(rows))
+      setNfsPendentes(pendentes)
+
+      // Pré-aquece o cache de geocoding em background (fire-and-forget)
+      const addrs = pendentes
+        .map(nf => [nf.municipio, nf.bairro, nf.cep].filter(p => p && p !== '—').join(', '))
+        .filter(Boolean)
+      if (addrs.length) {
+        fetch('/api/geocode', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ addresses: addrs }),
+        }).catch(() => {})
+      }
+
       setNfImportState({
         running:  false,
         step:     `${summary.totalNFs} notas fiscais importadas · ${summary.rotasUnicas} rotas`,

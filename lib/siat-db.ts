@@ -189,8 +189,8 @@ export async function queryVeiculosDisponiveis(): Promise<SiatRow[]> {
       CONCAT(c.FONE_DDD,    '-', c.FONE)   AS Telefone,
       CONCAT(c.CELULAR_DDD, '-', c.CELULAR) AS Celular
     FROM [TAB DE VEICULOS] a
-    LEFT JOIN [TAB MOT ADM] b         ON b.PLACA_VEI = a.PLACA
-    LEFT JOIN [TAB DE MOTORISTAS] c   ON c.MOTORISTA = b.MOTORISTA
+    INNER JOIN [TAB MOT ADM] b         ON b.PLACA_VEI = a.PLACA
+    INNER JOIN [TAB DE MOTORISTAS] c   ON c.MOTORISTA = b.MOTORISTA
     LEFT JOIN [TAB VEISIT] d          ON d.VEISIT    = a.VEISIT
     LEFT JOIN [TAB TIPO VEICULO] e    ON e.TIPVEI    = a.TIPVEI
     LEFT JOIN [TAB TIPO CARROCERIA] f ON f.TIPCAR    = a.TIPCAR
