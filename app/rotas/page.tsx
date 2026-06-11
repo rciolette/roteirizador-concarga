@@ -279,43 +279,11 @@ function GerarRotasDialog({ onClose, onConfirm, motoristas, veiculos }: {
   )
 }
 
-// ── Maps helpers ─────────────────────────────────────────────────────────────
-function enderecoMaps(nf: NotaFiscal): string {
-  const parts: string[] = []
-  if (nf.endereco && nf.endereco !== '—') parts.push(nf.endereco)
-  if (nf.bairro   && nf.bairro   !== '—') parts.push(nf.bairro)
-  if (nf.municipio && nf.municipio !== '—') parts.push(nf.municipio)
-  parts.push('MG')
-  return parts.join(', ')
-}
-
-function priNF(nf: NotaFiscal, hoje: string): number {
-  if (nf.dataAgendamento && nf.dataAgendamento <= hoje) return 0
-  if (nf.sac || nf.indRee) return 1
-  if (nf.cond === 'vermelho') return 2
-  if (nf.cond === 'laranja')  return 3
-  return 4
-}
-
-function gerarLinkMapsLocal(nfs: NotaFiscal[], enderecoOrigem?: string | null): string | null {
-  if (!nfs.length) return null
-  const hoje = new Date().toISOString().slice(0, 10)
-  const sorted = [...nfs].sort((a, b) => {
-    const d = priNF(a, hoje) - priNF(b, hoje)
-    if (d !== 0) return d
-    return a.dataEmissao.localeCompare(b.dataEmissao)
-  })
-  const seen = new Set<string>()
-  const stops: string[] = []
-  for (const nf of sorted) {
-    const addr = enderecoMaps(nf)
-    if (!seen.has(addr)) { seen.add(addr); stops.push(addr) }
-  }
-  const maxParadas = enderecoOrigem ? 24 : 25
-  const sliced = stops.slice(0, maxParadas)
-  if (!sliced.length) return null
-  const pontos = enderecoOrigem ? [enderecoOrigem, ...sliced] : sliced
-  return 'https://www.google.com/maps/dir/' + pontos.map(encodeURIComponent).join('/')
+function gerarLinkMapsLocal(nfs: import('@/types').NotaFiscal[], origem?: string | null): string | null {
+  const paradas = nfs.map(nf => [nf.endereco, nf.municipio].filter(Boolean).join(', '))
+  if (paradas.length === 0) return null
+  const waypoints = origem ? [origem, ...paradas] : paradas
+  return 'https://www.google.com/maps/dir/' + waypoints.map(w => encodeURIComponent(w).replace(/%20/g, '+')).join('/')
 }
 
 // ── Route Card ────────────────────────────────────────────────────────────────
@@ -639,6 +607,63 @@ function ExportMenuRotas({ rotas }: { rotas: import('@/types').Rota[] }) {
   )
 }
 
+// ── Carga por Veículo Panel (c2) ──────────────────────────────────────────────
+function CargaPorVeiculoPanel({ rotas }: { rotas: Rota[] }) {
+  const linhas = rotas.filter(r => r.veiculo)
+  if (linhas.length === 0) return null
+  return (
+    <Card>
+      <CardHeader>
+        <span className="text-xs font-medium text-base">Carga por veículo</span>
+      </CardHeader>
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-[0.5px] border-[var(--border-subtle)]">
+              {['Rota', 'Motorista', 'Placa', 'Tipo', 'Peso (kg)', 'Cap. (kg)', '% Ocup.'].map(h => (
+                <th key={h} className="text-left px-4 py-2 text-[11px] text-muted font-medium whitespace-nowrap">{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {linhas.map((rota, i) => {
+              const v    = rota.veiculo!
+              const cap  = v.capacidadeKg || 0
+              const pct  = cap > 0 ? Math.min(100, Math.round((rota.pesoTotal / cap) * 100)) : null
+              const alerta = pct !== null && pct >= 95
+              const aviso  = pct !== null && pct >= 80 && !alerta
+              return (
+                <tr key={rota.id} className={cn(
+                  'border-b border-[0.5px] border-[var(--border-faint)]',
+                  alerta ? 'bg-danger-bg/40' : i % 2 !== 0 ? 'bg-cream/40' : '',
+                )}>
+                  <td className="px-4 py-2 text-xs font-mono font-medium text-base">{rota.codigoRota}</td>
+                  <td className="px-4 py-2 text-xs text-muted">{rota.motorista?.nome ?? '—'}</td>
+                  <td className="px-4 py-2 text-xs font-mono text-base">{v.placa}</td>
+                  <td className="px-4 py-2 text-xs text-muted">{v.tipo}</td>
+                  <td className="px-4 py-2 text-xs tabular-nums text-right text-muted">{rota.pesoTotal.toLocaleString('pt-BR')}</td>
+                  <td className="px-4 py-2 text-xs tabular-nums text-right text-muted">{cap ? cap.toLocaleString('pt-BR') : '—'}</td>
+                  <td className="px-4 py-2">
+                    {pct !== null ? (
+                      <span className={cn(
+                        'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap',
+                        alerta ? 'bg-danger-bg text-danger' : aviso ? 'bg-warn-bg text-warn' : 'bg-success-bg text-success-dark',
+                      )}>
+                        {alerta && <span className="w-[5px] h-[5px] rounded-full shrink-0 bg-danger" />}
+                        {pct}%
+                      </span>
+                    ) : '—'}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  )
+}
+
 // ── Rotas Page ────────────────────────────────────────────────────────────────
 export default function RotasPage() {
   const { nfImportState, importarNFs, dismissNFImport, nfRows, rotas: routes, setRotas: setRoutes, loadingRotas, motoristas, veiculos, config, refreshVeiculos } = useAppData()
@@ -937,6 +962,8 @@ export default function RotasPage() {
             </div>
           </div>
         )}
+
+        {routes.length > 0 && <CargaPorVeiculoPanel rotas={routes} />}
 
         <div className="flex flex-col gap-2.5">
           {filtered.map(rota => (

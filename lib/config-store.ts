@@ -22,7 +22,7 @@ export async function carregarConfig(): Promise<AppConfig> {
     return {
       sql:               DEFAULT_CONFIG.sql,
       operacao:          (map.operacao          as AppConfig['operacao'])          ?? DEFAULT_CONFIG.operacao,
-      pesos:             (map.pesos             as AppConfig['pesos'])             ?? DEFAULT_CONFIG.pesos,
+      pesos:             mergePesos((map.pesos  as AppConfig['pesos'])             ?? DEFAULT_CONFIG.pesos),
       grades:            (map.grades            as AppConfig['grades'])            ?? DEFAULT_CONFIG.grades,
       instrucaoGlobal:   (map.instrucaoGlobal   as string)                         ?? DEFAULT_CONFIG.instrucaoGlobal,
       instrucoesPorRota: (map.instrucoesPorRota as AppConfig['instrucoesPorRota']) ?? DEFAULT_CONFIG.instrucoesPorRota,
@@ -110,6 +110,21 @@ export async function resolveWebhookUrl(
   } catch { /* usa fallback */ }
 
   return defaultUrl
+}
+
+// ── Helpers de configuração ───────────────────────────────────────────────────
+
+// Garante que valores 0 no Supabase não sobrescrevam os defaults de capacidade.
+// Isso acontece quando o usuário nunca preencheu os pesos manualmente.
+function mergePesos(saved: AppConfig['pesos']): AppConfig['pesos'] {
+  const d = DEFAULT_CONFIG.pesos
+  return {
+    fiorino:     saved.fiorino     || d.fiorino,
+    vuc:         saved.vuc         || d.vuc,
+    tresQuartos: saved.tresQuartos || d.tresQuartos,
+    truck:       saved.truck       || d.truck,
+    carreta:     saved.carreta     || d.carreta,
+  }
 }
 
 // ── localStorage helpers ──────────────────────────────────────────────────────
