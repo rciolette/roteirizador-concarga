@@ -12,6 +12,7 @@ export async function listarVeiculos(): Promise<Veiculo[]> {
       .from('veiculos')
       .select('id, placa, modelo, tipo_veiculo, capacidade_kg, situacao_siat, motorista_id, codigo_siat_motorista, disponivel_hoje, motoristas(nome, celular)')
       .eq('ativo', true)
+      .eq('disponivel_hoje', true)
       .not('motorista_id', 'is', null)
       .order('placa', { ascending: true }),
     supabase

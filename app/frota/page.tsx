@@ -62,14 +62,15 @@ function Paginacao({
 }
 
 // ── Toggle ────────────────────────────────────────────────────────────────────
-function Toggle({ checked, onChange, color = 'primary' }: {
-  checked: boolean; onChange: (v: boolean) => void; color?: 'primary' | 'teal'
+function Toggle({ checked, onChange, color = 'primary', disabled = false }: {
+  checked: boolean; onChange: (v: boolean) => void; color?: 'primary' | 'teal'; disabled?: boolean
 }) {
   return (
     <button
-      onClick={() => onChange(!checked)}
+      onClick={() => !disabled && onChange(!checked)}
       className={cn(
-        'relative inline-flex h-[18px] w-[32px] shrink-0 cursor-pointer items-center rounded-full border-0 transition-colors duration-200',
+        'relative inline-flex h-[18px] w-[32px] shrink-0 items-center rounded-full border-0 transition-colors duration-200',
+        disabled ? 'cursor-not-allowed opacity-40' : 'cursor-pointer',
         checked ? color === 'teal' ? 'bg-teal' : 'bg-primary' : 'bg-[var(--border-input)]',
       )}
     >
@@ -108,33 +109,23 @@ function SituacaoBadge({ situacao }: { situacao: string }) {
   )
 }
 
-function VeiculoStatusBadge({ situacaoSiat, disponivelHoje, origem }: {
-  situacaoSiat: string
-  disponivelHoje: boolean
-  origem: 'siat_sugerido' | 'operador' | null
-}) {
-  if (disponivelHoje) {
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap bg-teal-bg text-[#085041]">
-        <span className="w-[5px] h-[5px] rounded-full shrink-0 bg-teal" />
-        Disponível hoje
-        {origem === 'siat_sugerido' && (
-          <span className="ml-0.5 px-1 rounded text-[9px] bg-teal/20 text-[#085041]">SIAT</span>
-        )}
-      </span>
-    )
-  }
-  if (!situacaoSiat) {
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap bg-cream text-muted">
-        <span className="w-[5px] h-[5px] rounded-full shrink-0 bg-subtle" />—
-      </span>
-    )
-  }
+const SITUACAO_BADGE: Record<string, string> = {
+  'DISPONÍVEL':  'bg-green-100 text-green-800',
+  'RESERVADO':   'bg-yellow-100 text-yellow-800',
+  'CARREGADO':   'bg-blue-100 text-blue-800',
+  'VIAJANDO':    'bg-purple-100 text-purple-800',
+  'MANUTENÇÃO':  'bg-red-100 text-red-800',
+}
+
+function SituacaoSiatBadge({ situacao }: { situacao: string }) {
+  const norm = (situacao ?? '').toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+  const key   = Object.keys(SITUACAO_BADGE).find(k =>
+    k.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase() === norm
+  )
+  const cls = key ? SITUACAO_BADGE[key] : 'bg-gray-100 text-gray-600'
   return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap bg-cream text-muted">
-      <span className="w-[5px] h-[5px] rounded-full shrink-0 bg-subtle" />
-      {situacaoSiat}
+    <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap', cls)}>
+      {situacao || '—'}
     </span>
   )
 }
@@ -253,10 +244,13 @@ export default function FrotaPage() {
   const [pageM,       setPageM]       = useState(0)
 
   // ── Filtros veículos ────────────────────────────────────────────────────────
-  const [buscaV,     setBuscaV]     = useState('')
-  const [filtroSiat, setFiltroSiat] = useState('')          // '' = todas as situações
-  const [filtroAtV,  setFiltroAtV]  = useState<'todos' | 'ativos' | 'inativos'>('todos')
-  const [filtroDisp, setFiltroDisp] = useState<'todos' | 'sim' | 'nao'>('todos')
+  const [buscaV,         setBuscaV]         = useState('')
+  const [filtroSiat,     setFiltroSiat]     = useState('')
+  const [filtroAtV,      setFiltroAtV]      = useState<'todos' | 'ativos' | 'inativos'>('ativos')
+  const [filtroDisp,     setFiltroDisp]     = useState<'todos' | 'sim' | 'nao'>('todos')
+  const [filtroTipo,     setFiltroTipo]     = useState('')
+  const [filtroCategoria,setFiltroCategoria]= useState('')
+  const [filtroCarroceria,setFiltroCarroceria]=useState('')
   const [pageSizeV,  setPageSizeV]  = useState(25)
   const [pageV,      setPageV]      = useState(0)
 
@@ -447,7 +441,11 @@ export default function FrotaPage() {
   const totalPagesM = Math.max(1, Math.ceil(motoristasFiltrados.length / pageSizeM))
   const paginatedM  = motoristasFiltrados.slice(pageM * pageSizeM, (pageM + 1) * pageSizeM)
 
-  const situacoesSiat = [...new Set(veiculos.map(v => v.situacao_siat).filter(Boolean))].sort()
+  const situacoesSiat  = [...new Set(veiculos.map(v => v.situacao_siat).filter(Boolean))].sort()
+  const tiposVeiculo   = [...new Set(veiculos.map(v => v.tipo_veiculo).filter(Boolean))].sort()
+  const categorias     = [...new Set(veiculos.map(v => v.categoria).filter(Boolean))].sort()
+  const carrocerias    = [...new Set(veiculos.map(v => v.tipo_carroceria).filter(Boolean))].sort()
+
   const veiculosFiltrados = veiculos.filter(v => {
     if (buscaV) {
       const q = buscaV.toLowerCase()
@@ -457,7 +455,10 @@ export default function FrotaPage() {
     }
     if (filtroAtV === 'ativos'   && !v.ativo) return false
     if (filtroAtV === 'inativos' &&  v.ativo) return false
-    if (filtroSiat && v.situacao_siat !== filtroSiat) return false
+    if (filtroSiat      && v.situacao_siat  !== filtroSiat)      return false
+    if (filtroTipo      && v.tipo_veiculo   !== filtroTipo)      return false
+    if (filtroCategoria && v.categoria      !== filtroCategoria) return false
+    if (filtroCarroceria && v.tipo_carroceria !== filtroCarroceria) return false
     if (filtroDisp === 'sim' && !v.disponivel_hoje) return false
     if (filtroDisp === 'nao' &&  v.disponivel_hoje) return false
     return true
@@ -654,6 +655,18 @@ export default function FrotaPage() {
                   <option value="ativos">Somente ativos</option>
                   <option value="inativos">Somente inativos</option>
                 </Select>
+                <Select value={filtroTipo} onChange={v => { setFiltroTipo(v); setPageV(0) }} className="w-[130px]">
+                  <option value="">Todos os tipos</option>
+                  {tiposVeiculo.map(t => <option key={t} value={t}>{t}</option>)}
+                </Select>
+                <Select value={filtroCategoria} onChange={v => { setFiltroCategoria(v); setPageV(0) }} className="w-[140px]">
+                  <option value="">Todas categ.</option>
+                  {categorias.map(c => <option key={c} value={c}>{c}</option>)}
+                </Select>
+                <Select value={filtroCarroceria} onChange={v => { setFiltroCarroceria(v); setPageV(0) }} className="w-[140px]">
+                  <option value="">Todas carrocerias</option>
+                  {carrocerias.map(c => <option key={c} value={c}>{c}</option>)}
+                </Select>
                 <Select value={filtroDisp} onChange={v => { setFiltroDisp(v as typeof filtroDisp); setPageV(0) }} className="w-[155px]">
                   <option value="todos">Qualquer disp.</option>
                   <option value="sim">Disponíveis hoje</option>
@@ -696,11 +709,13 @@ export default function FrotaPage() {
               ]}
             />
 
-            {loadingV ? <TableSkeleton cols={13} /> : veiculosFiltrados.length === 0 ? (
+            {loadingV ? <TableSkeleton cols={9} /> : veiculosFiltrados.length === 0 ? (
               <div className="py-10 text-center text-subtle text-[13px]">
-                {filtroSiat || filtroAtV !== 'todos' || filtroDisp !== 'todos' || buscaV
+                {filtroSiat || filtroAtV !== 'ativos' || filtroDisp !== 'todos' || buscaV || filtroTipo || filtroCategoria || filtroCarroceria
                   ? 'Nenhum veículo com esses filtros.'
-                  : 'Nenhum veículo cadastrado. Use "Sincronizar com SIAT".'}
+                  : veiculos.length === 0
+                    ? 'Nenhum veículo cadastrado. Use "Sincronizar com SIAT".'
+                    : 'Nenhum veículo ativo na frota.'}
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -710,10 +725,8 @@ export default function FrotaPage() {
                       <TH check>
                         <Checkbox checked={allVSel} indeterminate={someVSel} onChange={toggleAllV} />
                       </TH>
-                      <TH>Placa</TH><TH>Modelo</TH><TH>Categoria</TH><TH>Tipo</TH><TH>Carroceria</TH>
-                      <TH>Cap. (kg)</TH><TH>PBT (kg)</TH><TH>Vol. (m³)</TH>
-                      <TH>Situação / Disp.</TH><TH>Motorista</TH>
-                      <TH>Ativo</TH><TH>Disponível hoje</TH>
+                      <TH>Placa</TH><TH>Motorista</TH><TH>Tipo</TH><TH>Categoria</TH><TH>Carroceria</TH>
+                      <TH>Cap. (kg)</TH><TH>Situação</TH><TH>Disponível hoje</TH>
                     </tr>
                   </thead>
                   <tbody>
@@ -734,28 +747,34 @@ export default function FrotaPage() {
                           <Checkbox checked={selectedV.has(v.id)} onChange={() => toggleOneV(v.id)} />
                         </td>
                         <td className="px-4 py-2.5 text-xs font-mono font-medium text-base">{v.placa}</td>
-                        <TD medium>{v.modelo || '—'}</TD>
-                        <TD>{v.categoria || '—'}</TD>
+                        <TD>{v.motorista_nome ?? <span className="italic text-subtle">—</span>}</TD>
                         <TD>{v.tipo_veiculo || '—'}</TD>
+                        <TD>{v.categoria || '—'}</TD>
                         <TD>{v.tipo_carroceria || '—'}</TD>
                         <td className="px-4 py-2.5 text-xs text-muted tabular-nums text-right">
                           {v.capacidade_kg ? v.capacidade_kg.toLocaleString('pt-BR') : '—'}
                         </td>
-                        <td className="px-4 py-2.5 text-xs text-muted tabular-nums text-right">
-                          {v.pbt ? v.pbt.toLocaleString('pt-BR') : '—'}
-                        </td>
-                        <td className="px-4 py-2.5 text-xs text-muted tabular-nums text-right">
-                          {v.volume_m3 ? v.volume_m3.toLocaleString('pt-BR') : '—'}
+                        <td className="px-4 py-2.5" onClick={e => e.stopPropagation()}>
+                          <SituacaoSiatBadge situacao={v.situacao_siat} />
                         </td>
                         <td className="px-4 py-2.5" onClick={e => e.stopPropagation()}>
-                          <VeiculoStatusBadge situacaoSiat={v.situacao_siat} disponivelHoje={v.disponivel_hoje} origem={v.disponibilidade_origem} />
-                        </td>
-                        <TD>{v.motorista_nome ?? <span className="italic">—</span>}</TD>
-                        <td className="px-4 py-2.5" onClick={e => e.stopPropagation()}>
-                          <Toggle checked={v.ativo} onChange={val => toggleVeiculo(v.id, val)} />
-                        </td>
-                        <td className="px-4 py-2.5" onClick={e => e.stopPropagation()}>
-                          <Toggle checked={v.disponivel_hoje} onChange={val => toggleDisponivelHoje(v.id, val)} color="teal" />
+                          {(() => {
+                            const norm = (v.situacao_siat ?? '').toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+                            const podeDisponivel = norm === 'DISPONIVEL'
+                            return (
+                              <div className="flex items-center gap-1.5">
+                                <Toggle
+                                  checked={v.disponivel_hoje}
+                                  onChange={val => toggleDisponivelHoje(v.id, val)}
+                                  color="teal"
+                                  disabled={!podeDisponivel}
+                                />
+                                {!podeDisponivel && (
+                                  <span className="text-[10px] text-muted italic">{v.situacao_siat || '—'}</span>
+                                )}
+                              </div>
+                            )
+                          })()}
                         </td>
                       </tr>
                     ))}
