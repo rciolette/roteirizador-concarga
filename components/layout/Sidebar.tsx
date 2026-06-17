@@ -6,8 +6,16 @@ import { ThemeToggle } from '@/components/ui/ThemeToggle'
 import { getSupabaseBrowser } from '@/lib/supabase-browser'
 import { useAuth } from '@/components/providers/AuthProvider'
 import { cn } from '@/lib/utils'
+import type { Perfil } from '@/lib/auth'
 
-const navItems = [
+interface NavItem {
+  href: string
+  label: string
+  acao: string
+  somentePerfis?: readonly Perfil[]
+}
+
+const navItems: { section: string; items: NavItem[] }[] = [
   {
     section: 'Principal',
     items: [
@@ -20,7 +28,7 @@ const navItems = [
   {
     section: 'Sistema',
     items: [
-      { href: '/rotas/acoes',   label: 'Aprovações',    acao: 'aprovar'       },
+      { href: '/aprovacoes',    label: 'Aprovações',    acao: 'aprovar',       somentePerfis: ['owner', 'administrador'] },
       { href: '/configuracoes', label: 'Configurações', acao: 'configuracoes' },
     ],
   },
@@ -47,7 +55,7 @@ const icons: Record<string, ReactNode> = {
       <circle cx="8" cy="8" r="6"/><path d="M8 5v3l2.5 2"/>
     </svg>
   ),
-  '/rotas/acoes': (
+  '/aprovacoes': (
     <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
       <path d="M2 4h12M4 8h8M6 12h4"/>
     </svg>
@@ -110,7 +118,11 @@ export default function Sidebar() {
       {/* Nav */}
       <nav className="px-2 py-2.5 flex-1 flex flex-col">
         {navItems.map(group => {
-          const itensVisiveis = group.items.filter(item => pode(item.acao))
+          const itensVisiveis = group.items.filter(item => {
+            if (!pode(item.acao)) return false
+            if (item.somentePerfis && (!usuario?.perfil || !item.somentePerfis.includes(usuario.perfil as Perfil))) return false
+            return true
+          })
           if (itensVisiveis.length === 0) return null
           return (
             <div key={group.section} className="mb-1">
@@ -120,7 +132,8 @@ export default function Sidebar() {
               {itensVisiveis.map(item => {
                 const active = item.href === '/'
                   ? pathname === '/'
-                  : pathname.startsWith(item.href)
+                  : pathname.startsWith(item.href) ||
+                    (item.href === '/aprovacoes' && pathname.startsWith('/rotas/acoes'))
                 return (
                   <Link
                     key={item.href}
@@ -137,7 +150,7 @@ export default function Sidebar() {
                       {icons[item.href]}
                     </span>
                     <span className="flex-1 truncate">{item.label}</span>
-                    {item.href === '/rotas' && aguardandoCount > 0 && (
+                    {(item.href === '/rotas' || item.href === '/aprovacoes') && aguardandoCount > 0 && (
                       <span className="text-[10px] px-1.5 py-px rounded-full font-medium shrink-0 bg-warn-bg text-warn">
                         {aguardandoCount}
                       </span>

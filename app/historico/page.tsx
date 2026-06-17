@@ -167,6 +167,7 @@ export default function HistoricoPage() {
   const [rotaSelecionada, setRotaSelecionada] = useState<Rota | null>(null)
   const [rotasPeriodo,    setRotasPeriodo]    = useState<Rota[]>([])
   const [loading,         setLoading]         = useState(false)
+  const [visibleCount,    setVisibleCount]    = useState(25)
   const { rotas: rotasHoje } = useAppData()
 
   // Carrega o período sempre que as datas mudarem (debounce 400ms)
@@ -197,6 +198,9 @@ export default function HistoricoPage() {
     const incHoje = dataInicio <= hoje && hoje <= dataFim
     return incHoje ? [...semHoje, ...rotasHoje] : semHoje
   })()
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { setVisibleCount(25) }, [dataInicio, dataFim, statusFilter, filtroMotorista, filtroVeiculo])
 
   const itens = allItens.filter(r => {
     if (statusFilter !== 'todas' && r.status !== statusFilter) return false
@@ -362,7 +366,7 @@ export default function HistoricoPage() {
               </tr>
             </thead>
             <tbody>
-              {itens.map((rota, i) => (
+              {itens.slice(0, visibleCount).map((rota, i) => (
                 <tr
                   key={rota.id}
                   onClick={() => setRotaSelecionada(rota)}
@@ -389,6 +393,16 @@ export default function HistoricoPage() {
               )}
             </tbody>
           </table>
+          {visibleCount < itens.length && (
+            <div className="px-4 py-3 border-t border-[0.5px] border-[var(--border-faint)] flex justify-center">
+              <button
+                onClick={() => setVisibleCount(c => c + 25)}
+                className="text-[11px] text-primary hover:underline cursor-pointer bg-transparent border-none transition-colors"
+              >
+                Ver mais {Math.min(25, itens.length - visibleCount)} rotas ({itens.length - visibleCount} restantes)
+              </button>
+            </div>
+          )}
         </Card>
       </div>
 

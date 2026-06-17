@@ -36,11 +36,12 @@ const GRADES = [
 ]
 
 export function GradeCidadesTable() {
-  const [rows,        setRows]        = useState<GradeCidade[]>([])
-  const [loading,     setLoading]     = useState(true)
-  const [busca,       setBusca]       = useState('')
-  const [regiaoFlt,   setRegiaoFlt]   = useState('Todas')
-  const [gradeFlt,    setGradeFlt]    = useState('Todas')
+  const [rows,         setRows]        = useState<GradeCidade[]>([])
+  const [loading,      setLoading]     = useState(true)
+  const [busca,        setBusca]       = useState('')
+  const [regiaoFlt,    setRegiaoFlt]   = useState('Todas')
+  const [gradeFlt,     setGradeFlt]    = useState('Todas')
+  const [visibleCount, setVisibleCount] = useState(25)
 
   // ── Adicionar ────────────────────────────────────────────────────────────────
   const [addMode,    setAddMode]    = useState(false)
@@ -109,6 +110,8 @@ export function GradeCidadesTable() {
     setLoading(false)
   }
 
+  useEffect(() => { setVisibleCount(25) }, [busca, regiaoFlt, gradeFlt])
+
   // ── Filtro ───────────────────────────────────────────────────────────────────
   const filtered = rows.filter(r => {
     if (busca && !(r.cidade ?? '').toLowerCase().includes(busca.toLowerCase())) return false
@@ -116,6 +119,7 @@ export function GradeCidadesTable() {
     if (gradeFlt  !== 'Todas' && (r.grade  ?? '').toUpperCase() !== gradeFlt)  return false
     return true
   })
+  const visible = filtered.slice(0, visibleCount)
 
   // ── Handlers ─────────────────────────────────────────────────────────────────
   async function handleAdd() {
@@ -271,7 +275,7 @@ export function GradeCidadesTable() {
       </div>
 
       {/* Tabela */}
-      <div className="overflow-x-auto max-h-[520px] overflow-y-auto">
+      <div className="overflow-x-auto">
         {loading ? (
           <div className="flex items-center justify-center py-12 gap-2 text-muted">
             <svg className="w-4 h-4 text-primary animate-spin-slow" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
@@ -343,7 +347,7 @@ export function GradeCidadesTable() {
               )}
 
               {/* Linhas de dados */}
-              {filtered.map((row, i) => {
+              {visible.map((row, i) => {
                 const isEditing = editId === row.id
                 const isDelConf = deleteConfirm === row.id
                 const isDel     = deleting === row.id
@@ -447,11 +451,23 @@ export function GradeCidadesTable() {
         )}
       </div>
 
+      {/* Ver mais */}
+      {!loading && visible.length < filtered.length && (
+        <div className="px-4 py-3 border-t border-[0.5px] border-[var(--border-faint)] flex justify-center">
+          <button
+            onClick={() => setVisibleCount(c => c + 25)}
+            className="text-[11px] text-primary hover:underline cursor-pointer bg-transparent border-none transition-colors"
+          >
+            Ver mais {Math.min(25, filtered.length - visible.length)} cidades ({filtered.length - visible.length} restantes)
+          </button>
+        </div>
+      )}
+
       {/* Rodapé com contagem */}
       {!loading && rows.length > 0 && (
         <div className="px-4 py-2 border-t border-[0.5px] border-[var(--border-faint)] flex items-center justify-between">
           <span className="text-[10px] text-muted">
-            {filtered.length} resultado{filtered.length !== 1 ? 's' : ''} · {rows.length} total
+            {visible.length} de {filtered.length} resultado{filtered.length !== 1 ? 's' : ''} · {rows.length} total
           </span>
           {(busca || regiaoFlt !== 'Todas' || gradeFlt !== 'Todas') && (
             <button

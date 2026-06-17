@@ -238,21 +238,19 @@ export default function FrotaPage() {
   const [seedingV,  setSeedingV]  = useState(false)
 
   // ── Filtros motoristas ────────────────────────────────────────────���─────────
-  const [busca,       setBusca]       = useState('')
-  const [filtroAtivo, setFiltroAtivo] = useState<'todos' | 'ativos' | 'inativos'>('todos')
-  const [pageSizeM,   setPageSizeM]   = useState(25)
-  const [pageM,       setPageM]       = useState(0)
+  const [busca,           setBusca]          = useState('')
+  const [filtroAtivo,     setFiltroAtivo]    = useState<'todos' | 'ativos' | 'inativos'>('todos')
+  const [visibleCountM,   setVisibleCountM]  = useState(25)
 
   // ── Filtros veículos ────────────────────────────────────────────────────────
-  const [buscaV,         setBuscaV]         = useState('')
-  const [filtroSiat,     setFiltroSiat]     = useState('')
-  const [filtroAtV,      setFiltroAtV]      = useState<'todos' | 'ativos' | 'inativos'>('ativos')
-  const [filtroDisp,     setFiltroDisp]     = useState<'todos' | 'sim' | 'nao'>('todos')
-  const [filtroTipo,     setFiltroTipo]     = useState('')
-  const [filtroCategoria,setFiltroCategoria]= useState('')
+  const [buscaV,          setBuscaV]         = useState('')
+  const [filtroSiat,      setFiltroSiat]     = useState('')
+  const [filtroAtV,       setFiltroAtV]      = useState<'todos' | 'ativos' | 'inativos'>('ativos')
+  const [filtroDisp,      setFiltroDisp]     = useState<'todos' | 'sim' | 'nao'>('todos')
+  const [filtroTipo,      setFiltroTipo]     = useState('')
+  const [filtroCategoria, setFiltroCategoria]= useState('')
   const [filtroCarroceria,setFiltroCarroceria]=useState('')
-  const [pageSizeV,  setPageSizeV]  = useState(25)
-  const [pageV,      setPageV]      = useState(0)
+  const [visibleCountV,   setVisibleCountV]  = useState(25)
 
   // ── Paginação vinculados ────────────────────────────────────────────────────
   const [pageVi, setPageVi] = useState(0)
@@ -438,8 +436,7 @@ export default function FrotaPage() {
     if (filtroAtivo === 'inativos' &&  m.ativo) return false
     return true
   })
-  const totalPagesM = Math.max(1, Math.ceil(motoristasFiltrados.length / pageSizeM))
-  const paginatedM  = motoristasFiltrados.slice(pageM * pageSizeM, (pageM + 1) * pageSizeM)
+  const paginatedM  = motoristasFiltrados.slice(0, visibleCountM)
 
   const situacoesSiat  = [...new Set(veiculos.map(v => v.situacao_siat).filter(Boolean))].sort()
   const tiposVeiculo   = [...new Set(veiculos.map(v => v.tipo_veiculo).filter(Boolean))].sort()
@@ -463,8 +460,7 @@ export default function FrotaPage() {
     if (filtroDisp === 'nao' &&  v.disponivel_hoje) return false
     return true
   })
-  const totalPagesV = Math.max(1, Math.ceil(veiculosFiltrados.length / pageSizeV))
-  const paginatedV  = veiculosFiltrados.slice(pageV * pageSizeV, (pageV + 1) * pageSizeV)
+  const paginatedV  = veiculosFiltrados.slice(0, visibleCountV)
 
   const totalPagesVi = Math.max(1, Math.ceil(vinculados.length / PAGE_SIZE_DEFAULT))
   const paginatedVi  = vinculados.slice(pageVi * PAGE_SIZE_DEFAULT, (pageVi + 1) * PAGE_SIZE_DEFAULT)
@@ -549,12 +545,12 @@ export default function FrotaPage() {
                 <Btn size="sm" onClick={handleSincronizarSIAT} disabled={syncingM}>
                   {syncingM ? 'Sincronizando...' : '↺ Sincronizar com SIAT'}
                 </Btn>
-                <Select value={filtroAtivo} onChange={v => { setFiltroAtivo(v as typeof filtroAtivo); setPageM(0) }} className="w-[130px]">
+                <Select value={filtroAtivo} onChange={v => { setFiltroAtivo(v as typeof filtroAtivo); setVisibleCountM(25) }} className="w-[130px]">
                   <option value="todos">Todos</option>
                   <option value="ativos">Somente ativos</option>
                   <option value="inativos">Somente inativos</option>
                 </Select>
-                <TextInput value={busca} onChange={v => { setBusca(v); setPageM(0) }} placeholder="Nome, sigla ou SIAT..." style={{ width: 200 }} />
+                <TextInput value={busca} onChange={v => { setBusca(v); setVisibleCountM(25) }} placeholder="Nome, sigla ou SIAT..." style={{ width: 200 }} />
               </div>
             </CardHeader>
 
@@ -624,11 +620,16 @@ export default function FrotaPage() {
                 </table>
               </div>
             )}
-            <Paginacao
-              page={pageM} totalItems={motoristasFiltrados.length} totalPages={totalPagesM}
-              onChange={setPageM} pageSize={pageSizeM}
-              onPageSizeChange={s => { setPageSizeM(s); setPageM(0) }}
-            />
+            {paginatedM.length < motoristasFiltrados.length && (
+              <div className="px-4 py-3 border-t border-[0.5px] border-[var(--border-faint)] flex justify-center">
+                <button
+                  onClick={() => setVisibleCountM(c => c + 25)}
+                  className="text-[11px] text-primary hover:underline cursor-pointer bg-transparent border-none transition-colors"
+                >
+                  Ver mais {Math.min(25, motoristasFiltrados.length - paginatedM.length)} motoristas ({motoristasFiltrados.length - paginatedM.length} restantes)
+                </button>
+              </div>
+            )}
           </Card>
         )}
 
@@ -649,30 +650,30 @@ export default function FrotaPage() {
               </div>
               <div className="flex items-center gap-2 flex-wrap justify-end">
                 <ExportMenuFrota rows={veiculosParaLinhas(veiculosFiltrados)} nomeBase="veiculos" />
-                <TextInput value={buscaV} onChange={v => { setBuscaV(v); setPageV(0) }} placeholder="Placa, modelo, motorista..." style={{ width: 190 }} />
-                <Select value={filtroAtV} onChange={v => { setFiltroAtV(v as typeof filtroAtV); setPageV(0) }} className="w-[130px]">
+                <TextInput value={buscaV} onChange={v => { setBuscaV(v); setVisibleCountV(25) }} placeholder="Placa, modelo, motorista..." style={{ width: 190 }} />
+                <Select value={filtroAtV} onChange={v => { setFiltroAtV(v as typeof filtroAtV); setVisibleCountV(25) }} className="w-[130px]">
                   <option value="todos">Todos</option>
                   <option value="ativos">Somente ativos</option>
                   <option value="inativos">Somente inativos</option>
                 </Select>
-                <Select value={filtroTipo} onChange={v => { setFiltroTipo(v); setPageV(0) }} className="w-[130px]">
+                <Select value={filtroTipo} onChange={v => { setFiltroTipo(v); setVisibleCountV(25) }} className="w-[130px]">
                   <option value="">Todos os tipos</option>
                   {tiposVeiculo.map(t => <option key={t} value={t}>{t}</option>)}
                 </Select>
-                <Select value={filtroCategoria} onChange={v => { setFiltroCategoria(v); setPageV(0) }} className="w-[140px]">
+                <Select value={filtroCategoria} onChange={v => { setFiltroCategoria(v); setVisibleCountV(25) }} className="w-[140px]">
                   <option value="">Todas categ.</option>
                   {categorias.map(c => <option key={c} value={c}>{c}</option>)}
                 </Select>
-                <Select value={filtroCarroceria} onChange={v => { setFiltroCarroceria(v); setPageV(0) }} className="w-[140px]">
+                <Select value={filtroCarroceria} onChange={v => { setFiltroCarroceria(v); setVisibleCountV(25) }} className="w-[140px]">
                   <option value="">Todas carrocerias</option>
                   {carrocerias.map(c => <option key={c} value={c}>{c}</option>)}
                 </Select>
-                <Select value={filtroDisp} onChange={v => { setFiltroDisp(v as typeof filtroDisp); setPageV(0) }} className="w-[155px]">
+                <Select value={filtroDisp} onChange={v => { setFiltroDisp(v as typeof filtroDisp); setVisibleCountV(25) }} className="w-[155px]">
                   <option value="todos">Qualquer disp.</option>
                   <option value="sim">Disponíveis hoje</option>
                   <option value="nao">Não disponíveis</option>
                 </Select>
-                <Select value={filtroSiat} onChange={v => { setFiltroSiat(v); setPageV(0) }} className="w-[155px]">
+                <Select value={filtroSiat} onChange={v => { setFiltroSiat(v); setVisibleCountV(25) }} className="w-[155px]">
                   <option value="">Todas as situações</option>
                   {situacoesSiat.map(s => <option key={s} value={s}>{s}</option>)}
                 </Select>
@@ -782,11 +783,16 @@ export default function FrotaPage() {
                 </table>
               </div>
             )}
-            <Paginacao
-              page={pageV} totalItems={veiculosFiltrados.length} totalPages={totalPagesV}
-              onChange={setPageV} pageSize={pageSizeV}
-              onPageSizeChange={s => { setPageSizeV(s); setPageV(0) }}
-            />
+            {paginatedV.length < veiculosFiltrados.length && (
+              <div className="px-4 py-3 border-t border-[0.5px] border-[var(--border-faint)] flex justify-center">
+                <button
+                  onClick={() => setVisibleCountV(c => c + 25)}
+                  className="text-[11px] text-primary hover:underline cursor-pointer bg-transparent border-none transition-colors"
+                >
+                  Ver mais {Math.min(25, veiculosFiltrados.length - paginatedV.length)} veículos ({veiculosFiltrados.length - paginatedV.length} restantes)
+                </button>
+              </div>
+            )}
           </Card>
         )}
 

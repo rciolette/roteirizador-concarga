@@ -191,10 +191,11 @@ function AtivoToggle({ ativo, loading, onToggle }: { ativo: boolean; loading: bo
 // ── Componente principal ──────────────────────────────────────────────────────
 
 export function RotasCadastradasTable() {
-  const [rows,      setRows]      = useState<RotaCadastrada[]>([])
-  const [loading,   setLoading]   = useState(true)
-  const [busca,     setBusca]     = useState('')
-  const [showModal, setShowModal] = useState(false)
+  const [rows,         setRows]        = useState<RotaCadastrada[]>([])
+  const [loading,      setLoading]     = useState(true)
+  const [busca,        setBusca]       = useState('')
+  const [showModal,    setShowModal]   = useState(false)
+  const [visibleCount, setVisibleCount] = useState(25)
 
   // Edição inline
   const [editId,     setEditId]     = useState<number | null>(null)
@@ -222,6 +223,8 @@ export function RotasCadastradasTable() {
     setLoading(false)
   }
 
+  useEffect(() => { setVisibleCount(25) }, [busca])
+
   // ── Filtro ────────────────────────────────────────────────────────────────
 
   const filtered = rows.filter(r => {
@@ -233,6 +236,7 @@ export function RotasCadastradasTable() {
       (r.motorista_padrao ?? '').toLowerCase().includes(q)
     )
   })
+  const visible = filtered.slice(0, visibleCount)
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
@@ -331,7 +335,7 @@ export function RotasCadastradasTable() {
         </div>
 
         {/* Tabela */}
-        <div className="overflow-x-auto max-h-[480px] overflow-y-auto">
+        <div className="overflow-x-auto">
           {loading ? (
             <div className="flex items-center justify-center py-12 gap-2 text-muted">
               <svg className="w-4 h-4 text-primary animate-spin-slow" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
@@ -364,7 +368,7 @@ export function RotasCadastradasTable() {
                   </tr>
                 )}
 
-                {filtered.map((row, i) => {
+                {visible.map((row, i) => {
                   const isEditing = editId === row.id
                   const isDelConf = deleteConfirm === row.id
                   const isDel     = deleting === row.id
@@ -482,11 +486,23 @@ export function RotasCadastradasTable() {
           )}
         </div>
 
+        {/* Ver mais */}
+        {!loading && visible.length < filtered.length && (
+          <div className="px-4 py-3 border-t border-[0.5px] border-[var(--border-faint)] flex justify-center">
+            <button
+              onClick={() => setVisibleCount(c => c + 25)}
+              className="text-[11px] text-primary hover:underline cursor-pointer bg-transparent border-none transition-colors"
+            >
+              Ver mais {Math.min(25, filtered.length - visible.length)} rotas ({filtered.length - visible.length} restantes)
+            </button>
+          </div>
+        )}
+
         {/* Rodapé */}
         {!loading && rows.length > 0 && (
           <div className="px-4 py-2 border-t border-[0.5px] border-[var(--border-faint)] flex items-center justify-between">
             <span className="text-[10px] text-muted">
-              {rows.filter(r => r.ativo).length} ativa{rows.filter(r => r.ativo).length !== 1 ? 's' : ''} · {rows.length} total
+              {visible.length} de {filtered.length} · {rows.filter(r => r.ativo).length} ativa{rows.filter(r => r.ativo).length !== 1 ? 's' : ''} · {rows.length} total
             </span>
             {busca && (
               <button

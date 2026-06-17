@@ -5,6 +5,7 @@ export const ROTA_PERMISSAO: Record<string, string | null> = {
   '/':              'dashboard',
   '/rotas':         'rotas',
   '/rotas/acoes':   'aprovar',
+  '/aprovacoes':    'aprovar',
   '/historico':     'historico',
   '/frota':         'frota',
   '/configuracoes': 'configuracoes',
