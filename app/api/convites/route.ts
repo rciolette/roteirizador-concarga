@@ -48,12 +48,22 @@ export async function POST(req: Request) {
 
   if (inviteError) return Response.json({ error: inviteError.message }, { status: 500 })
 
+  const userId = user.user?.id ?? null
+
+  // Cria perfil imediatamente para que o usuário tenha o perfil correto ao aceitar o convite
+  if (userId) {
+    await sb.from('perfis_usuario').upsert(
+      { user_id: userId, perfil, nome: body.nome ?? '', ativo: true },
+      { onConflict: 'user_id', ignoreDuplicates: true },
+    )
+  }
+
   await sb.from('convites').insert({
     email:         body.email,
     perfil,
     status:        'pendente',
     convidado_por: auth.userId,
-    user_id:       user.user?.id ?? null,
+    user_id:       userId,
   })
 
   return Response.json({ ok: true })

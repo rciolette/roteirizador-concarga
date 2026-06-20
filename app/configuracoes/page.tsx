@@ -375,33 +375,42 @@ export default function ConfiguracoesPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[var(--border-faint)]">
-                      {usuarios.map(u => (
-                        <tr key={u.id} className="hover:bg-page transition-colors">
-                          <td className="px-4 py-2.5 text-xs text-base">{u.nome || '—'}</td>
-                          <td className="px-4 py-2.5 text-xs text-muted">{u.email}</td>
-                          <td className="px-4 py-2.5">
-                            <select
-                              value={u.perfil}
-                              onChange={e => handleAlterarPerfil(u.id, e.target.value as Perfil)}
-                              className="border border-[var(--border-input)] rounded text-[11px] py-1 px-1.5 bg-white dark:bg-[#1E1E1C] text-base outline-none focus:border-primary"
-                            >
-                              {(['administrador', 'operador', 'visualizador'] as Perfil[]).map(p => (
-                                <option key={p} value={p} disabled={p === 'administrador' && usuario?.perfil !== 'owner'}>
-                                  {PERFIL_LABELS[p]}
-                                </option>
-                              ))}
-                            </select>
-                          </td>
-                          <td className="px-4 py-2.5">
-                            <input
-                              type="checkbox"
-                              checked={u.ativo}
-                              onChange={e => handleToggleAtivo(u.id, e.target.checked)}
-                              className="w-3.5 h-3.5 accent-primary cursor-pointer"
-                            />
-                          </td>
-                        </tr>
-                      ))}
+                      {usuarios.map(u => {
+                        const isAdminRow = u.perfil === 'administrador'
+                        const podeEditar = usuario?.perfil === 'owner' || !isAdminRow
+                        return (
+                          <tr key={u.id} className="hover:bg-page transition-colors">
+                            <td className="px-4 py-2.5 text-xs text-base">{u.nome || '—'}</td>
+                            <td className="px-4 py-2.5 text-xs text-muted">{u.email}</td>
+                            <td className="px-4 py-2.5">
+                              {podeEditar ? (
+                                <select
+                                  value={u.perfil}
+                                  onChange={e => handleAlterarPerfil(u.id, e.target.value as Perfil)}
+                                  className="border border-[var(--border-input)] rounded text-[11px] py-1 px-1.5 bg-white dark:bg-[#1E1E1C] text-base outline-none focus:border-primary"
+                                >
+                                  {(['administrador', 'operador', 'visualizador'] as Perfil[]).map(p => (
+                                    <option key={p} value={p} disabled={p === 'administrador' && usuario?.perfil !== 'owner'}>
+                                      {PERFIL_LABELS[p]}
+                                    </option>
+                                  ))}
+                                </select>
+                              ) : (
+                                <span className="text-[11px] text-muted">{PERFIL_LABELS[u.perfil]}</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-2.5">
+                              <input
+                                type="checkbox"
+                                checked={u.ativo}
+                                onChange={e => podeEditar && handleToggleAtivo(u.id, e.target.checked)}
+                                disabled={!podeEditar}
+                                className="w-3.5 h-3.5 accent-primary cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+                              />
+                            </td>
+                          </tr>
+                        )
+                      })}
                     </tbody>
                   </table>
                 )}

@@ -55,6 +55,11 @@ export async function PATCH(req: Request) {
     return Response.json({ error: 'O perfil owner não pode ser alterado' }, { status: 403 })
   }
 
+  // Administrador não pode modificar outro administrador (perfil ou ativo) — apenas owner
+  if (alvo?.perfil === 'administrador' && auth.perfil !== 'owner') {
+    return Response.json({ error: 'Sem permissão para modificar um administrador' }, { status: 403 })
+  }
+
   // Administrador não pode promover outro a administrador — apenas owner
   if (perfil === 'administrador' && auth.perfil !== 'owner') {
     return Response.json({ error: 'Sem permissão para promover a administrador' }, { status: 403 })

@@ -8,6 +8,10 @@
 # Production
 /build
 
+# TypeScript build info
+tsconfig.tsbuildinfo
+*.tsbuildinfo
+
 # Env files
 .env
 .env*.local
@@ -19,4 +23,3 @@ yarn-error.log*
 
 # OS
 .DS_Store
-node_modules
