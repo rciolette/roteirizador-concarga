@@ -61,7 +61,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 // ─── Seção: Meu perfil ────────────────────────────────────────────────────────
 function SecaoPerfil() {
-  const { usuario } = useAuth()
+  const { usuario, refreshUsuario } = useAuth()
 
   const [nome,     setNome]     = useState('')
   const [username, setUsername] = useState('')
@@ -96,7 +96,12 @@ function SecaoPerfil() {
       body:    JSON.stringify({ nome: nome.trim(), username: username.trim(), cargo: cargo.trim() }),
     })
     const data = await res.json()
-    setMsg(res.ok ? 'Dados salvos com sucesso.' : (data.error ?? 'Erro ao salvar.'))
+    if (res.ok) {
+      await refreshUsuario()
+      setMsg('Dados salvos com sucesso.')
+    } else {
+      setMsg(data.error ?? 'Erro ao salvar.')
+    }
     setSaving(false)
   }
 
@@ -135,6 +140,7 @@ function SecaoPerfil() {
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ avatar_url: publicUrl }),
     })
+    if (res.ok) await refreshUsuario()
     setMsg(res.ok ? 'Foto atualizada.' : 'Erro ao salvar foto.')
     setUploading(false)
   }

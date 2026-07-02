@@ -12,10 +12,11 @@ import { getSupabaseBrowser } from '@/lib/supabase-browser'
 import { getUsuarioAtual, signOut as authSignOut, type UsuarioSessao, type Perfil, temPermissao } from '@/lib/auth'
 
 interface AuthCtx {
-  usuario:     UsuarioSessao | null
-  loading:     boolean
-  signOut:     () => Promise<void>
-  pode:        (acao: string) => boolean
+  usuario:        UsuarioSessao | null
+  loading:        boolean
+  signOut:        () => Promise<void>
+  pode:           (acao: string) => boolean
+  refreshUsuario: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthCtx | null>(null)
@@ -77,7 +78,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ usuario, loading, signOut, pode }}>
+    <AuthContext.Provider value={{ usuario, loading, signOut, pode, refreshUsuario: carregarUsuario }}>
       {children}
     </AuthContext.Provider>
   )
