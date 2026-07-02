@@ -40,7 +40,7 @@ function NavItem({ label, active, onClick, icon }: {
           : 'bg-transparent text-muted font-normal border-transparent hover:bg-cream hover:text-base',
       )}
     >
-      <span className={cn('shrink-0', active ? 'text-primary' : 'text-subtle')}>{icon}</span>
+      <span className={cn('shrink-0', active ? 'text-primary' : 'text-muted dark:text-muted/80')}>{icon}</span>
       <span className="flex-1 truncate text-left">{label}</span>
     </button>
   )
@@ -48,7 +48,7 @@ function NavItem({ label, active, onClick, icon }: {
 
 // ─── campo reutilizável ───────────────────────────────────────────────────────
 const inputCls =
-  'w-full px-3 py-2 rounded-lg border border-[0.5px] border-[var(--border-input)] bg-page text-xs outline-none focus:border-primary transition-colors'
+  'w-full px-3 py-2 rounded-lg border border-[0.5px] border-[var(--border-input)] bg-white dark:bg-[#252523] text-xs text-base placeholder:text-muted/60 dark:placeholder:text-muted/70 outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 dark:focus:ring-primary/20 transition-colors'
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -186,7 +186,7 @@ function SecaoPerfil() {
 
       {/* Informações pessoais */}
       <form onSubmit={salvar} className="space-y-4">
-        <h2 className="text-[11px] font-medium text-muted uppercase tracking-wide">Informações pessoais</h2>
+        <h2 className="text-[11px] font-medium text-mid uppercase tracking-wide">Informações pessoais</h2>
         <div className="grid grid-cols-2 gap-4">
           <Field label="Nome completo">
             <input type="text" value={nome} onChange={e => setNome(e.target.value)} className={inputCls} placeholder="Seu nome completo" />
@@ -214,7 +214,7 @@ function SecaoPerfil() {
 
       {/* Alterar senha */}
       <form onSubmit={atualizarSenha} className="space-y-4">
-        <h2 className="text-[11px] font-medium text-muted uppercase tracking-wide">Alterar senha</h2>
+        <h2 className="text-[11px] font-medium text-mid uppercase tracking-wide">Alterar senha</h2>
         <Field label="Senha atual">
           <input type="password" value={senhaAtual} onChange={e => setSenhaAtual(e.target.value)} className={inputCls} placeholder="••••••••" />
         </Field>
@@ -332,7 +332,7 @@ function SecaoUsuarios() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-[11px] font-medium text-muted uppercase tracking-wide">Usuários do sistema</h2>
+          <h2 className="text-[11px] font-medium text-mid uppercase tracking-wide">Usuários do sistema</h2>
           <p className="text-[11px] text-subtle mt-0.5">Gerencie acessos e permissões</p>
         </div>
         <button
@@ -401,7 +401,7 @@ function SecaoUsuarios() {
 
       {convites.length > 0 && (
         <div className="space-y-3">
-          <h3 className="text-[11px] font-medium text-muted uppercase tracking-wide">Convites pendentes</h3>
+          <h3 className="text-[11px] font-medium text-mid uppercase tracking-wide">Convites pendentes</h3>
           <div className="space-y-2">
             {convites.map(c => (
               <div key={c.id} className="flex items-center gap-3 bg-white dark:bg-[#1E1E1C] border border-[0.5px] border-[var(--border-card)] rounded-xl px-4 py-3">
@@ -478,7 +478,7 @@ export default function PerfilPage() {
         {/* Nav lateral interna */}
         <aside className="w-44 shrink-0 border-r border-[0.5px] border-[var(--border-subtle)] flex flex-col px-2 py-3">
           <nav className="flex-1 space-y-0.5">
-            <div className="text-[9px] text-dim px-2.5 pt-1 pb-1.5 uppercase tracking-[0.06em] font-medium">
+            <div className="text-[9px] text-muted/60 dark:text-muted px-2.5 pt-1 pb-1.5 uppercase tracking-[0.06em] font-medium">
               Configurações
             </div>
             <NavItem
