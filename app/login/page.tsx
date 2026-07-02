@@ -1,15 +1,37 @@
 'use client'
 
-import { useState, FormEvent } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect, FormEvent, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { signIn } from '@/lib/auth'
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [email,    setEmail]    = useState('')
   const [password, setPassword] = useState('')
   const [loading,  setLoading]  = useState(false)
   const [error,    setError]    = useState('')
+
+  useEffect(() => {
+    // Erro via query param (redirect do /auth/callback)
+    const erro = searchParams.get('erro')
+    if (erro === 'link_invalido') {
+      setError('O link de acesso é inválido ou expirou. Solicite um novo convite ao administrador.')
+      return
+    }
+    // Erro via hash fragment (redirect direto do Supabase quando o OTP expira)
+    const hash = window.location.hash
+    if (hash.includes('error=')) {
+      const params = new URLSearchParams(hash.substring(1))
+      const errCode = params.get('error_code')
+      if (errCode === 'otp_expired') {
+        setError('O link de convite expirou. Peça ao administrador que envie um novo convite.')
+      } else {
+        const desc = params.get('error_description')
+        setError(desc ? decodeURIComponent(desc.replace(/\+/g, ' ')) : 'Erro de autenticação. Tente novamente.')
+      }
+    }
+  }, [searchParams])
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
@@ -96,5 +118,13 @@ export default function LoginPage() {
         </p>
       </div>
     </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
   )
 }

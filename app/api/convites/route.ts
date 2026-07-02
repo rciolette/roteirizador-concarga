@@ -39,7 +39,10 @@ export async function POST(req: Request) {
   }
 
   const sb = getAdminClient()
-  const redirectTo = `${process.env.NEXT_PUBLIC_APP_URL ?? ''}/auth/callback?type=invite`
+  // Deriva a URL absoluta dos headers da requisição — não depende de NEXT_PUBLIC_APP_URL
+  const host = req.headers.get('host') ?? ''
+  const proto = req.headers.get('x-forwarded-proto') ?? 'https'
+  const redirectTo = `${proto}://${host}/auth/callback?type=invite`
 
   const { data: user, error: inviteError } = await sb.auth.admin.inviteUserByEmail(body.email, {
     data: { perfil, nome: body.nome ?? '' },
