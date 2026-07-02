@@ -1,7 +1,7 @@
 import { getSessaoServidor, getAdminClient } from '@/lib/auth-server'
 
 const BUCKET = 'roteirizador-avatares'
-const MAX_SIZE = 2 * 1024 * 1024 // 2 MB
+const MAX_SIZE_SERVER = 5 * 1024 * 1024 // 5 MB — cliente já comprime para << 1 MB
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
 
 export async function POST(req: Request) {
@@ -14,15 +14,15 @@ export async function POST(req: Request) {
   if (!file) return Response.json({ error: 'Arquivo não enviado' }, { status: 400 })
   if (!ALLOWED_TYPES.includes(file.type))
     return Response.json({ error: 'Tipo de arquivo não permitido (use JPG, PNG, WEBP ou GIF)' }, { status: 400 })
-  if (file.size > MAX_SIZE)
-    return Response.json({ error: 'Imagem deve ter no máximo 2 MB' }, { status: 400 })
+  if (file.size > MAX_SIZE_SERVER)
+    return Response.json({ error: 'Imagem excede o tamanho máximo permitido' }, { status: 400 })
 
   const sb = getAdminClient()
 
   // Cria o bucket se ainda não existir
   const { error: bucketErr } = await sb.storage.createBucket(BUCKET, {
     public: true,
-    fileSizeLimit: MAX_SIZE,
+    fileSizeLimit: MAX_SIZE_SERVER,
     allowedMimeTypes: ALLOWED_TYPES,
   })
   if (bucketErr && !bucketErr.message.toLowerCase().includes('already exists')) {

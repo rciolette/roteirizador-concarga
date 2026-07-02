@@ -210,6 +210,17 @@ export default function ConfiguracoesPage() {
     setConvites(prev => prev.filter(c => c.id !== id))
   }
 
+  async function handleReenviarConvite(id: string) {
+    setMsgAcessos('')
+    const res = await fetch('/api/convites', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    })
+    const data = await res.json()
+    setMsgAcessos(res.ok ? 'Convite reenviado!' : (data.error ?? 'Erro ao reenviar convite'))
+  }
+
   const perfisConvidaveis: Perfil[] = usuario?.perfil === 'owner'
     ? ['administrador', 'operador', 'visualizador']
     : ['operador', 'visualizador']
@@ -438,9 +449,14 @@ export default function ConfiguracoesPage() {
                           <td className="px-4 py-2.5 text-xs text-base">{PERFIL_LABELS[c.perfil]}</td>
                           <td className="px-4 py-2.5 text-xs text-muted">{new Date(c.criado_em).toLocaleDateString('pt-BR')}</td>
                           <td className="px-4 py-2.5 text-right">
-                            <button onClick={() => handleCancelarConvite(c.id)} className="text-[11px] text-muted hover:text-red-500 transition-colors bg-transparent border-none cursor-pointer">
-                              Cancelar
-                            </button>
+                            <div className="flex items-center justify-end gap-3">
+                              <button onClick={() => handleReenviarConvite(c.id)} className="text-[11px] text-primary hover:underline transition-colors bg-transparent border-none cursor-pointer">
+                                Reenviar
+                              </button>
+                              <button onClick={() => handleCancelarConvite(c.id)} className="text-[11px] text-muted hover:text-red-500 transition-colors bg-transparent border-none cursor-pointer">
+                                Cancelar
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}

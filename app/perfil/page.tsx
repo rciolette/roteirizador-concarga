@@ -46,6 +46,29 @@ function NavItem({ label, active, onClick, icon }: {
   )
 }
 
+// ─── compressão de imagem via Canvas ─────────────────────────────────────────
+function compressImage(file: File, maxDim = 512, quality = 0.85): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    const url = URL.createObjectURL(file)
+    img.onload = () => {
+      URL.revokeObjectURL(url)
+      const scale = Math.min(1, maxDim / Math.max(img.width, img.height))
+      const canvas = document.createElement('canvas')
+      canvas.width  = Math.round(img.width  * scale)
+      canvas.height = Math.round(img.height * scale)
+      canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height)
+      canvas.toBlob(
+        blob => blob ? resolve(blob) : reject(new Error('Falha ao comprimir imagem')),
+        'image/jpeg',
+        quality,
+      )
+    }
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Falha ao carregar imagem')) }
+    img.src = url
+  })
+}
+
 // ─── campo reutilizável ───────────────────────────────────────────────────────
 const inputCls =
   'w-full px-3 py-2 rounded-lg border border-[0.5px] border-[var(--border-input)] bg-white dark:bg-[#252523] text-xs text-base placeholder:text-muted/60 dark:placeholder:text-muted/70 outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 dark:focus:ring-primary/20 transition-colors'
@@ -128,15 +151,20 @@ function SecaoPerfil() {
     if (!file || !usuario) return
     setUploading(true)
     setMsg('')
-    const form = new FormData()
-    form.append('file', file)
-    const res  = await fetch('/api/avatar', { method: 'POST', body: form })
-    const data = await res.json()
-    if (res.ok) {
-      await refreshUsuario()
-      setMsg('Foto atualizada.')
-    } else {
-      setMsg(data.error ?? 'Erro ao salvar foto.')
+    try {
+      const blob = await compressImage(file)
+      const form = new FormData()
+      form.append('file', blob, 'avatar.jpg')
+      const res  = await fetch('/api/avatar', { method: 'POST', body: form })
+      const data = await res.json()
+      if (res.ok) {
+        await refreshUsuario()
+        setMsg('Foto atualizada.')
+      } else {
+        setMsg(data.error ?? 'Erro ao salvar foto.')
+      }
+    } catch {
+      setMsg('Não foi possível processar a imagem.')
     }
     setUploading(false)
   }
@@ -320,6 +348,17 @@ function SecaoUsuarios() {
     carregar()
   }
 
+  async function reenviarConvite(id: string) {
+    setMsg('')
+    const res = await fetch('/api/convites', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    })
+    const data = await res.json()
+    setMsg(res.ok ? 'Convite reenviado com sucesso.' : (data.error ?? 'Erro ao reenviar convite.'))
+  }
+
   const perfisDisponiveis: Perfil[] = usuario?.perfil === 'owner'
     ? ['administrador', 'operador', 'visualizador']
     : ['operador', 'visualizador']
@@ -405,13 +444,22 @@ function SecaoUsuarios() {
                   <div className="text-[12px] font-medium truncate">{c.email}</div>
                   <div className="text-[10px] text-muted">{NOME_PERFIL[c.perfil]} · aguardando aceite</div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => cancelarConvite(c.id)}
-                  className="text-[10px] text-danger hover:underline border-none bg-transparent cursor-pointer shrink-0"
-                >
-                  Cancelar
-                </button>
+                <div className="flex items-center gap-3 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => reenviarConvite(c.id)}
+                    className="text-[10px] text-primary hover:underline border-none bg-transparent cursor-pointer"
+                  >
+                    Reenviar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => cancelarConvite(c.id)}
+                    className="text-[10px] text-danger hover:underline border-none bg-transparent cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                </div>
               </div>
             ))}
           </div>

@@ -3,12 +3,20 @@ import type { Perfil } from '@/lib/auth'
 
 const PERFIS_CONVIDAVEIS: Perfil[] = ['administrador', 'operador', 'visualizador']
 
-// GET /api/convites — lista convites pendentes
+// GET /api/convites — lista convites; auto-expira pendentes com mais de 7 dias
 export async function GET() {
   const auth = await exigirPermissao('usuarios')
   if (auth instanceof Response) return auth
 
   const sb = getAdminClient()
+
+  // Auto-expira convites pendentes com mais de 7 dias
+  const seteDiasAtras = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+  await sb.from('convites')
+    .update({ status: 'expirado' })
+    .eq('status', 'pendente')
+    .lt('criado_em', seteDiasAtras)
+
   const { data, error } = await sb
     .from('convites')
     .select('id, email, perfil, status, criado_em, aceito_em')
@@ -68,6 +76,46 @@ export async function POST(req: Request) {
     convidado_por: auth.userId,
     user_id:       userId,
   })
+
+  return Response.json({ ok: true })
+}
+
+// PUT /api/convites — reenviar convite (expira o antigo e envia novo)
+export async function PUT(req: Request) {
+  const auth = await exigirPermissao('usuarios')
+  if (auth instanceof Response) return auth
+
+  const body = await req.json().catch(() => null)
+  if (!body?.id) return Response.json({ error: 'id obrigatório' }, { status: 400 })
+
+  const sb = getAdminClient()
+
+  // Busca o convite existente
+  const { data: convite, error: fetchErr } = await sb
+    .from('convites')
+    .select('id, email, perfil, user_id')
+    .eq('id', body.id)
+    .eq('status', 'pendente')
+    .single()
+
+  if (fetchErr || !convite) {
+    return Response.json({ error: 'Convite não encontrado ou já processado' }, { status: 404 })
+  }
+
+  const host = req.headers.get('host') ?? ''
+  const proto = req.headers.get('x-forwarded-proto') ?? 'https'
+  const redirectTo = `${proto}://${host}/auth/callback?type=invite`
+
+  // Reenvia o convite pelo Supabase Auth
+  const { error: inviteError } = await sb.auth.admin.inviteUserByEmail(convite.email, {
+    data: { perfil: convite.perfil },
+    redirectTo,
+  })
+
+  if (inviteError) return Response.json({ error: inviteError.message }, { status: 500 })
+
+  // Atualiza data de envio no registro existente
+  await sb.from('convites').update({ criado_em: new Date().toISOString() }).eq('id', convite.id)
 
   return Response.json({ ok: true })
 }

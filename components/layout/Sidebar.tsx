@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
 import { getSupabaseBrowser } from '@/lib/supabase-browser'
 import { useAuth } from '@/components/providers/AuthProvider'
+import { useSidebar } from '@/components/providers/SidebarProvider'
 import { cn } from '@/lib/utils'
 import type { Perfil } from '@/lib/auth'
 
@@ -81,6 +82,7 @@ const icons: Record<string, ReactNode> = {
 export default function Sidebar() {
   const pathname = usePathname()
   const { usuario, pode } = useAuth()
+  const { collapsed, toggle } = useSidebar()
   const [aguardandoCount, setAguardandoCount] = useState(0)
 
   useEffect(() => {
@@ -102,21 +104,29 @@ export default function Sidebar() {
   }, [])
 
   return (
-    <aside className="w-[172px] shrink-0 bg-white dark:bg-[#1E1E1C] border-r border-[0.5px] border-[var(--border-subtle)] flex flex-col h-full">
+    <aside className={cn(
+      'shrink-0 bg-white dark:bg-[#1E1E1C] border-r border-[0.5px] border-[var(--border-subtle)] flex flex-col h-full transition-[width] duration-200 ease-in-out overflow-hidden',
+      collapsed ? 'w-[52px]' : 'w-[172px]',
+    )}>
       {/* Logo */}
-      <div className="px-[18px] pt-4 pb-3.5 border-b border-[0.5px] border-[var(--border-subtle)]">
+      <div className={cn(
+        'border-b border-[0.5px] border-[var(--border-subtle)] flex items-center shrink-0',
+        collapsed ? 'px-0 pt-4 pb-3.5 justify-center' : 'px-[18px] pt-4 pb-3.5',
+      )}>
         <div className="flex items-center gap-2">
           <div className="w-[26px] h-[26px] rounded-[7px] bg-primary flex items-center justify-center shrink-0">
             <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="#E6F1FB" strokeWidth="1.8">
               <path d="M2 8l4-5 4 5 4-5"/>
             </svg>
           </div>
-          <div className="text-[13px] font-medium text-base tracking-[-0.01em]">Concarga</div>
+          {!collapsed && (
+            <div className="text-[13px] font-medium text-base tracking-[-0.01em] whitespace-nowrap">Concarga</div>
+          )}
         </div>
       </div>
 
       {/* Nav */}
-      <nav className="px-2 py-2.5 flex-1 flex flex-col">
+      <nav className={cn('py-2.5 flex-1 flex flex-col', collapsed ? 'px-1.5' : 'px-2')}>
         {navItems.map(group => {
           const itensVisiveis = group.items.filter(item => {
             if (!pode(item.acao)) return false
@@ -126,34 +136,48 @@ export default function Sidebar() {
           if (itensVisiveis.length === 0) return null
           return (
             <div key={group.section} className="mb-1">
-              <div className="text-[9px] text-dim px-2.5 pt-2 pb-1 uppercase tracking-[0.06em] font-medium">
-                {group.section}
-              </div>
+              {!collapsed ? (
+                <div className="text-[9px] text-dim px-2.5 pt-2 pb-1 uppercase tracking-[0.06em] font-medium">
+                  {group.section}
+                </div>
+              ) : (
+                <div className="pt-3" />
+              )}
               {itensVisiveis.map(item => {
                 const active = item.href === '/'
                   ? pathname === '/'
                   : pathname.startsWith(item.href) ||
                     (item.href === '/aprovacoes' && pathname.startsWith('/rotas/acoes'))
+                const hasBadge = (item.href === '/rotas' || item.href === '/aprovacoes') && aguardandoCount > 0
                 return (
                   <Link
                     key={item.href}
                     href={item.href}
+                    title={collapsed ? item.label : undefined}
                     className={cn(
-                      'flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs transition-colors duration-100',
+                      'flex items-center gap-2 py-2 rounded-lg text-xs transition-colors duration-100',
                       'border-l-[2.5px]',
+                      collapsed ? 'px-0 justify-center relative' : 'px-2.5',
                       active
-                        ? 'bg-cream text-base font-medium border-primary'
-                        : 'text-muted font-normal border-transparent hover:bg-cream hover:text-base',
+                        ? 'bg-cream dark:bg-white/8 text-base font-medium border-primary'
+                        : 'text-muted font-normal border-transparent hover:bg-cream dark:hover:bg-white/5 hover:text-base',
                     )}
                   >
                     <span className={cn('shrink-0', active ? 'text-primary' : 'text-subtle')}>
                       {icons[item.href]}
                     </span>
-                    <span className="flex-1 truncate">{item.label}</span>
-                    {(item.href === '/rotas' || item.href === '/aprovacoes') && aguardandoCount > 0 && (
-                      <span className="text-[10px] px-1.5 py-px rounded-full font-medium shrink-0 bg-warn-bg text-warn">
-                        {aguardandoCount}
-                      </span>
+                    {!collapsed && (
+                      <>
+                        <span className="flex-1 truncate">{item.label}</span>
+                        {hasBadge && (
+                          <span className="text-[10px] px-1.5 py-px rounded-full font-medium shrink-0 bg-warn-bg text-warn">
+                            {aguardandoCount}
+                          </span>
+                        )}
+                      </>
+                    )}
+                    {collapsed && hasBadge && (
+                      <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-warn shrink-0" />
                     )}
                   </Link>
                 )
@@ -164,21 +188,28 @@ export default function Sidebar() {
       </nav>
 
       {/* Footer */}
-      <div className="px-2 py-2 border-t border-[0.5px] border-[var(--border-subtle)]">
-        {/* Seção Conta */}
+      <div className={cn(
+        'py-2 border-t border-[0.5px] border-[var(--border-subtle)] shrink-0',
+        collapsed ? 'px-1.5' : 'px-2',
+      )}>
+        {/* Conta */}
         {usuario && (
-          <div className="mb-0.5">
-            <div className="text-[9px] text-dim px-2.5 pt-2 pb-1 uppercase tracking-[0.06em] font-medium">
-              Conta
-            </div>
+          <div className={collapsed ? 'mb-1' : 'mb-0.5'}>
+            {!collapsed && (
+              <div className="text-[9px] text-dim px-2.5 pt-2 pb-1 uppercase tracking-[0.06em] font-medium">
+                Conta
+              </div>
+            )}
             <Link
               href="/perfil"
+              title={collapsed ? (usuario.nome || usuario.email) : undefined}
               className={cn(
-                'flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs transition-colors duration-100',
+                'flex items-center gap-2 py-2 rounded-lg text-xs transition-colors duration-100',
                 'border-l-[2.5px]',
+                collapsed ? 'px-0 justify-center' : 'px-2.5',
                 pathname.startsWith('/perfil')
-                  ? 'bg-cream text-base font-medium border-primary'
-                  : 'text-muted font-normal border-transparent hover:bg-cream hover:text-base',
+                  ? 'bg-cream dark:bg-white/8 text-base font-medium border-primary'
+                  : 'text-muted font-normal border-transparent hover:bg-cream dark:hover:bg-white/5 hover:text-base',
               )}
             >
               <span className={cn('shrink-0', pathname.startsWith('/perfil') ? 'text-primary' : 'text-subtle')}>
@@ -189,22 +220,44 @@ export default function Sidebar() {
                   }
                 </div>
               </span>
-              <span className="flex-1 truncate">{usuario.nome || usuario.email}</span>
+              {!collapsed && (
+                <span className="flex-1 truncate">{usuario.nome || usuario.email}</span>
+              )}
             </Link>
           </div>
         )}
 
-        {/* Tema + SIAT — linha compacta */}
-        <div className="flex items-center justify-between px-2.5 py-1.5">
-          <div className="flex items-center gap-1.5">
-            <span className="relative flex h-1.5 w-1.5 shrink-0">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cond-ok opacity-60" />
-              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-cond-ok" />
-            </span>
-            <span className="text-[10px] text-mid font-mono">SIAT</span>
-          </div>
+        {/* Tema + SIAT */}
+        <div className={cn(
+          'flex items-center px-2.5 py-1.5',
+          collapsed ? 'justify-center' : 'justify-between',
+        )}>
+          {!collapsed && (
+            <div className="flex items-center gap-1.5">
+              <span className="relative flex h-1.5 w-1.5 shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cond-ok opacity-60" />
+                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-cond-ok" />
+              </span>
+              <span className="text-[10px] text-mid font-mono">SIAT</span>
+            </div>
+          )}
           <ThemeToggle />
         </div>
+
+        {/* Botão de colapsar */}
+        <button
+          type="button"
+          onClick={toggle}
+          title={collapsed ? 'Expandir menu' : 'Minimizar menu'}
+          className="flex items-center justify-center w-full py-1.5 rounded-lg text-muted hover:bg-cream dark:hover:bg-white/5 hover:text-base transition-colors duration-100 bg-transparent border-none cursor-pointer"
+        >
+          <svg
+            width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"
+            className={cn('transition-transform duration-200', collapsed ? 'rotate-180' : '')}
+          >
+            <path d="M10 3L5 8l5 5"/>
+          </svg>
+        </button>
       </div>
     </aside>
   )
