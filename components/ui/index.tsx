@@ -364,11 +364,6 @@ export function EmptyState({ message }: { message: string }) {
   )
 }
 
-// ── Mock Banner ───────────────────────────────────────────────────────────────
-export function MockBanner() {
-  return <div className="h-[6px] bg-warn-accent shrink-0 opacity-80" />
-}
-
 // ── Confirm Dialog ────────────────────────────────────────────────────────────
 export interface ConfirmAction {
   title: string
