@@ -128,20 +128,16 @@ function SecaoPerfil() {
     if (!file || !usuario) return
     setUploading(true)
     setMsg('')
-    const sb = getSupabaseBrowser()
-    const path = `${usuario.id}/avatar`
-    const { error: upErr } = await sb.storage
-      .from('roteirizador-avatares')
-      .upload(path, file, { upsert: true, contentType: file.type })
-    if (upErr) { setMsg(upErr.message); setUploading(false); return }
-    const { data: { publicUrl } } = sb.storage.from('roteirizador-avatares').getPublicUrl(path)
-    const res = await fetch('/api/perfil', {
-      method:  'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ avatar_url: publicUrl }),
-    })
-    if (res.ok) await refreshUsuario()
-    setMsg(res.ok ? 'Foto atualizada.' : 'Erro ao salvar foto.')
+    const form = new FormData()
+    form.append('file', file)
+    const res  = await fetch('/api/avatar', { method: 'POST', body: form })
+    const data = await res.json()
+    if (res.ok) {
+      await refreshUsuario()
+      setMsg('Foto atualizada.')
+    } else {
+      setMsg(data.error ?? 'Erro ao salvar foto.')
+    }
     setUploading(false)
   }
 
