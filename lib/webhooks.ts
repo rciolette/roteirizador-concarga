@@ -8,7 +8,7 @@ export type Prioridade = 'padrao' | 'vermelho' | 'menos-veiculos' | 'menor-dista
 export async function carregarRotasSupabase(data: string): Promise<Rota[]> {
   const { data: rows, error } = await sb()
     .from('rotas')
-    .select(`*, notas_fiscais(id, n_nfs, destinatario, municipio, bairro, endereco, cep, peso_kg, tipo_cliente, cond, grade, agendamento, hora_agendamento, reentrega, sac, observacao, sequencia)`)
+    .select(`id, data, codigo_rota, regiao, status, motorista_id, motorista_nome, motorista_celular, veiculo_id, veiculo_placa, peso_total, ocupacao_percent, qtd_notas, link_maps, alertas, criado_em, enviado_em, notas_fiscais(id, n_nfs, destinatario, municipio, bairro, endereco, cep, peso_kg, tipo_cliente, cond, grade, agendamento, hora_agendamento, reentrega, sac, observacao, sequencia)`)
     .eq('data', data)
     .order('criado_em', { ascending: false })
 
@@ -350,7 +350,7 @@ export async function limparRascunhosDoDia(data: string): Promise<void> {
 export async function carregarRotasPorPeriodo(dataInicio: string, dataFim: string): Promise<Rota[]> {
   const { data: rows, error } = await sb()
     .from('rotas')
-    .select(`*, notas_fiscais(id, n_nfs, destinatario, municipio, bairro, endereco, cep, peso_kg, tipo_cliente, cond, grade, agendamento, hora_agendamento, reentrega, sac, observacao, sequencia)`)
+    .select(`id, data, codigo_rota, regiao, status, motorista_id, motorista_nome, motorista_celular, veiculo_id, veiculo_placa, peso_total, ocupacao_percent, qtd_notas, link_maps, alertas, criado_em, enviado_em, notas_fiscais(id, n_nfs, destinatario, municipio, bairro, endereco, cep, peso_kg, tipo_cliente, cond, grade, agendamento, hora_agendamento, reentrega, sac, observacao, sequencia)`)
     .gte('data', dataInicio)
     .lte('data', dataFim)
     .order('data', { ascending: false })

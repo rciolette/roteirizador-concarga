@@ -4,8 +4,18 @@ import Link from 'next/link'
 import { Topbar, MetricCard, Card, CardHeader, Btn, ImportBar } from '@/components/ui'
 import { ImportarSIATButton } from '@/components/ui/ImportarSIATButton'
 import { SiatImportDialog } from '@/components/ui/SiatImportDialog'
-import { NfsPendentesTable } from '@/components/ui/NfsPendentesTable'
-import { MapaDashboard } from '@/components/ui/MapaDashboard'
+import { NotasTable } from '@/components/notas/NotasTable'
+import dynamic from 'next/dynamic'
+
+const MapaDashboard = dynamic(
+  () => import('@/components/ui/MapaDashboard').then(m => m.MapaDashboard),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-[360px] rounded-xl bg-cream dark:bg-[#1A1918] animate-pulse" />
+    ),
+  },
+)
 import { formatPeso } from '@/lib/utils'
 import { useAppData } from '@/components/providers/AppDataProvider'
 import type { ClientType } from '@/types'
@@ -323,7 +333,7 @@ export default function Page() {
         )}
 
         {/* Notas fiscais pendentes */}
-        <NfsPendentesTable />
+        <NotasTable />
 
         {/* Mapa de rotas */}
         <MapaDashboard />

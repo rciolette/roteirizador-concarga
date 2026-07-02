@@ -26,7 +26,7 @@ type BtnVariant = 'default' | 'primary' | 'success' | 'teal' | 'danger-soft' | '
 
 const BV: Record<BtnVariant, string> = {
   'default':     'bg-white dark:bg-[#1E1E1C] text-base border-[var(--border-btn)]',
-  'primary':     'bg-primary text-primary-bg border-primary',
+  'primary':     'bg-brand text-brand-fg border-brand',
   'success':     'bg-success text-success-bg border-success',
   'teal':        'bg-teal text-teal-bg border-teal',
   'danger-soft': 'bg-danger-bg text-danger border-danger-border',

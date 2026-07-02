@@ -6,7 +6,7 @@ import {
 } from '@/components/ui'
 import { exportarCSV, exportarXLSX, rotasParaLinhas } from '@/lib/export'
 import { NotasFiscaisTable } from '@/components/ui/NotasFiscaisTable'
-import { NfsPendentesTable } from '@/components/ui/NfsPendentesTable'
+import { NotasTable } from '@/components/notas/NotasTable'
 import { AgendadosHojeTable } from '@/components/ui/AgendadosHojeTable'
 import { MapaRota } from '@/components/ui/MapaRota'
 import { ImportarSIATButton } from '@/components/ui/ImportarSIATButton'
@@ -1090,7 +1090,7 @@ export default function RotasPage() {
                 )
               })}
             </div>
-            {tabPendentes === 'pendentes' && <NfsPendentesTable />}
+            {tabPendentes === 'pendentes' && <NotasTable />}
             {tabPendentes === 'agendados' && <AgendadosHojeTable />}
             {tabPendentes === 'srota'     && <SRotaTable rows={sRotaNfs} />}
           </>

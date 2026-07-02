@@ -68,7 +68,7 @@ export async function listarMotoristas(): Promise<MotoristaDaFrota[]> {
   const rows = await fetchAllPages<Record<string, unknown>>(
     (from, to) => sb
       .from('motoristas')
-      .select('*')
+      .select('id, codigo_siat, nome, sigla, telefone, celular, ativo')
       .order('nome', { ascending: true })
       .range(from, to),
   )
@@ -92,7 +92,7 @@ export async function listarVeiculos(): Promise<VeiculoDaFrota[]> {
     fetchAllPages<Record<string, unknown>>(
       (from, to) => sb
         .from('veiculos')
-        .select('*, motoristas(nome, celular, sigla)')
+        .select('id, placa, modelo, categoria, tipo_veiculo, tipo_carroceria, capacidade_kg, pbt, volume_m3, situacao_siat, motorista_id, ativo, motoristas(nome, celular, sigla)')
         .order('placa', { ascending: true })
         .range(from, to),
     ),
@@ -136,7 +136,7 @@ export async function listarVinculados(): Promise<VinculadoDaFrota[]> {
   const rows = await fetchAllPages<Record<string, unknown>>(
     (from, to) => sb
       .from('veiculos')
-      .select('*, motoristas(nome, celular, sigla)')
+      .select('id, placa, modelo, capacidade_kg, situacao_siat, motorista_id, motoristas(nome, celular, sigla)')
       .eq('ativo', true)
       .not('motorista_id', 'is', null)
       .order('placa', { ascending: true })
