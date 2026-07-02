@@ -27,7 +27,7 @@ export function useAuth(): AuthCtx {
   return ctx
 }
 
-const PUBLIC_PATHS = ['/login']
+const PUBLIC_PATHS = ['/login', '/aceitar-convite', '/redefinir-senha', '/esqueci-senha']
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [usuario,  setUsuario]  = useState<UsuarioSessao | null>(null)

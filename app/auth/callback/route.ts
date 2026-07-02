@@ -13,9 +13,9 @@ export async function GET(request: NextRequest) {
     const sb = await createSupabaseServerClient()
     const { error } = await sb.auth.exchangeCodeForSession(code)
     if (!error) {
-      const destino = type === 'invite' || type === 'recovery'
-        ? '/redefinir-senha'
-        : '/'
+      const destino =
+        type === 'invite'   ? '/aceitar-convite' :
+        type === 'recovery' ? '/redefinir-senha'  : '/'
       return NextResponse.redirect(new URL(destino, origin))
     }
   }
