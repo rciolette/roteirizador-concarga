@@ -106,9 +106,13 @@ function LoginForm() {
             </button>
           </form>
 
-          <div className="mt-4 text-center">
+          <div className="mt-4 flex flex-col items-center gap-2">
             <a href="/esqueci-senha" className="text-[11px] text-muted hover:text-base">
               Esqueci minha senha
+            </a>
+            <div className="w-full border-t border-[0.5px] border-[var(--border-subtle)] my-1" />
+            <a href="/ativar-conta" className="text-[11px] text-primary hover:underline font-medium">
+              Primeiro acesso? Ative sua conta aqui
             </a>
           </div>
         </div>

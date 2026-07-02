@@ -13,9 +13,10 @@ export async function GET(request: NextRequest) {
     const sb = await createSupabaseServerClient()
     const { error } = await sb.auth.exchangeCodeForSession(code)
     if (!error) {
+      const origem = searchParams.get('origem') // param customizado: 'convite'
       const destino =
-        type === 'invite'   ? '/aceitar-convite' :
-        type === 'recovery' ? '/redefinir-senha'  : '/'
+        type === 'invite' || origem === 'convite' ? '/aceitar-convite' :
+        type === 'recovery'                        ? '/redefinir-senha'  : '/'
       return NextResponse.redirect(new URL(destino, origin))
     }
   }
