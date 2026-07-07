@@ -6,6 +6,7 @@ import { ThemeToggle } from '@/components/ui/ThemeToggle'
 import { getSupabaseBrowser } from '@/lib/supabase-browser'
 import { useAuth } from '@/components/providers/AuthProvider'
 import { useSidebar } from '@/components/providers/SidebarProvider'
+import { useOnboarding } from '@/components/providers/OnboardingProvider'
 import { cn } from '@/lib/utils'
 import type { Perfil } from '@/lib/auth'
 
@@ -83,6 +84,7 @@ export default function Sidebar() {
   const pathname = usePathname()
   const { usuario, pode } = useAuth()
   const { collapsed, toggle } = useSidebar()
+  const { iniciarTour } = useOnboarding()
   const [aguardandoCount, setAguardandoCount] = useState(0)
 
   useEffect(() => {
@@ -105,7 +107,7 @@ export default function Sidebar() {
 
   return (
     <aside className={cn(
-      'shrink-0 bg-white dark:bg-[#1E1E1C] border-r border-[0.5px] border-[var(--border-subtle)] flex flex-col h-full transition-[width] duration-200 ease-in-out overflow-hidden',
+      'shrink-0 bg-surface border-r border-[0.5px] border-[var(--border-subtle)] flex flex-col h-full transition-[width] duration-200 ease-in-out overflow-hidden',
       collapsed ? 'w-[52px]' : 'w-[172px]',
     )}>
       {/* Logo */}
@@ -115,8 +117,10 @@ export default function Sidebar() {
       )}>
         <div className="flex items-center gap-2">
           <div className="w-[26px] h-[26px] rounded-[7px] bg-primary flex items-center justify-center shrink-0">
-            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="#E6F1FB" strokeWidth="1.8">
-              <path d="M2 8l4-5 4 5 4-5"/>
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="#E6F1FB" strokeWidth="1.8" strokeLinecap="round">
+              <path d="M3 12.5C4.5 5.5 6.5 3 8 3S11.5 5.5 13 12.5"/>
+              <circle cx="3" cy="12.5" r="1.3" fill="#E6F1FB" stroke="none"/>
+              <circle cx="13" cy="12.5" r="1.3" fill="#E6F1FB" stroke="none"/>
             </svg>
           </div>
           {!collapsed && (
@@ -154,6 +158,7 @@ export default function Sidebar() {
                     key={item.href}
                     href={item.href}
                     title={collapsed ? item.label : undefined}
+                    data-tour={`nav-${item.href}`}
                     className={cn(
                       'flex items-center gap-2 py-2 rounded-lg text-xs transition-colors duration-100',
                       'border-l-[2.5px]',
@@ -243,6 +248,27 @@ export default function Sidebar() {
           )}
           <ThemeToggle />
         </div>
+
+        {/* Ajuda / rever tutorial */}
+        {usuario && (
+          <button
+            type="button"
+            onClick={iniciarTour}
+            title={collapsed ? 'Ajuda / Rever tutorial' : undefined}
+            data-tour="sidebar-ajuda"
+            className={cn(
+              'flex items-center gap-2 py-2 rounded-lg text-xs text-muted hover:bg-cream dark:hover:bg-white/5 hover:text-base transition-colors duration-100 bg-transparent border-none cursor-pointer',
+              collapsed ? 'w-full justify-center' : 'w-full px-2.5',
+            )}
+          >
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="shrink-0">
+              <circle cx="8" cy="8" r="6"/>
+              <path d="M6.2 6.2a1.8 1.8 0 1 1 2.4 1.7c-.6.3-1 .7-1 1.4v.3"/>
+              <circle cx="8" cy="11.6" r="0.15" fill="currentColor" stroke="none"/>
+            </svg>
+            {!collapsed && <span>Ajuda / Rever tutorial</span>}
+          </button>
+        )}
 
         {/* Botão de colapsar */}
         <button

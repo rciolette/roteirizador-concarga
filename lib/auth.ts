@@ -3,15 +3,16 @@ import { getSupabaseBrowser } from '@/lib/supabase-browser'
 export type Perfil = 'owner' | 'administrador' | 'operador' | 'visualizador'
 
 export interface UsuarioSessao {
-  id:         string
-  email:      string
-  perfil:     Perfil
-  nome?:      string
-  username?:  string
-  cargo?:     string
-  telefone?:  string
-  avatarUrl?: string
-  ativo:      boolean
+  id:                string
+  email:             string
+  perfil:            Perfil
+  nome?:             string
+  username?:         string
+  cargo?:            string
+  telefone?:         string
+  avatarUrl?:        string
+  ativo:             boolean
+  onboardingVistoEm: string | null
 }
 
 export const NOME_PERFIL: Record<Perfil, string> = {
@@ -39,20 +40,21 @@ export async function getUsuarioAtual(): Promise<UsuarioSessao | null> {
 
   const { data } = await sb
     .from('perfis_usuario')
-    .select('perfil, nome, username, cargo, telefone, avatar_url, ativo')
+    .select('perfil, nome, username, cargo, telefone, avatar_url, ativo, onboarding_visto_em')
     .eq('user_id', session.user.id)
     .single()
 
   return {
-    id:        session.user.id,
-    email:     session.user.email ?? '',
-    perfil:    (data?.perfil as Perfil) ?? 'visualizador',
-    nome:      data?.nome ?? (session.user.user_metadata?.nome as string | undefined),
-    username:  data?.username ?? undefined,
-    cargo:     data?.cargo ?? undefined,
-    telefone:  data?.telefone ?? undefined,
-    avatarUrl: data?.avatar_url ?? undefined,
-    ativo:     data?.ativo ?? true,
+    id:                session.user.id,
+    email:             session.user.email ?? '',
+    perfil:            (data?.perfil as Perfil) ?? 'visualizador',
+    nome:              data?.nome ?? (session.user.user_metadata?.nome as string | undefined),
+    username:          data?.username ?? undefined,
+    cargo:             data?.cargo ?? undefined,
+    telefone:          data?.telefone ?? undefined,
+    avatarUrl:         data?.avatar_url ?? undefined,
+    ativo:             data?.ativo ?? true,
+    onboardingVistoEm: data?.onboarding_visto_em ?? null,
   }
 }
 

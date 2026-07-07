@@ -16,6 +16,8 @@ export async function PATCH(req: Request) {
   if (body.cargo      !== undefined) campos.cargo      = body.cargo
   if (body.telefone   !== undefined) campos.telefone   = body.telefone
   if (body.avatar_url !== undefined) campos.avatar_url = body.avatar_url
+  // Marca que o usuário concluiu (ou pulou) o tutorial de primeiro acesso.
+  if (body.onboarding_concluido === true) campos.onboarding_visto_em = new Date().toISOString()
 
   if (Object.keys(campos).length === 0) {
     return Response.json({ error: 'Nenhum campo para atualizar' }, { status: 400 })
