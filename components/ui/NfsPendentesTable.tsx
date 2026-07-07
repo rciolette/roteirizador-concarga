@@ -147,7 +147,7 @@ function TipoBadge({ tipo }: { tipo: string | null | undefined }) {
   const cls =
     t === 'CD'        ? 'bg-primary-bg text-primary-dark' :
     t === 'REDE'      ? 'bg-purple-bg text-purple' :
-    t === 'VAREJO'    ? 'bg-teal-bg text-[#085041]' :
+    t === 'VAREJO'    ? 'bg-teal-bg text-teal-dark' :
     t === 'COZINHA'   ? 'bg-warn-bg text-warn' :
     t === 'REENTREGA' ? 'bg-warn-bg text-warn' :
                         'bg-cream text-mid'
@@ -337,7 +337,7 @@ export function NfsPendentesTable() {
                 'px-2.5 py-1 text-[11px] font-medium transition-colors',
                 vista === 'nfs'
                   ? 'bg-primary text-white'
-                  : 'bg-white dark:bg-[#1E1E1C] text-muted hover:bg-page'
+                  : 'bg-surface text-muted hover:bg-page'
               )}
             >
               Por NF
@@ -348,7 +348,7 @@ export function NfsPendentesTable() {
                 'px-2.5 py-1 text-[11px] font-medium border-l border-[var(--border-subtle)] transition-colors',
                 vista === 'destinatario'
                   ? 'bg-primary text-white'
-                  : 'bg-white dark:bg-[#1E1E1C] text-muted hover:bg-page'
+                  : 'bg-surface text-muted hover:bg-page'
               )}
             >
               Por destinatário
@@ -482,7 +482,7 @@ export function NfsPendentesTable() {
             </thead>
             <tbody>
               {rowsDestinatario.map((row, i) => (
-                <tr key={row.key} className={i % 2 === 0 ? 'bg-white dark:bg-[#1E1E1C]' : 'bg-page'}>
+                <tr key={row.key} className={i % 2 === 0 ? 'bg-surface' : 'bg-page'}>
                   <td className={cn(tdCls, 'max-w-[200px] truncate font-medium')} title={row.destinatario}>{row.destinatario}</td>
                   <td className={cn(tdCls, 'max-w-[120px] truncate text-muted')}>{row.bairro}</td>
                   <td className={cn(tdCls, 'whitespace-nowrap text-muted')}>{row.municipio}</td>
@@ -545,7 +545,7 @@ export function NfsPendentesTable() {
             </thead>
             <tbody>
               {paginated.map((row, i) => (
-                <tr key={row.id} className={i % 2 === 0 ? 'bg-white dark:bg-[#1E1E1C]' : 'bg-page'}>
+                <tr key={row.id} className={i % 2 === 0 ? 'bg-surface' : 'bg-page'}>
                   <td className={cn(tdCls, 'font-mono whitespace-nowrap')}>{row.n_nfs ?? '—'}</td>
                   <td className={cn(tdCls, 'text-[10px] text-muted whitespace-nowrap')}>{row.regiao ?? '—'}</td>
                   <td className={cn(tdCls, 'max-w-[100px] truncate text-muted')} title={row.remetente ?? ''}>{row.remetente ?? '—'}</td>

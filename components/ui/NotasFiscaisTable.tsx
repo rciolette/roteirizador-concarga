@@ -45,7 +45,7 @@ export function NotasFiscaisTable({ notas, compact = false }: {
         {notas.map((nf, i) => (
           <tr
             key={nf.id}
-            className={compact ? undefined : (i % 2 === 0 ? 'bg-white dark:bg-[#1E1E1C]' : 'bg-page')}
+            className={compact ? undefined : (i % 2 === 0 ? 'bg-surface' : 'bg-page')}
           >
             <td className={cn(cellCls, 'font-mono')}>{nf.numnfs}</td>
             <td className={cellCls}><CondDot cond={nf.cond} label /></td>

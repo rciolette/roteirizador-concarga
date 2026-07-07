@@ -34,7 +34,7 @@ function Skeleton({ rows }: { rows: number }) {
         <tr key={i} className={i % 2 === 0 ? 'bg-page' : 'bg-cream/40 dark:bg-[#1A1918]/60'}>
           {[40, 120, 90, 70, 60, 55, 55].map((w, j) => (
             <td key={j} className="px-3 py-2">
-              <div className="h-3 rounded animate-pulse bg-cream dark:bg-[#252523]" style={{ width: w }} />
+              <div className="h-3 rounded animate-pulse bg-cream dark:bg-hover" style={{ width: w }} />
             </td>
           ))}
         </tr>
@@ -61,10 +61,10 @@ export function NotasTable() {
       )}
 
       {/* Tabela com scroll */}
-      <div className="overflow-auto rounded-xl border border-[var(--border-card)] bg-surface dark:bg-[#1E1E1C]">
+      <div className="overflow-auto rounded-xl border border-[var(--border-card)] bg-surface">
         <table className="w-full text-[12px] border-collapse">
           <thead className="sticky top-0 z-10">
-            <tr className="bg-cream dark:bg-[#252523] border-b border-[var(--border-light)]">
+            <tr className="bg-cream dark:bg-hover border-b border-[var(--border-light)]">
               <th className="px-3 py-2 text-left font-medium text-muted whitespace-nowrap">NF</th>
               <th className="px-3 py-2 text-left font-medium text-muted whitespace-nowrap">Destinatário</th>
               <th className="px-3 py-2 text-left font-medium text-muted whitespace-nowrap">Município</th>
@@ -89,7 +89,7 @@ export function NotasTable() {
                   key={row.id}
                   className={cn(
                     'border-b border-[var(--border-faint)] last:border-0',
-                    i % 2 === 0 ? 'bg-surface dark:bg-[#1E1E1C]' : 'bg-cream/30 dark:bg-[#1A1918]/40',
+                    i % 2 === 0 ? 'bg-surface' : 'bg-cream/30 dark:bg-[#1A1918]/40',
                   )}
                 >
                   <td className="px-3 py-2 font-mono text-[11px] text-base whitespace-nowrap">
@@ -141,7 +141,7 @@ export function NotasTable() {
                     'px-2 py-0.5 text-[11px] transition-colors',
                     s === pageSize
                       ? 'bg-primary text-white font-medium'
-                      : 'bg-surface dark:bg-[#1E1E1C] text-muted hover:text-base hover:bg-cream dark:hover:bg-[#252523]',
+                      : 'bg-surface text-muted hover:text-base hover:bg-cream dark:hover:bg-hover',
                   )}
                 >
                   {s}
@@ -155,7 +155,7 @@ export function NotasTable() {
             <button
               onClick={() => setPage(page - 1)}
               disabled={page === 0}
-              className="px-2.5 py-1 rounded-md text-[11px] border border-[var(--border-input)] bg-surface dark:bg-[#1E1E1C] text-muted hover:text-base disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              className="px-2.5 py-1 rounded-md text-[11px] border border-[var(--border-input)] bg-surface text-muted hover:text-base disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             >
               ← Ant.
             </button>
@@ -165,7 +165,7 @@ export function NotasTable() {
             <button
               onClick={() => setPage(page + 1)}
               disabled={page >= totalPages - 1}
-              className="px-2.5 py-1 rounded-md text-[11px] border border-[var(--border-input)] bg-surface dark:bg-[#1E1E1C] text-muted hover:text-base disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              className="px-2.5 py-1 rounded-md text-[11px] border border-[var(--border-input)] bg-surface text-muted hover:text-base disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             >
               Próx. →
             </button>

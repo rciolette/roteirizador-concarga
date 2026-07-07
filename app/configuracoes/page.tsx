@@ -243,7 +243,7 @@ export default function ConfiguracoesPage() {
         </Topbar>
 
         {/* Abas */}
-        <div className="flex gap-0 border-b border-[0.5px] border-[var(--border-subtle)] bg-white dark:bg-[#1E1E1C] px-5">
+        <div className="flex gap-0 border-b border-[0.5px] border-[var(--border-subtle)] bg-surface px-5">
           {tabs.filter(t => t.visible).map(t => (
             <button
               key={t.id}
@@ -301,7 +301,7 @@ export default function ConfiguracoesPage() {
                   </thead>
                   <tbody className="divide-y divide-[var(--border-faint)]">
                     {cfg.grades.map((g, i) => (
-                      <tr key={g.id} className={cn('transition-colors', i % 2 === 0 ? 'bg-white dark:bg-[#1E1E1C] hover:bg-page' : 'bg-page hover:bg-cream')}>
+                      <tr key={g.id} className={cn('transition-colors', i % 2 === 0 ? 'bg-surface hover:bg-page' : 'bg-page hover:bg-cream')}>
                         <td className="px-4 py-2.5 text-xs text-base">{g.nome}</td>
                         {DIAS.map(d => (
                           <td key={d} className="px-3 py-2.5 text-center">
@@ -343,7 +343,7 @@ export default function ConfiguracoesPage() {
                     <select
                       value={convidandoPerfil}
                       onChange={e => setConvidandoPerfil(e.target.value as Perfil)}
-                      className="w-full border border-[var(--border-input)] rounded-lg text-xs py-2 px-2.5 bg-white dark:bg-[#1E1E1C] text-base outline-none focus:border-primary transition-colors"
+                      className="w-full border border-[var(--border-input)] rounded-lg text-xs py-2 px-2.5 bg-surface text-base outline-none focus:border-primary transition-colors"
                     >
                       {perfisConvidaveis.map(p => (
                         <option key={p} value={p}>{PERFIL_LABELS[p]}</option>
@@ -398,7 +398,7 @@ export default function ConfiguracoesPage() {
                                 <select
                                   value={u.perfil}
                                   onChange={e => handleAlterarPerfil(u.id, e.target.value as Perfil)}
-                                  className="border border-[var(--border-input)] rounded text-[11px] py-1 px-1.5 bg-white dark:bg-[#1E1E1C] text-base outline-none focus:border-primary"
+                                  className="border border-[var(--border-input)] rounded text-[11px] py-1 px-1.5 bg-surface text-base outline-none focus:border-primary"
                                 >
                                   {(['administrador', 'operador', 'visualizador'] as Perfil[]).map(p => (
                                     <option key={p} value={p} disabled={p === 'administrador' && usuario?.perfil !== 'owner'}>
@@ -620,7 +620,7 @@ export default function ConfiguracoesPage() {
       )}
 
       {hasChanges && (
-        <div className="fixed bottom-0 left-0 right-0 z-50 flex items-center justify-end gap-3 px-6 py-3 bg-white dark:bg-[#1E1E1C] border-t border-[0.5px] border-[var(--border-subtle)] shadow-lg">
+        <div className="fixed bottom-0 left-0 right-0 z-50 flex items-center justify-end gap-3 px-6 py-3 bg-surface border-t border-[0.5px] border-[var(--border-subtle)] shadow-lg">
           <span className="text-xs text-muted">Alterações não salvas</span>
           <button onClick={handleDiscard} className="px-3.5 py-[5px] text-xs text-muted hover:text-base transition-colors cursor-pointer bg-transparent border-none">
             Descartar

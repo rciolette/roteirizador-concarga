@@ -32,7 +32,7 @@ function DetalheModal({ rota, onClose }: { rota: Rota; onClose: () => void }) {
       className="fixed inset-0 bg-black/55 z-[100] flex items-center justify-center"
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div className="animate-fade-in bg-white dark:bg-[#1E1E1C] rounded-xl border border-[0.5px] border-[var(--border-light)] w-[600px] max-w-[95vw] max-h-[85vh] flex flex-col">
+      <div className="animate-fade-in bg-surface rounded-xl border border-[0.5px] border-[var(--border-light)] w-[600px] max-w-[95vw] max-h-[85vh] flex flex-col">
         <div className="px-5 py-4 border-b border-[0.5px] border-[var(--border-subtle)] flex items-center justify-between shrink-0">
           <div>
             <div className="text-[13px] font-medium">{rota.codigoRota}</div>
@@ -126,7 +126,7 @@ function ExportMenu({ rotas, nomeBase }: { rotas: Rota[]; nomeBase: string }) {
         </svg>
       </Btn>
       {open && (
-        <div className="absolute right-0 top-full mt-1 z-50 w-[130px] rounded-lg border border-[0.5px] border-[var(--border-subtle)] bg-white dark:bg-[#1E1E1C] shadow-lg overflow-hidden">
+        <div className="absolute right-0 top-full mt-1 z-50 w-[130px] rounded-lg border border-[0.5px] border-[var(--border-subtle)] bg-surface shadow-lg overflow-hidden">
           <button
             onClick={() => doExport('csv')}
             className="w-full text-left px-3 py-2 text-[11px] hover:bg-cream transition-colors cursor-pointer bg-transparent border-none"
@@ -288,7 +288,7 @@ export default function HistoricoPage() {
           { label: 'Aprovadas',  value: kpiAprov,           color: 'text-success' },
           { label: 'Rejeitadas', value: kpiRej,             color: kpiRej > 0 ? 'text-danger' : '' },
         ].map(m => (
-          <div key={m.label} className="flex-1 min-w-[80px] bg-white dark:bg-[#1E1E1C] border border-[0.5px] border-[var(--border-card)] rounded-lg px-3 py-2">
+          <div key={m.label} className="flex-1 min-w-[80px] bg-surface border border-[0.5px] border-[var(--border-card)] rounded-lg px-3 py-2">
             <div className="text-[10px] text-muted uppercase tracking-[0.04em]">{m.label}</div>
             <div className={cn('text-lg font-medium mt-0.5', m.color)}>{m.value}</div>
           </div>
@@ -339,7 +339,7 @@ export default function HistoricoPage() {
               {count > 0 && (
                 <span className={cn(
                   'text-[10px] min-w-[16px] text-center px-1 rounded-full font-medium',
-                  active ? 'bg-white/25 text-white' : 'bg-white dark:bg-[#2A2A28] text-muted',
+                  active ? 'bg-white/25 text-white' : 'bg-white dark:bg-hover text-muted',
                 )}>
                   {count}
                 </span>
@@ -372,7 +372,7 @@ export default function HistoricoPage() {
                   onClick={() => setRotaSelecionada(rota)}
                   className={cn(
                     'cursor-pointer transition-colors duration-100',
-                    i % 2 === 0 ? 'bg-white dark:bg-[#1E1E1C] hover:bg-page' : 'bg-page hover:bg-cream',
+                    i % 2 === 0 ? 'bg-surface hover:bg-page' : 'bg-page hover:bg-cream',
                   )}
                 >
                   <td className="px-3 py-[7px] border-b border-[0.5px] border-[var(--border-faint)] text-muted tabular-nums whitespace-nowrap">{rota.data}</td>

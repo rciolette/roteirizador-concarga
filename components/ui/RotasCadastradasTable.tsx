@@ -79,7 +79,7 @@ function AddModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => vo
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="animate-fade-in bg-white dark:bg-[#1E1E1C] rounded-xl border border-[0.5px] border-[var(--border-light)] w-[480px] max-w-full max-h-[90vh] overflow-y-auto shadow-xl">
+      <div className="animate-fade-in bg-surface rounded-xl border border-[0.5px] border-[var(--border-light)] w-[480px] max-w-full max-h-[90vh] overflow-y-auto shadow-xl">
 
         {/* Cabeçalho */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-[0.5px] border-[var(--border-faint)]">
@@ -378,8 +378,8 @@ export function RotasCadastradasTable() {
                     <tr
                       key={row.id}
                       className={cn(
-                        i % 2 === 0 ? 'bg-white dark:bg-[#1E1E1C]' : 'bg-page',
-                        !isEditing && 'cursor-pointer hover:bg-cream dark:hover:bg-[#28282A]',
+                        i % 2 === 0 ? 'bg-surface' : 'bg-page',
+                        !isEditing && 'cursor-pointer hover:bg-cream dark:hover:bg-hover',
                         'transition-colors',
                         !row.ativo && !isEditing && 'opacity-50',
                       )}

@@ -50,7 +50,7 @@ function PrimeiroAcessoDialog({ onClose }: { onClose: () => void }) {
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div className="w-full max-w-[360px] bg-white dark:bg-[#1E1E1C] border border-[0.5px] border-[var(--border-card)] rounded-xl shadow-xl px-6 py-7 animate-fade-in">
+      <div className="w-full max-w-[360px] bg-surface border border-[0.5px] border-[var(--border-card)] rounded-xl shadow-xl px-6 py-7 animate-fade-in">
 
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
@@ -78,7 +78,7 @@ function PrimeiroAcessoDialog({ onClose }: { onClose: () => void }) {
               onChange={e => setEmail(e.target.value)}
               required
               autoFocus
-              className="w-full px-3 py-2 rounded-lg border border-[0.5px] border-[var(--border-input)] bg-white dark:bg-[#252523] text-xs outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 dark:focus:ring-primary/20 transition-colors"
+              className="w-full px-3 py-2 rounded-lg border border-[0.5px] border-[var(--border-input)] bg-white dark:bg-hover text-xs outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 dark:focus:ring-primary/20 transition-colors"
               placeholder="seu@email.com"
             />
           </div>
@@ -92,7 +92,7 @@ function PrimeiroAcessoDialog({ onClose }: { onClose: () => void }) {
               value={senha}
               onChange={e => setSenha(e.target.value)}
               required
-              className="w-full px-3 py-2 rounded-lg border border-[0.5px] border-[var(--border-input)] bg-white dark:bg-[#252523] text-xs outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 dark:focus:ring-primary/20 transition-colors"
+              className="w-full px-3 py-2 rounded-lg border border-[0.5px] border-[var(--border-input)] bg-white dark:bg-hover text-xs outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 dark:focus:ring-primary/20 transition-colors"
               placeholder="Mínimo 8 caracteres com símbolo"
             />
           </div>
@@ -114,7 +114,7 @@ function PrimeiroAcessoDialog({ onClose }: { onClose: () => void }) {
               value={confirma}
               onChange={e => setConfirma(e.target.value)}
               required
-              className="w-full px-3 py-2 rounded-lg border border-[0.5px] border-[var(--border-input)] bg-white dark:bg-[#252523] text-xs outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 dark:focus:ring-primary/20 transition-colors"
+              className="w-full px-3 py-2 rounded-lg border border-[0.5px] border-[var(--border-input)] bg-white dark:bg-hover text-xs outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 dark:focus:ring-primary/20 transition-colors"
               placeholder="••••••••"
             />
           </div>
@@ -208,7 +208,7 @@ function LoginForm() {
           </div>
 
           {/* Card */}
-          <div className="bg-white dark:bg-[#1E1E1C] border border-[0.5px] border-[var(--border-card)] rounded-xl px-6 py-7 shadow-sm">
+          <div className="bg-surface border border-[0.5px] border-[var(--border-card)] rounded-xl px-6 py-7 shadow-sm">
             <h1 className="text-[14px] font-medium mb-1">Entrar no sistema</h1>
             <p className="text-[11px] text-muted mb-5">Roteirizador Concarga</p>
 

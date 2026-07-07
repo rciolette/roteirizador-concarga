@@ -29,7 +29,7 @@ export function SiatImportDialog({ onClose, onConfirm }: {
       className="fixed inset-0 bg-black/55 z-50 flex items-center justify-center"
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div className="animate-fade-in bg-white dark:bg-[#1E1E1C] rounded-xl border border-[0.5px] border-[var(--border-light)] p-6 w-[460px] max-w-[90vw]">
+      <div className="animate-fade-in bg-surface rounded-xl border border-[0.5px] border-[var(--border-light)] p-6 w-[460px] max-w-[90vw]">
         <div className="text-sm font-medium mb-1">Importar dados do SIAT</div>
         <div className="text-[11px] text-muted mb-4">
           Filtros opcionais — deixe em branco pra importar todas as NFs aguardando entrega.

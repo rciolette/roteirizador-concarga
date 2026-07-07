@@ -212,7 +212,7 @@ function ExportMenuFrota({ rows, nomeBase }: { rows: Record<string, unknown>[]; 
         <svg className="w-2.5 h-2.5" viewBox="0 0 10 10" fill="currentColor"><path d="M2 3l3 4 3-4H2z"/></svg>
       </Btn>
       {open && (
-        <div className="absolute right-0 top-full mt-1 z-50 w-[130px] rounded-lg border border-[0.5px] border-[var(--border-subtle)] bg-white dark:bg-[#1E1E1C] shadow-lg overflow-hidden">
+        <div className="absolute right-0 top-full mt-1 z-50 w-[130px] rounded-lg border border-[0.5px] border-[var(--border-subtle)] bg-surface shadow-lg overflow-hidden">
           <button onClick={() => doExport('csv')} className="w-full text-left px-3 py-2 text-[11px] hover:bg-cream cursor-pointer bg-transparent border-none">CSV</button>
           <button onClick={() => doExport('xlsx')} className="w-full text-left px-3 py-2 text-[11px] hover:bg-cream cursor-pointer bg-transparent border-none border-t border-[0.5px] border-[var(--border-faint)]">Excel (XLSX)</button>
         </div>
@@ -510,7 +510,7 @@ export default function FrotaPage() {
               className={cn(
                 'px-4 py-1.5 rounded-md text-xs font-medium transition-all duration-150 cursor-pointer',
                 tab === t.id
-                  ? 'bg-white dark:bg-[#1E1E1C] text-base shadow-sm border border-[0.5px] border-[var(--border-subtle)]'
+                  ? 'bg-surface text-base shadow-sm border border-[0.5px] border-[var(--border-subtle)]'
                   : 'text-muted hover:text-base',
               )}
             >

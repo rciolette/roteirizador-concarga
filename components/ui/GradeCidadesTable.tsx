@@ -355,8 +355,8 @@ export function GradeCidadesTable() {
                   <tr
                     key={row.id}
                     className={cn(
-                      i % 2 === 0 ? 'bg-white dark:bg-[#1E1E1C]' : 'bg-page',
-                      !isEditing && 'cursor-pointer hover:bg-cream dark:hover:bg-[#28282A]',
+                      i % 2 === 0 ? 'bg-surface' : 'bg-page',
+                      !isEditing && 'cursor-pointer hover:bg-cream dark:hover:bg-hover',
                       'transition-colors',
                     )}
                     onClick={() => { if (!isEditing) startEdit(row) }}

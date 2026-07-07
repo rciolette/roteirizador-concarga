@@ -30,7 +30,7 @@ export function ThemeToggle() {
             'w-[22px] h-5 flex items-center justify-center rounded text-[12px] leading-none',
             'transition-colors duration-100 cursor-pointer border-none',
             current === m
-              ? 'bg-white dark:bg-[#2A2A28] text-base shadow-sm'
+              ? 'bg-white dark:bg-hover text-base shadow-sm'
               : 'bg-transparent text-subtle hover:text-muted',
           )}
         >

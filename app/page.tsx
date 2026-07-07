@@ -258,7 +258,7 @@ export default function Page() {
                             v.status === 'manutencao'   ? 'Manu.' :
                                                           'Indisp.'
                           return (
-                            <tr key={v.id} className={i % 2 === 0 ? 'bg-white dark:bg-[#1E1E1C]' : 'bg-page'}>
+                            <tr key={v.id} className={i % 2 === 0 ? 'bg-surface' : 'bg-page'}>
                               <td className="px-2.5 py-1.5 font-mono whitespace-nowrap border-b border-[0.5px] border-[var(--border-faint)]">{v.placa}</td>
                               <td className="px-2.5 py-1.5 text-muted border-b border-[0.5px] border-[var(--border-faint)]">{v.tipo}</td>
                               <td className="px-2.5 py-1.5 max-w-[90px] truncate text-muted border-b border-[0.5px] border-[var(--border-faint)]" title={v.motoristaNome ?? ''}>{v.motoristaNome ?? '—'}</td>

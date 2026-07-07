@@ -90,7 +90,7 @@ export function AgendadosHojeTable() {
               </thead>
               <tbody>
                 {agendados.map((nf, i) => (
-                  <tr key={nf.id} className={i % 2 === 0 ? 'bg-white dark:bg-[#1E1E1C]' : 'bg-page'}>
+                  <tr key={nf.id} className={i % 2 === 0 ? 'bg-surface' : 'bg-page'}>
                     <td className={cn(tdCls, 'font-mono font-medium whitespace-nowrap text-primary-dark')}>
                       {fmtHora(nf.horaAgendamento)}
                     </td>

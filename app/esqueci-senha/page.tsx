@@ -39,7 +39,7 @@ export default function EsqueciSenhaPage() {
           <span className="text-[15px] font-medium tracking-[-0.01em]">Concarga</span>
         </div>
 
-        <div className="bg-white dark:bg-[#1E1E1C] border border-[0.5px] border-[var(--border-card)] rounded-xl px-6 py-7 shadow-sm">
+        <div className="bg-surface border border-[0.5px] border-[var(--border-card)] rounded-xl px-6 py-7 shadow-sm">
           {enviado ? (
             <div className="text-center">
               <h1 className="text-[14px] font-medium mb-2">E-mail enviado</h1>

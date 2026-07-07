@@ -63,7 +63,7 @@ function AceitarConviteForm() {
           <span className="text-[15px] font-medium tracking-[-0.01em]">Concarga</span>
         </div>
 
-        <div className="bg-white dark:bg-[#1E1E1C] border border-[0.5px] border-[var(--border-card)] rounded-xl px-6 py-7 shadow-sm">
+        <div className="bg-surface border border-[0.5px] border-[var(--border-card)] rounded-xl px-6 py-7 shadow-sm">
           <h1 className="text-[14px] font-medium mb-1">Criar sua conta</h1>
           <p className="text-[11px] text-muted mb-5">
             Defina uma senha para ativar seu acesso ao Roteirizador Concarga.
@@ -91,7 +91,7 @@ function AceitarConviteForm() {
                 value={senha}
                 onChange={e => setSenha(e.target.value)}
                 required
-                className="w-full px-3 py-2 rounded-lg border border-[0.5px] border-[var(--border-input)] bg-white dark:bg-[#252523] text-xs outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 dark:focus:ring-primary/20 transition-colors"
+                className="w-full px-3 py-2 rounded-lg border border-[0.5px] border-[var(--border-input)] bg-white dark:bg-hover text-xs outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 dark:focus:ring-primary/20 transition-colors"
                 placeholder="Mínimo 8 caracteres com símbolo"
               />
             </div>
@@ -113,7 +113,7 @@ function AceitarConviteForm() {
                 value={confirma}
                 onChange={e => setConfirma(e.target.value)}
                 required
-                className="w-full px-3 py-2 rounded-lg border border-[0.5px] border-[var(--border-input)] bg-white dark:bg-[#252523] text-xs outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 dark:focus:ring-primary/20 transition-colors"
+                className="w-full px-3 py-2 rounded-lg border border-[0.5px] border-[var(--border-input)] bg-white dark:bg-hover text-xs outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 dark:focus:ring-primary/20 transition-colors"
                 placeholder="••••••••"
               />
             </div>

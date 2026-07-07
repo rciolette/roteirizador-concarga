@@ -71,7 +71,7 @@ function compressImage(file: File, maxDim = 512, quality = 0.85): Promise<Blob> 
 
 // ─── campo reutilizável ───────────────────────────────────────────────────────
 const inputCls =
-  'w-full px-3 py-2 rounded-lg border border-[0.5px] border-[var(--border-input)] bg-white dark:bg-[#252523] text-xs text-base placeholder:text-muted/60 dark:placeholder:text-muted/70 outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 dark:focus:ring-primary/20 transition-colors'
+  'w-full px-3 py-2 rounded-lg border border-[0.5px] border-[var(--border-input)] bg-white dark:bg-hover text-xs text-base placeholder:text-muted/60 dark:placeholder:text-muted/70 outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 dark:focus:ring-primary/20 transition-colors'
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -392,7 +392,7 @@ function SecaoUsuarios() {
           {usuarios.map(u => (
             <div
               key={u.id}
-              className="flex items-center gap-3 bg-white dark:bg-[#1E1E1C] border border-[0.5px] border-[var(--border-card)] rounded-xl px-4 py-3"
+              className="flex items-center gap-3 bg-surface border border-[0.5px] border-[var(--border-card)] rounded-xl px-4 py-3"
             >
               <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0 text-[12px] font-medium text-primary overflow-hidden">
                 {(u.nome ?? u.email).charAt(0).toUpperCase()}
@@ -439,7 +439,7 @@ function SecaoUsuarios() {
           <h3 className="text-[11px] font-medium text-mid uppercase tracking-wide">Convites pendentes</h3>
           <div className="space-y-2">
             {convites.map(c => (
-              <div key={c.id} className="flex items-center gap-3 bg-white dark:bg-[#1E1E1C] border border-[0.5px] border-[var(--border-card)] rounded-xl px-4 py-3">
+              <div key={c.id} className="flex items-center gap-3 bg-surface border border-[0.5px] border-[var(--border-card)] rounded-xl px-4 py-3">
                 <div className="flex-1 min-w-0">
                   <div className="text-[12px] font-medium truncate">{c.email}</div>
                   <div className="text-[10px] text-muted">{NOME_PERFIL[c.perfil]} · aguardando aceite</div>
@@ -469,7 +469,7 @@ function SecaoUsuarios() {
       {/* Modal de convite */}
       {convidarOpen && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
-          <div className="bg-white dark:bg-[#1E1E1C] border border-[0.5px] border-[var(--border-card)] rounded-xl px-6 py-6 w-full max-w-sm shadow-xl">
+          <div className="bg-surface border border-[0.5px] border-[var(--border-card)] rounded-xl px-6 py-6 w-full max-w-sm shadow-xl">
             <h3 className="text-[14px] font-medium mb-4">Convidar usuário</h3>
             <div className="flex flex-col gap-3.5">
               <Field label="E-mail">

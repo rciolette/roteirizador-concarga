@@ -42,7 +42,7 @@ export default function RedefinirSenhaPage() {
           <span className="text-[15px] font-medium tracking-[-0.01em]">Concarga</span>
         </div>
 
-        <div className="bg-white dark:bg-[#1E1E1C] border border-[0.5px] border-[var(--border-card)] rounded-xl px-6 py-7 shadow-sm">
+        <div className="bg-surface border border-[0.5px] border-[var(--border-card)] rounded-xl px-6 py-7 shadow-sm">
           <h1 className="text-[14px] font-medium mb-1">Definir nova senha</h1>
           <p className="text-[11px] text-muted mb-5">Escolha uma senha segura com no mínimo 8 caracteres.</p>
 

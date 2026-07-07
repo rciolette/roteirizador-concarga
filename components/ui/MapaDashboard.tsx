@@ -223,7 +223,7 @@ function MapaDashboardInner({ rotas }: { rotas: Rota[] }) {
       {/* Sidebar com lista de rotas (só quando há rotas) */}
       {rotas.length > 0 && (
         <div className="w-[188px] shrink-0 border-r border-[0.5px] border-[var(--border-faint)] overflow-y-auto flex flex-col">
-          <div className="px-3 py-[7px] border-b border-[0.5px] border-[var(--border-faint)] sticky top-0 bg-white dark:bg-[#1E1E1C]">
+          <div className="px-3 py-[7px] border-b border-[0.5px] border-[var(--border-faint)] sticky top-0 bg-surface">
             <span className="text-[10px] uppercase tracking-[0.06em] text-muted font-medium">Rotas do dia</span>
           </div>
           <button
@@ -362,7 +362,7 @@ function MapaDashboardInner({ rotas }: { rotas: Rota[] }) {
 
         {/* Legenda COND (só quando exibindo NFs pendentes) */}
         {rotas.length === 0 && nfsPendentes.length > 0 && (
-          <div className="absolute bottom-3 left-3 flex items-center gap-2 bg-white/90 dark:bg-[#1E1E1C]/90 rounded-lg px-2.5 py-1.5 text-[10px] shadow-sm">
+          <div className="absolute bottom-3 left-3 flex items-center gap-2 bg-surface/90 rounded-lg px-2.5 py-1.5 text-[10px] shadow-sm">
             {(['vermelho', 'laranja', 'ok'] as CondStatus[]).map(c => (
               <span key={c} className="flex items-center gap-1">
                 <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ backgroundColor: COND_COLORS[c] }} />

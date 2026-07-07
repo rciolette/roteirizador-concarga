@@ -6,7 +6,7 @@ import { cn, formatPeso } from '@/lib/utils'
 // ── Topbar ───────────────────────────────────────────────────────────────────
 export function Topbar({ title, sub, children }: { title: string; sub?: string; children?: ReactNode }) {
   return (
-    <div className="h-[46px] bg-white dark:bg-[#1E1E1C] border-b border-[0.5px] border-[var(--border-subtle)] flex items-center justify-between px-5 shrink-0 gap-3">
+    <div className="h-[46px] bg-surface border-b border-[0.5px] border-[var(--border-subtle)] flex items-center justify-between px-5 shrink-0 gap-3">
       <div className="min-w-0">
         <div className="text-[13px] font-medium tracking-[-0.01em] text-base">{title}</div>
         {sub && <div className="text-[10px] text-muted mt-px">{sub}</div>}
@@ -25,7 +25,7 @@ export function Divider() {
 type BtnVariant = 'default' | 'primary' | 'success' | 'teal' | 'danger-soft' | 'warn-soft'
 
 const BV: Record<BtnVariant, string> = {
-  'default':     'bg-white dark:bg-[#1E1E1C] text-base border-[var(--border-btn)]',
+  'default':     'bg-surface text-base border-[var(--border-btn)]',
   'primary':     'bg-brand text-brand-fg border-brand',
   'success':     'bg-success text-success-bg border-success',
   'teal':        'bg-teal text-teal-bg border-teal',
@@ -65,7 +65,7 @@ export function Card({ children, style, className }: {
 }) {
   return (
     <div
-      className={cn('bg-white dark:bg-[#1E1E1C] border border-[0.5px] border-[var(--border-card)] rounded-lg overflow-hidden', className)}
+      className={cn('bg-surface border border-[0.5px] border-[var(--border-card)] rounded-lg overflow-hidden', className)}
       style={style}
     >
       {children}
@@ -211,7 +211,7 @@ export function ImportBar({ running, step, progress, result, onClose }: {
 
   if (hasError) {
     return (
-      <div className="animate-fade-in bg-white dark:bg-[#1E1E1C] rounded-lg px-4 py-3 flex items-center gap-3.5 border border-[0.5px] border-danger-border">
+      <div className="animate-fade-in bg-surface rounded-lg px-4 py-3 flex items-center gap-3.5 border border-[0.5px] border-danger-border">
         <svg className="w-[18px] h-[18px] text-danger shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/>
         </svg>
@@ -228,7 +228,7 @@ export function ImportBar({ running, step, progress, result, onClose }: {
 
   return (
     <div className={cn(
-      'animate-fade-in bg-white dark:bg-[#1E1E1C] rounded-lg px-4 py-3 flex items-center gap-3.5',
+      'animate-fade-in bg-surface rounded-lg px-4 py-3 flex items-center gap-3.5',
       'border border-[0.5px]',
       done ? 'border-success-border' : 'border-[#B5D4F4] dark:border-[#1A3A5C]',
     )}>
@@ -394,7 +394,7 @@ export function ConfirmDialog({ action, onConfirm, onClose }: {
       className="fixed inset-0 bg-black/55 z-[200] flex items-center justify-center"
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div className="animate-fade-in bg-white dark:bg-[#1E1E1C] rounded-xl border border-[0.5px] border-[var(--border-light)] w-[420px] max-w-[92vw]">
+      <div className="animate-fade-in bg-surface rounded-xl border border-[0.5px] border-[var(--border-light)] w-[420px] max-w-[92vw]">
         <div className="px-5 pt-[18px] pb-3.5 border-b border-[0.5px] border-[var(--border-subtle)]">
           <div className="flex items-start gap-3">
             <div className={cn('w-8 h-8 rounded-lg shrink-0 flex items-center justify-center', icon.bg)}>

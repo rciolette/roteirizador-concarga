@@ -128,7 +128,7 @@ function GerarRotasDialog({ onClose, onConfirm, motoristas, veiculos }: {
 
   return (
     <div className="fixed inset-0 bg-black/55 flex items-center justify-center z-50">
-      <div className="animate-fade-in bg-white dark:bg-[#1E1E1C] rounded-xl border border-[0.5px] border-[var(--border-light)] p-6 w-[640px] max-w-[95vw] max-h-[90vh] overflow-y-auto">
+      <div className="animate-fade-in bg-surface rounded-xl border border-[0.5px] border-[var(--border-light)] p-6 w-[640px] max-w-[95vw] max-h-[90vh] overflow-y-auto">
         <div className="text-sm font-medium mb-1">Instrução para o agente de IA</div>
         <div className="text-[11px] text-muted mb-4">
           Estas informações serão combinadas com as regras fixas e os dados do SIAT.
@@ -196,7 +196,7 @@ function GerarRotasDialog({ onClose, onConfirm, motoristas, veiculos }: {
           ) : (
             <div className="flex flex-col gap-0.5 max-h-[160px] overflow-y-auto pr-0.5">
               {motoristasFiltrados.map(m => (
-                <label key={m.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-cream dark:hover:bg-[#2a2a28] cursor-pointer select-none transition-colors">
+                <label key={m.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-cream dark:hover:bg-hover cursor-pointer select-none transition-colors">
                   <input
                     type="checkbox"
                     checked={motoristasSel.has(m.id)}
@@ -240,7 +240,7 @@ function GerarRotasDialog({ onClose, onConfirm, motoristas, veiculos }: {
                 return (
                   <label key={v.id} className={cn(
                     'flex items-center gap-2 px-2 py-1.5 rounded-lg select-none transition-colors',
-                    disabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-cream dark:hover:bg-[#2a2a28] cursor-pointer',
+                    disabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-cream dark:hover:bg-hover cursor-pointer',
                   )}>
                     <input
                       type="checkbox"
@@ -255,7 +255,7 @@ function GerarRotasDialog({ onClose, onConfirm, motoristas, veiculos }: {
                     <span className="text-[10px] text-muted shrink-0">{formatPeso(v.capacidadeKg)}</span>
                     {v.motoristaNome && <span className="text-[10px] text-subtle truncate max-w-[80px] shrink-0">{v.motoristaNome}</span>}
                     {v.disponivel_hoje
-                      ? <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0 bg-teal-bg text-[#085041]">Disponível hoje</span>
+                      ? <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0 bg-teal-bg text-teal-dark">Disponível hoje</span>
                       : <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0 bg-warn-bg text-warn">Ativo</span>
                     }
                   </label>
@@ -291,7 +291,7 @@ const AVATAR_CLS = [
   'bg-primary-bg text-primary-dark',
   'bg-success-bg text-success-dark',
   'bg-purple-bg text-purple',
-  'bg-teal-bg text-[#085041]',
+  'bg-teal-bg text-teal-dark',
   'bg-warn-bg text-warn',
 ]
 
@@ -324,7 +324,7 @@ function RouteCard({ rota, onUpdateStatus, onAskConfirm, enderecoOrigem }: {
 
   return (
     <div className={cn(
-      'bg-white dark:bg-[#1E1E1C] rounded-lg overflow-hidden transition-[border] duration-150',
+      'bg-surface rounded-lg overflow-hidden transition-[border] duration-150',
       rota.status === 'aguardando'
         ? 'border border-[1.5px] border-primary'
         : 'border border-[0.5px] border-[var(--border-card)]',
@@ -546,7 +546,7 @@ function SRotaTable({ rows }: { rows: SiatRow[] }) {
               </thead>
               <tbody>
                 {rows.map((row, i) => (
-                  <tr key={String(row.NUMNFS ?? i)} className={i % 2 === 0 ? 'bg-white dark:bg-[#1E1E1C]' : 'bg-page'}>
+                  <tr key={String(row.NUMNFS ?? i)} className={i % 2 === 0 ? 'bg-surface' : 'bg-page'}>
                     <td className={cn(thCls, 'font-mono border-b border-[0.5px] border-[var(--border-faint)] bg-transparent')}>{row.NUMNFS ?? '—'}</td>
                     <td className={cn(tdCls, 'max-w-[180px] truncate')} title={row.Destinatario ?? ''}>{row.Destinatario ?? '—'}</td>
                     <td className={cn(tdCls, 'whitespace-nowrap text-muted')}>{row.MunicipioFinal ?? row.Municipio ?? '—'}</td>
@@ -598,7 +598,7 @@ function ExportMenuRotas({ rotas }: { rotas: import('@/types').Rota[] }) {
         <svg className="w-2.5 h-2.5" viewBox="0 0 10 10" fill="currentColor"><path d="M2 3l3 4 3-4H2z"/></svg>
       </Btn>
       {open && (
-        <div className="absolute right-0 top-full mt-1 z-50 w-[130px] rounded-lg border border-[0.5px] border-[var(--border-subtle)] bg-white dark:bg-[#1E1E1C] shadow-lg overflow-hidden">
+        <div className="absolute right-0 top-full mt-1 z-50 w-[130px] rounded-lg border border-[0.5px] border-[var(--border-subtle)] bg-surface shadow-lg overflow-hidden">
           <button onClick={() => doExport('csv')} className="w-full text-left px-3 py-2 text-[11px] hover:bg-cream cursor-pointer bg-transparent border-none">CSV</button>
           <button onClick={() => doExport('xlsx')} className="w-full text-left px-3 py-2 text-[11px] hover:bg-cream cursor-pointer bg-transparent border-none border-t border-[0.5px] border-[var(--border-faint)]">Excel (XLSX)</button>
         </div>
@@ -847,7 +847,7 @@ export default function RotasPage() {
     <div>
       {loadingRotas && routes.length === 0 && (
         <div className="fixed inset-0 bg-page/80 backdrop-blur-sm z-40 flex items-center justify-center">
-          <div className="bg-white dark:bg-[#1E1E1C] rounded-xl border border-[0.5px] border-[var(--border-card)] px-8 py-6 flex flex-col items-center gap-3 text-center shadow-lg">
+          <div className="bg-surface rounded-xl border border-[0.5px] border-[var(--border-card)] px-8 py-6 flex flex-col items-center gap-3 text-center shadow-lg">
             <svg className="w-6 h-6 text-primary animate-spin-slow" viewBox="0 0 24 24" fill="none">
               <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" strokeDasharray="60" strokeDashoffset="20"/>
             </svg>
@@ -901,7 +901,7 @@ export default function RotasPage() {
                 {count > 0 && (
                   <span className={cn(
                     'text-[10px] min-w-[16px] text-center px-1 rounded-full font-medium',
-                    active ? 'bg-white/25 text-white' : 'bg-white dark:bg-[#2A2A28] text-muted',
+                    active ? 'bg-white/25 text-white' : 'bg-white dark:bg-hover text-muted',
                   )}>
                     {count}
                   </span>
@@ -1081,7 +1081,7 @@ export default function RotasPage() {
                           ? 'bg-white/25 text-white'
                           : tab === 'agendados'
                             ? 'bg-danger-bg text-danger'
-                            : 'bg-white dark:bg-[#2A2A28] text-muted',
+                            : 'bg-white dark:bg-hover text-muted',
                       )}>
                         {count}
                       </span>

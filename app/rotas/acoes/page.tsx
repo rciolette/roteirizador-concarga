@@ -130,7 +130,7 @@ function RouteDrawer({ rota, onClose, onAprovar, onRejeitar }: {
                     {rota.notasFiscais.map((nf, i) => {
                       const res = restricao(nf)
                       return (
-                        <tr key={nf.id} className={i % 2 === 0 ? 'bg-white dark:bg-[#1E1E1C]' : 'bg-page'}>
+                        <tr key={nf.id} className={i % 2 === 0 ? 'bg-surface' : 'bg-page'}>
                           <td className={cn(tdCls, 'font-mono whitespace-nowrap')}>{nf.numnfs}</td>
                           <td className={cn(tdCls, 'max-w-[120px] truncate')} title={nf.destinatario}>{nf.destinatario}</td>
                           <td className={cn(tdCls, 'max-w-[100px] truncate text-muted')} title={`${nf.endereco} ${nf.bairro} ${nf.municipio}`}>
@@ -202,7 +202,7 @@ function BulkRejectModal({ count, onConfirm, onClose }: {
       className="fixed inset-0 bg-black/55 z-[200] flex items-center justify-center"
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div className="animate-fade-in bg-white dark:bg-[#1E1E1C] rounded-xl border border-[0.5px] border-[var(--border-light)] w-[400px] max-w-[92vw]">
+      <div className="animate-fade-in bg-surface rounded-xl border border-[0.5px] border-[var(--border-light)] w-[400px] max-w-[92vw]">
         <div className="px-5 pt-4 pb-3 border-b border-[0.5px] border-[var(--border-subtle)]">
           <div className="text-[13px] font-medium">Rejeitar {count} rota{count !== 1 ? 's' : ''}</div>
           <div className="text-[11px] text-muted mt-0.5">Essa ação não pode ser desfeita.</div>
@@ -472,7 +472,7 @@ export default function AprovacoesPage() {
                     key={rota.id}
                     className={cn(
                       'flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors',
-                      isSel ? 'bg-primary-bg/60 dark:bg-primary/8' : 'hover:bg-cream dark:hover:bg-[#28282A]',
+                      isSel ? 'bg-primary-bg/60 dark:bg-primary/8' : 'hover:bg-cream dark:hover:bg-hover',
                       i < aguardando.length - 1 && 'border-b border-[0.5px] border-[var(--border-faint)]',
                     )}
                     onClick={e => {
@@ -555,7 +555,7 @@ export default function AprovacoesPage() {
                     key={rota.id}
                     className={cn(
                       'flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors',
-                      isSel ? 'bg-primary-bg/60 dark:bg-primary/8' : 'hover:bg-cream dark:hover:bg-[#28282A]',
+                      isSel ? 'bg-primary-bg/60 dark:bg-primary/8' : 'hover:bg-cream dark:hover:bg-hover',
                       i < aprovadas.length - 1 && 'border-b border-[0.5px] border-[var(--border-faint)]',
                     )}
                     onClick={e => {
@@ -603,7 +603,7 @@ export default function AprovacoesPage() {
                 <div
                   key={rota.id}
                   className={cn(
-                    'flex items-center gap-3.5 px-4 py-2.5 cursor-pointer hover:bg-cream dark:hover:bg-[#28282A] transition-colors',
+                    'flex items-center gap-3.5 px-4 py-2.5 cursor-pointer hover:bg-cream dark:hover:bg-hover transition-colors',
                     i < enviadas.length - 1 && 'border-b border-[0.5px] border-[var(--border-faint)]',
                   )}
                   onClick={() => setDrawerRota(rota)}
