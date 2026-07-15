@@ -1,4 +1,7 @@
 import { createSupabaseServerClient } from '@/lib/supabase-server'
+import { getAdminClient } from '@/lib/auth-server'
+import { registrarLog } from '@/lib/log-atividade'
+import type { Perfil } from '@/lib/auth'
 import { NextResponse, type NextRequest } from 'next/server'
 
 // Recebe o code do link de e-mail (convite ou recuperação de senha)
@@ -13,6 +16,18 @@ export async function GET(request: NextRequest) {
     const sb = await createSupabaseServerClient()
     const { error } = await sb.auth.exchangeCodeForSession(code)
     if (!error) {
+      // Este é o único ponto de entrada de sessão via link de e-mail (convite/recovery) —
+      // não passa por signIn() em lib/auth.ts, por isso o login precisa ser registrado aqui.
+      const { data: { user } } = await sb.auth.getUser()
+      if (user) {
+        const admin = getAdminClient()
+        const { data: perfilRow } = await admin.from('perfis_usuario').select('perfil').eq('user_id', user.id).single()
+        await registrarLog({
+          sessao: { userId: user.id, email: user.email ?? '', perfil: (perfilRow?.perfil as Perfil) ?? 'visualizador', ativo: true },
+          evento: 'login', area: 'sessao', req: request,
+        })
+      }
+
       const origem = searchParams.get('origem') // param customizado: 'convite'
       const destino =
         type === 'invite' || origem === 'convite' ? '/aceitar-convite' :
