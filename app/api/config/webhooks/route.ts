@@ -1,4 +1,5 @@
 import { exigirPermissao, getAdminClient } from '@/lib/auth-server'
+import { registrarLog } from '@/lib/log-atividade'
 
 export async function POST(req: Request) {
   const auth = await exigirPermissao('webhooks')
@@ -14,5 +15,12 @@ export async function POST(req: Request) {
     .upsert({ chave: 'webhooks', valor: body }, { onConflict: 'chave' })
 
   if (error) return Response.json({ error: error.message }, { status: 500 })
+
+  await registrarLog({
+    sessao: auth, evento: 'editar', area: 'webhooks',
+    descricao: 'Atualizou webhooks de integração',
+    req,
+  })
+
   return Response.json({ ok: true })
 }

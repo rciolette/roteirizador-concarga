@@ -23,6 +23,7 @@ export const API_PERMISSAO: Record<string, string> = {
   '/api/usuarios':         'usuarios',
   '/api/convites':         'usuarios',
   '/api/empresa':          'empresa',
+  '/api/logs':             'logs',
 }
 
 // Retorna a ação exigida para uma rota de página.

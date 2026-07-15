@@ -1,4 +1,5 @@
 import { exigirPermissao, getAdminClient } from '@/lib/auth-server'
+import { registrarLog } from '@/lib/log-atividade'
 import type { Perfil } from '@/lib/auth'
 
 // GET /api/usuarios — lista usuários com perfil
@@ -47,7 +48,7 @@ export async function PATCH(req: Request) {
   const sb = getAdminClient()
   const { data: alvo } = await sb
     .from('perfis_usuario')
-    .select('perfil')
+    .select('perfil, nome')
     .eq('user_id', userId)
     .single()
 
@@ -79,5 +80,16 @@ export async function PATCH(req: Request) {
     .eq('user_id', userId)
 
   if (error) return Response.json({ error: error.message }, { status: 500 })
+
+  const mudancas = [
+    perfil !== undefined ? `perfil → ${perfil}` : null,
+    ativo  !== undefined ? (ativo ? 'reativado' : 'desativado') : null,
+  ].filter(Boolean).join(', ')
+  await registrarLog({
+    sessao: auth, evento: 'editar', area: 'usuarios', entidadeId: userId,
+    descricao: `Alterou usuário ${alvo?.nome || userId}: ${mudancas}`,
+    dados: { userId, perfil, ativo }, req,
+  })
+
   return Response.json({ ok: true })
 }

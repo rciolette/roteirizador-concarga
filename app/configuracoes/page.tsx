@@ -12,6 +12,7 @@ import { salvarConfig, salvarWebhooks, carregarWebhooks, type WebhookConfig } fr
 import { cn } from '@/lib/utils'
 import { GradeCidadesTable } from '@/components/ui/GradeCidadesTable'
 import { RotasCadastradasTable } from '@/components/ui/RotasCadastradasTable'
+import { LogsAtividadeTable } from '@/components/ui/LogsAtividadeTable'
 import type { Perfil } from '@/lib/auth'
 
 const DIAS = ['seg', 'ter', 'qua', 'qui', 'sex', 'sab'] as const
@@ -25,7 +26,7 @@ const PRIORIDADES = [
   'Varejo por data de chegada',
 ]
 
-type ConfigTab = 'operacao' | 'cidades' | 'rotas' | 'acessos' | 'avancado'
+type ConfigTab = 'operacao' | 'cidades' | 'rotas' | 'acessos' | 'logs' | 'avancado'
 
 const PERFIL_LABELS: Record<Perfil, string> = {
   owner:         'Owner',
@@ -101,8 +102,9 @@ export default function ConfiguracoesPage() {
     if (!usuario || !pode('configuracoes')) { router.replace('/'); return }
     const params = new URLSearchParams(window.location.search)
     const tabParam = params.get('tab') as ConfigTab | null
-    if (tabParam && ['operacao', 'cidades', 'rotas', 'acessos', 'avancado'].includes(tabParam)) {
-      if ((tabParam === 'acessos' && pode('usuarios')) || (tabParam === 'avancado' && pode('webhooks')) || !['acessos', 'avancado'].includes(tabParam)) {
+    if (tabParam && ['operacao', 'cidades', 'rotas', 'acessos', 'logs', 'avancado'].includes(tabParam)) {
+      const gated: Record<string, boolean> = { acessos: pode('usuarios'), logs: pode('logs'), avancado: pode('webhooks') }
+      if (!(tabParam in gated) || gated[tabParam]) {
         setTab(tabParam)
       }
     }
@@ -230,6 +232,7 @@ export default function ConfiguracoesPage() {
     { id: 'cidades',  label: 'Cidades',    visible: true },
     { id: 'rotas',    label: 'Rotas',      visible: true },
     { id: 'acessos',  label: 'Acessos',    visible: pode('usuarios') },
+    { id: 'logs',     label: 'Logs',       visible: pode('logs') },
     { id: 'avancado', label: 'Avançado',   visible: pode('webhooks') },
   ]
 
@@ -517,6 +520,9 @@ export default function ConfiguracoesPage() {
             )}
           </>
         )}
+
+        {/* ── Aba Logs ── */}
+        {tab === 'logs' && pode('logs') && <LogsAtividadeTable />}
 
         {/* ── Aba Avançado ── */}
         {tab === 'avancado' && pode('webhooks') && (

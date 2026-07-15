@@ -1,4 +1,5 @@
 import { exigirPermissao, getAdminClient } from '@/lib/auth-server'
+import { registrarLog } from '@/lib/log-atividade'
 
 // GET /api/empresa — retorna os dados da empresa
 export async function GET() {
@@ -37,6 +38,12 @@ export async function PATCH(req: Request) {
 
   // Garante que a linha singleton existe antes de atualizar
   await sb.from('empresa').upsert({ ...updates, singleton: true }, { onConflict: 'singleton' })
+
+  await registrarLog({
+    sessao: auth, evento: 'editar', area: 'empresa',
+    descricao: 'Atualizou dados da empresa',
+    dados: updates, req,
+  })
 
   return Response.json({ ok: true })
 }

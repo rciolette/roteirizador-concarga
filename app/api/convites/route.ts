@@ -1,4 +1,5 @@
 import { exigirPermissao, getAdminClient } from '@/lib/auth-server'
+import { registrarLog } from '@/lib/log-atividade'
 import type { Perfil } from '@/lib/auth'
 
 const PERFIS_CONVIDAVEIS: Perfil[] = ['administrador', 'operador', 'visualizador']
@@ -77,6 +78,12 @@ export async function POST(req: Request) {
     user_id:       userId,
   })
 
+  await registrarLog({
+    sessao: auth, evento: 'criar', area: 'convites', entidadeId: userId ?? undefined,
+    descricao: `Convidou ${body.email} como ${perfil}`,
+    dados: { email: body.email, perfil }, req,
+  })
+
   return Response.json({ ok: true })
 }
 
@@ -117,6 +124,12 @@ export async function PUT(req: Request) {
   // Atualiza data de envio no registro existente
   await sb.from('convites').update({ criado_em: new Date().toISOString() }).eq('id', convite.id)
 
+  await registrarLog({
+    sessao: auth, evento: 'editar', area: 'convites', entidadeId: convite.id,
+    descricao: `Reenviou convite para ${convite.email}`,
+    req,
+  })
+
   return Response.json({ ok: true })
 }
 
@@ -130,7 +143,14 @@ export async function DELETE(req: Request) {
   if (!id) return Response.json({ error: 'id obrigatório' }, { status: 400 })
 
   const sb = getAdminClient()
-  const { error } = await sb.from('convites').update({ status: 'expirado' }).eq('id', id)
+  const { data, error } = await sb.from('convites').update({ status: 'expirado' }).eq('id', id).select('email').single()
   if (error) return Response.json({ error: error.message }, { status: 500 })
+
+  await registrarLog({
+    sessao: auth, evento: 'editar', area: 'convites', entidadeId: id,
+    descricao: `Cancelou convite de ${data?.email ?? id}`,
+    req,
+  })
+
   return Response.json({ ok: true })
 }

@@ -34,6 +34,9 @@ function AceitarConviteForm() {
     const { error } = await sb.auth.updateUser({ password: senha })
     if (error) { setErro(error.message); setSalvando(false); return }
 
+    // Marca o convite como aceito (este fluxo, ao contrário de /api/ativar-conta, não fazia isso)
+    fetch('/api/convites/aceitar', { method: 'POST' }).catch(() => {})
+
     // Senha definida → vai para perfil para concluir configuração da conta
     router.replace('/perfil')
   }

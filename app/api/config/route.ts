@@ -1,5 +1,6 @@
 import type { AppConfig } from '@/types'
 import { exigirPermissao, getAdminClient } from '@/lib/auth-server'
+import { registrarLog } from '@/lib/log-atividade'
 
 export async function POST(req: Request) {
   const auth = await exigirPermissao('webhooks')
@@ -27,5 +28,12 @@ export async function POST(req: Request) {
     .upsert(rows, { onConflict: 'chave' })
 
   if (error) return Response.json({ error: error.message }, { status: 500 })
+
+  await registrarLog({
+    sessao: auth, evento: 'editar', area: 'configuracoes',
+    descricao: 'Atualizou configurações operacionais',
+    req,
+  })
+
   return Response.json({ ok: true })
 }

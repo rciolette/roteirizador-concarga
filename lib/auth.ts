@@ -22,13 +22,24 @@ export const NOME_PERFIL: Record<Perfil, string> = {
   visualizador:  'Visualizador',
 }
 
+function registrarAcesso(evento: 'login' | 'logout'): void {
+  fetch('/api/logs/acesso', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ evento }),
+  }).catch(() => {})
+}
+
 export async function signIn(email: string, password: string): Promise<void> {
   const sb = getSupabaseBrowser()
   const { error } = await sb.auth.signInWithPassword({ email, password })
   if (error) throw new Error(error.message)
+  registrarAcesso('login')
 }
 
 export async function signOut(): Promise<void> {
+  // Registra o logout antes de encerrar a sessão — depois disso a rota não identifica mais o usuário.
+  registrarAcesso('logout')
   const sb = getSupabaseBrowser()
   await sb.auth.signOut()
 }
@@ -58,9 +69,9 @@ export async function getUsuarioAtual(): Promise<UsuarioSessao | null> {
   }
 }
 
-// Permissões por perfil. owner difere de administrador apenas na ação 'webhooks'.
+// Permissões por perfil. owner difere de administrador nas ações 'webhooks' e 'logs'.
 export const PERMISSOES = {
-  owner:         ['configuracoes', 'frota', 'rotas', 'historico', 'dashboard', 'importar', 'gerar', 'aprovar', 'enviar', 'webhooks', 'usuarios', 'empresa'],
+  owner:         ['configuracoes', 'frota', 'rotas', 'historico', 'dashboard', 'importar', 'gerar', 'aprovar', 'enviar', 'webhooks', 'usuarios', 'empresa', 'logs'],
   administrador: ['configuracoes', 'frota', 'rotas', 'historico', 'dashboard', 'importar', 'gerar', 'aprovar', 'enviar', 'usuarios', 'empresa'],
   operador:      ['frota', 'rotas', 'historico', 'dashboard', 'importar', 'gerar', 'aprovar', 'enviar'],
   visualizador:  ['historico', 'dashboard'],
