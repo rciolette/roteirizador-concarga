@@ -1,4 +1,5 @@
 import { getSupabaseBrowser } from '@/lib/supabase-browser'
+import { fetchAllPages } from '@/lib/supabase-paginate'
 import { tipoVeiculoFromSiat } from '@/lib/siat'
 import type { Veiculo, Motorista } from '@/types'
 
@@ -45,22 +46,6 @@ export interface CapacidadeVeiculo {
   tipo: string
   capacidade_kg: number
   ocupacao_max_percent: number
-}
-
-const PAGE = 1000
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function fetchAllPages<T>(buildQuery: (from: number, to: number) => any): Promise<T[]> {
-  const result: T[] = []
-  let from = 0
-  while (true) {
-    const { data, error } = await buildQuery(from, from + PAGE - 1)
-    if (error) throw error
-    result.push(...((data ?? []) as T[]))
-    if ((data ?? []).length < PAGE) break
-    from += PAGE
-  }
-  return result
 }
 
 export async function listarMotoristas(): Promise<MotoristaDaFrota[]> {

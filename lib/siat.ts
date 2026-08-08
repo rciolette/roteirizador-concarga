@@ -338,3 +338,14 @@ export function summarizeSiat(rows: SiatRow[]): SiatSummary {
     nfsLaranja,
   }
 }
+
+// Atividade recente de um motorista, derivada dos romaneios de expedição do
+// SIAT. Vive aqui (e não em lib/siat-db.ts) para que componentes de cliente
+// possam importar o tipo sem arrastar o driver `mssql` para o bundle.
+export interface MotoristaAtividade {
+  codMotorista:     string
+  nome:             string
+  ultimaSaida:      string | null
+  romaneiosPeriodo: number
+  notasEntregues:   number
+}

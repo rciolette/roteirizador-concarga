@@ -11,14 +11,16 @@ import { AgendadosHojeTable } from '@/components/ui/AgendadosHojeTable'
 import { MapaRota } from '@/components/ui/MapaRota'
 import { ImportarSIATButton } from '@/components/ui/ImportarSIATButton'
 import { SiatImportDialog } from '@/components/ui/SiatImportDialog'
-import { webhookGerarRotas, mapRetornoGerarRotas, salvarRotasSupabase, salvarNfsNaoAlocadas, atualizarStatusRota, webhookEnviarMotorista, Prioridade, MotoristaPayload, VeiculoDisponivel } from '@/lib/webhooks'
+import { webhookGerarRotas, mapRetornoGerarRotas, salvarRotasSupabase, salvarNfsNaoAlocadas, atualizarStatusRota, Prioridade, MotoristaPayload, VeiculoDisponivel } from '@/lib/webhooks'
 import { derivarCond } from '@/lib/siat'
 import { listarCapacidades, type CapacidadeVeiculo } from '@/lib/frota'
 import type { SiatRow } from '@/lib/siat'
-import type { Veiculo, Motorista, NotaFiscal } from '@/types'
+import type { Veiculo } from '@/types'
 import { cn, formatPeso } from '@/lib/utils'
 import { useCopyToClipboard } from '@/lib/hooks'
 import { useAppData } from '@/components/providers/AppDataProvider'
+import { useAuth } from '@/components/providers/AuthProvider'
+import type { MotoristaAtividade } from '@/lib/siat'
 import { Rota, RouteStatus, RetornoGerarRotas } from '@/types'
 
 // ── Log de sessão ─────────────────────────────────────────────────────────────
@@ -62,25 +64,97 @@ type GerarRotasFormState = {
   prioridade: string
 }
 
-function GerarRotasDialog({ onClose, onConfirm, motoristas, veiculos }: {
+// Motorista elegível para roteirização = motorista vinculado a um veículo
+// disponível hoje. O roteirizador aloca veículos, não motoristas soltos: listar
+// os ~1,6 mil motoristas ativos da base dava uma escolha que não tinha efeito.
+interface MotoristaDoDia {
+  key:         string
+  nome:        string
+  celular?:    string
+  placas:      string[]
+  ultimaSaida: string | null
+  romaneios:   number
+}
+
+function normalizaNome(nome: string): string {
+  return nome.trim().toUpperCase().replace(/\s+/g, ' ')
+}
+
+function diasDesde(iso: string | null): number | null {
+  if (!iso) return null
+  const ms = Date.now() - new Date(iso).getTime()
+  return Math.max(0, Math.floor(ms / 86_400_000))
+}
+
+function rotuloAtividade(m: MotoristaDoDia): { texto: string; recente: boolean } {
+  const d = diasDesde(m.ultimaSaida)
+  if (d === null)      return { texto: 'sem histórico', recente: false }
+  if (d === 0)         return { texto: 'rodou hoje',    recente: true }
+  if (d === 1)         return { texto: 'ontem',         recente: true }
+  if (d <= 7)          return { texto: `há ${d} dias`,  recente: true }
+  if (d <= 30)         return { texto: `há ${d} dias`,  recente: false }
+  return { texto: `há ${Math.floor(d / 30)} meses`, recente: false }
+}
+
+function GerarRotasDialog({ onClose, onConfirm, veiculos, atividade }: {
   onClose:    () => void
   onConfirm:  (form: GerarRotasFormState, motoristas: MotoristaPayload[], veiculos: VeiculoDisponivel[]) => void
-  motoristas: Motorista[]
   veiculos:   Veiculo[]
+  atividade:  MotoristaAtividade[]
 }) {
   const hoje = new Date().toISOString().slice(0, 10)
   const [form, setForm] = useState<GerarRotasFormState>({
     dataInicio: hoje, dataFim: hoje, observacoes: '', restricoesExtras: '', prioridade: 'padrao',
   })
-  const [motoristasSel, setMotoristasSel] = useState<Set<string>>(
-    () => new Set(motoristas.filter(m => m.status !== 'ausente').map(m => m.id))
-  )
-  const [veiculosSel, setVeiculosSel] = useState<Set<string>>(
+
+  // Motoristas do dia, ordenados por atividade recente no SIAT (romaneios de
+  // expedição). Quem rodou há menos tempo aparece primeiro.
+  const motoristasDoDia = useMemo<MotoristaDoDia[]>(() => {
+    const porNome = new Map<string, MotoristaAtividade>()
+    for (const a of atividade) {
+      if (a.nome) porNome.set(normalizaNome(a.nome), a)
+    }
+
+    const agrupado = new Map<string, MotoristaDoDia>()
+    for (const v of veiculos) {
+      if (!v.disponivel_hoje || v.status !== 'disponivel' || !v.motoristaNome) continue
+      const key = normalizaNome(v.motoristaNome)
+      const existente = agrupado.get(key)
+      if (existente) { existente.placas.push(v.placa); continue }
+      const act = porNome.get(key)
+      agrupado.set(key, {
+        key,
+        nome:        v.motoristaNome,
+        celular:     v.motoristaCelular,
+        placas:      [v.placa],
+        ultimaSaida: act?.ultimaSaida ?? null,
+        romaneios:   act?.romaneiosPeriodo ?? 0,
+      })
+    }
+
+    return [...agrupado.values()].sort((a, b) => {
+      if (a.ultimaSaida && b.ultimaSaida) return b.ultimaSaida.localeCompare(a.ultimaSaida)
+      if (a.ultimaSaida) return -1
+      if (b.ultimaSaida) return 1
+      return a.nome.localeCompare(b.nome, 'pt-BR')
+    })
+  }, [veiculos, atividade])
+
+  const [motoristasSel, setMotoristasSel] = useState<Set<string>>(new Set())
+  const [veiculosSel,   setVeiculosSel]   = useState<Set<string>>(
     () => new Set(veiculos.filter(v => v.disponivel_hoje && v.status === 'disponivel').map(v => v.id))
   )
   const [buscaMot, setBuscaMot] = useState('')
   const [buscaVei, setBuscaVei] = useState('')
   const set = (k: string, v: string) => setForm(p => ({ ...p, [k]: v }))
+
+  // A lista chega junto com os veículos (assíncrono); marca todos assim que ela existir.
+  const semeado = useRef(false)
+  useEffect(() => {
+    if (semeado.current || motoristasDoDia.length === 0) return
+    semeado.current = true
+    setMotoristasSel(new Set(motoristasDoDia.map(m => m.key)))
+  }, [motoristasDoDia])
 
   function toggleSet(prev: Set<string>, id: string): Set<string> {
     const next = new Set(prev)
@@ -90,9 +164,9 @@ function GerarRotasDialog({ onClose, onConfirm, motoristas, veiculos }: {
 
   const veiDisabled = (v: Veiculo) => v.status === 'manutencao' || v.status === 'indisponivel'
 
-  const motoristasFiltrados = motoristas.filter(m => {
+  const motoristasFiltrados = motoristasDoDia.filter(m => {
     const q = buscaMot.toLowerCase()
-    return !q || m.nome.toLowerCase().includes(q) || m.sigla.toLowerCase().includes(q) || m.telefone.toLowerCase().includes(q)
+    return !q || m.nome.toLowerCase().includes(q) || m.placas.some(p => p.toLowerCase().includes(q))
   })
 
   const veiculosFiltrados = veiculos
@@ -104,17 +178,24 @@ function GerarRotasDialog({ onClose, onConfirm, motoristas, veiculos }: {
     })
 
   function handleConfirmClick() {
-    const veiculosNoPayload = veiculos.filter(v => veiculosSel.has(v.id) && v.disponivel_hoje)
-    const placasDisponiveisNoPayload = new Set(veiculosNoPayload.map(v => v.placa))
+    // Só entram veículos marcados E cujo motorista foi mantido na seleção — é
+    // assim que a escolha do operador chega ao roteirizador (ver notas em
+    // handleConfirm sobre motoristasAusentes/veiculosBloqueados).
+    const veiculosNoPayload = veiculos.filter(v =>
+      veiculosSel.has(v.id)
+      && v.disponivel_hoje
+      && (!v.motoristaNome || motoristasSel.has(normalizaNome(v.motoristaNome)))
+    )
 
-    const motoristasPayload: MotoristaPayload[] = motoristas
-      .filter(m => motoristasSel.has(m.id) && (!m.placa || placasDisponiveisNoPayload.has(m.placa)))
+    const motoristasPayload: MotoristaPayload[] = motoristasDoDia
+      .filter(m => motoristasSel.has(m.key))
       .map(m => ({
         nome:     m.nome,
-        telefone: m.telefone || undefined,
-        placa:    m.placa    || undefined,
-        status:   (m.status === 'ausente' ? 'ausente' : 'disponivel') as 'disponivel' | 'ausente',
+        telefone: m.celular || undefined,
+        placa:    m.placas[0] || undefined,
+        status:   'disponivel' as const,
       }))
+
     const veiculosPayload: VeiculoDisponivel[] = veiculosNoPayload
       .map(v => ({
         placa:            v.placa,
@@ -184,38 +265,48 @@ function GerarRotasDialog({ onClose, onConfirm, motoristas, veiculos }: {
         <div className="mt-4 pt-3 border-t border-[0.5px] border-[var(--border-faint)]">
           <div className="flex items-center justify-between mb-2">
             <span className="text-[11px] text-muted font-medium">Motoristas do dia</span>
-            <span className="text-[10px] text-subtle">{motoristasSel.size} de {motoristas.length} selecionados</span>
+            <span className="text-[10px] text-subtle">{motoristasSel.size} de {motoristasDoDia.length} selecionados</span>
+          </div>
+          <div className="text-[10px] text-subtle mb-2">
+            Motoristas dos veículos disponíveis hoje, ordenados por atividade recente no SIAT.
           </div>
           <div className="mb-2">
-            <TextInput value={buscaMot} onChange={setBuscaMot} placeholder="Buscar por nome, sigla ou telefone" />
+            <TextInput value={buscaMot} onChange={setBuscaMot} placeholder="Buscar por nome ou placa" />
           </div>
-          {motoristas.length === 0 ? (
-            <div className="text-[11px] text-muted py-2">Nenhum motorista ativo na frota.</div>
+          {motoristasDoDia.length === 0 ? (
+            <div className="text-[11px] text-muted py-2">
+              Nenhum motorista disponível hoje. Marque a disponibilidade dos veículos na tela <strong>Frota</strong> — os motoristas vinculados aparecem aqui.
+            </div>
           ) : motoristasFiltrados.length === 0 ? (
             <div className="text-[11px] text-muted py-2">Nenhum resultado para &ldquo;{buscaMot}&rdquo;.</div>
           ) : (
             <div className="flex flex-col gap-0.5 max-h-[160px] overflow-y-auto pr-0.5">
-              {motoristasFiltrados.map(m => (
-                <label key={m.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-cream dark:hover:bg-hover cursor-pointer select-none transition-colors">
+              {motoristasFiltrados.map(m => {
+                const atv = rotuloAtividade(m)
+                return (
+                <label key={m.key} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-cream dark:hover:bg-hover cursor-pointer select-none transition-colors">
                   <input
                     type="checkbox"
-                    checked={motoristasSel.has(m.id)}
-                    onChange={() => setMotoristasSel(prev => toggleSet(prev, m.id))}
+                    checked={motoristasSel.has(m.key)}
+                    onChange={() => setMotoristasSel(prev => toggleSet(prev, m.key))}
                     className="w-3.5 h-3.5 shrink-0 accent-primary"
                   />
                   <span className="text-[11px] font-medium flex-1 truncate">{m.nome}</span>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-page border border-[0.5px] border-[var(--border-input)] text-subtle font-mono shrink-0">{m.sigla}</span>
-                  {m.telefone && <span className="text-[10px] text-muted shrink-0">{m.telefone}</span>}
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-page border border-[0.5px] border-[var(--border-input)] text-subtle font-mono shrink-0">
+                    {m.placas.join(' · ')}
+                  </span>
+                  {m.romaneios > 0 && (
+                    <span className="text-[10px] text-muted shrink-0">{m.romaneios} rom./90d</span>
+                  )}
                   <span className={cn(
                     'text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0',
-                    m.status === 'disponivel' ? 'bg-success-bg text-success-dark' :
-                    m.status === 'em_rota'    ? 'bg-primary-bg text-primary-dark' :
-                                                'bg-danger-bg text-danger',
+                    atv.recente ? 'bg-success-bg text-success-dark' : 'bg-page text-subtle',
                   )}>
-                    {m.status === 'disponivel' ? 'Disponível' : m.status === 'em_rota' ? 'Em rota' : 'Ausente'}
+                    {atv.texto}
                   </span>
                 </label>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>
@@ -230,7 +321,9 @@ function GerarRotasDialog({ onClose, onConfirm, motoristas, veiculos }: {
             <TextInput value={buscaVei} onChange={setBuscaVei} placeholder="Buscar por placa ou modelo" />
           </div>
           {veiculos.length === 0 ? (
-            <div className="text-[11px] text-muted py-2">Nenhum veículo ativo na frota.</div>
+            <div className="text-[11px] text-muted py-2">
+              Nenhum veículo marcado como disponível hoje. Marque a disponibilidade na tela <strong>Frota</strong> para que apareçam aqui.
+            </div>
           ) : veiculosFiltrados.length === 0 ? (
             <div className="text-[11px] text-muted py-2">Nenhum resultado para &ldquo;{buscaVei}&rdquo;.</div>
           ) : (
@@ -297,7 +390,7 @@ const AVATAR_CLS = [
 
 function RouteCard({ rota, onUpdateStatus, onAskConfirm, enderecoOrigem }: {
   rota: Rota
-  onUpdateStatus: (id: string, status: RouteStatus, linkMaps?: string) => void
+  onUpdateStatus: (id: string, status: RouteStatus) => void
   onAskConfirm: (action: ConfirmAction, execute: () => void) => void
   enderecoOrigem?: string | null
 }) {
@@ -425,7 +518,7 @@ function RouteCard({ rota, onUpdateStatus, onAskConfirm, enderecoOrigem }: {
               ],
               confirmLabel: 'Confirmar envio',
               confirmVariant: 'primary',
-            }, () => onUpdateStatus(rota.id, 'enviada', mapsLink ?? undefined))}>
+            }, () => onUpdateStatus(rota.id, 'enviada'))}>
               <svg className="w-[11px] h-[11px]" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
                 <path d="M2 8l12-6-6 12V8H2z"/>
               </svg>
@@ -666,7 +759,8 @@ function CargaPorVeiculoPanel({ rotas }: { rotas: Rota[] }) {
 
 // ── Rotas Page ────────────────────────────────────────────────────────────────
 export default function RotasPage() {
-  const { nfImportState, importarNFs, dismissNFImport, nfRows, rotas: routes, setRotas: setRoutes, loadingRotas, motoristas, veiculos, config, refreshVeiculos } = useAppData()
+  const { usuario } = useAuth()
+  const { nfImportState, importarNFs, dismissNFImport, nfRows, rotas: routes, setRotas: setRoutes, loadingRotas, motoristasAtividade, veiculos, config, refreshVeiculos } = useAppData()
   const [filter,         setFilter]         = useState<RouteStatus | 'todos'>('todos')
   const [busca,          setBusca]          = useState('')
   const [ordenar,        setOrdenar]        = useState('')
@@ -677,11 +771,13 @@ export default function RotasPage() {
     [nfRows],
   )
 
-  // Atualiza notas e veículos automaticamente ao abrir a página
+  // Atualiza notas e veículos ao abrir a página — só com sessão ativa, senão o
+  // RLS devolve lista vazia e sobrescreve o que o AppDataProvider já carregou.
   useEffect(() => {
+    if (!usuario) return
     importarNFs()
     refreshVeiculos()
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [usuario]) // eslint-disable-line react-hooks/exhaustive-deps
   const [showDialog,     setShowDialog]     = useState(false)
   const [generating,     setGenerating]     = useState(false)
   const [toast,          setToast]          = useState('')
@@ -748,7 +844,7 @@ export default function RotasPage() {
     setTimeout(() => setToast(''), 4000)
   }
 
-  function updateRouteStatus(id: string, status: RouteStatus, linkMaps?: string) {
+  function updateRouteStatus(id: string, status: RouteStatus) {
     const rota = routes.find(r => r.id === id)
     setRoutes(prev => prev.map(r =>
       r.id === id
@@ -756,18 +852,9 @@ export default function RotasPage() {
         : r
     ))
     atualizarStatusRota(id, status).catch(() => {})
-    if (status === 'enviada' && rota?.motorista?.telefone) {
-      webhookEnviarMotorista({
-        rotaId:          id,
-        codigoRota:      rota.codigoRota,
-        motoristaNome:   rota.motorista.nome,
-        motoristaTel:    rota.motorista.telefone,
-        linkMaps:        rota.linkMaps ?? linkMaps,
-        nfsConcatenadas: rota.nfsConcatenadas,
-        qtdNotas:        rota.qtdNotas,
-        pesoTotal:       rota.pesoTotal,
-      }).catch(() => {})
-    }
+    // O disparo automático de WhatsApp para o motorista foi removido: o webhook
+    // `enviar-motorista` não existe no n8n e essa etapa do processo ainda não
+    // está definida. "Enviada" segue como marcação manual do operador.
     if (rota) {
       const msgs: Partial<Record<RouteStatus, string>> = {
         aprovada:  `✓ Rota ${rota.codigoRota} aprovada`,
@@ -791,13 +878,33 @@ export default function RotasPage() {
 
     try {
       const hoje = new Date().toISOString().slice(0, 10)
+
+      // O WF-B monta a frota consultando o Supabase por conta própria e só
+      // respeita exclusões. Mandar apenas as listas escolhidas não bastava — a
+      // seleção era descartada. Enviamos o complemento: tudo que estava
+      // disponível hoje e o operador tirou da seleção.
+      const disponiveisHoje = veiculos.filter(v => v.disponivel_hoje && v.status === 'disponivel')
+      const placasEscolhidas = new Set(veiculosDisponiveis.map(v => v.placa))
+      const nomesEscolhidos  = new Set(motoristasPayload.map(m => m.nome))
+
+      const veiculosBloqueados = disponiveisHoje
+        .filter(v => !placasEscolhidas.has(v.placa))
+        .map(v => v.placa)
+
+      const motoristasAusentes = [...new Set(
+        disponiveisHoje
+          .map(v => v.motoristaNome)
+          .filter((n): n is string => !!n && !nomesEscolhidos.has(n))
+      )]
+
       const raw = await webhookGerarRotas({
         dataInicio:          form.dataInicio || hoje,
         dataFim:             form.dataFim    || hoje,
         observacoes:         form.observacoes,
         motoristas:          motoristasPayload,
         veiculosDisponiveis,
-        veiculosBloqueados:  [],
+        veiculosBloqueados,
+        motoristasAusentes,
         restricoesExtras:    form.restricoesExtras,
         prioridade:          form.prioridade as Prioridade,
         instrucaoGlobal:     config.instrucaoGlobal,
@@ -1122,7 +1229,7 @@ export default function RotasPage() {
         )}
       </div>
 
-      {showDialog && <GerarRotasDialog onClose={() => setShowDialog(false)} onConfirm={handleConfirm} motoristas={motoristas} veiculos={veiculos} />}
+      {showDialog && <GerarRotasDialog onClose={() => setShowDialog(false)} onConfirm={handleConfirm} veiculos={veiculos} atividade={motoristasAtividade} />}
 
       {importDialog && (
         <SiatImportDialog

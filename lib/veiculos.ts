@@ -1,4 +1,5 @@
-import { supabase } from '@/lib/supabase'
+import { getSupabaseBrowser } from '@/lib/supabase-browser'
+import { fetchAllPages } from '@/lib/supabase-paginate'
 import type { Veiculo } from '@/types'
 import { tipoVeiculoFromSiat, capKgFromSiat } from '@/lib/siat'
 
@@ -6,45 +7,53 @@ import { tipoVeiculoFromSiat, capKgFromSiat } from '@/lib/siat'
 // do dia lida de veiculo_disponibilidade (fonte de verdade).
 export async function listarVeiculos(): Promise<Veiculo[]> {
   const hoje = new Date().toISOString().slice(0, 10)
+  const sb   = getSupabaseBrowser()
 
-  const [veicResult, dispResult] = await Promise.all([
-    supabase
-      .from('veiculos')
-      .select('id, placa, modelo, tipo_veiculo, capacidade_kg, situacao_siat, motorista_id, codigo_siat_motorista, disponivel_hoje, motoristas(nome, celular)')
-      .eq('ativo', true)
-      .eq('disponivel_hoje', true)
-      .not('motorista_id', 'is', null)
-      .order('placa', { ascending: true }),
-    supabase
-      .from('veiculo_disponibilidade')
-      .select('veiculo_id, disponivel')
-      .eq('data', hoje),
+  const [veicRows, dispRows] = await Promise.all([
+    fetchAllPages<Record<string, unknown>>(
+      (from, to) => sb
+        .from('veiculos')
+        .select('id, placa, modelo, tipo_veiculo, capacidade_kg, situacao_siat, motorista_id, codigo_siat_motorista, disponivel_hoje, motoristas(nome, celular)')
+        .eq('ativo', true)
+        .eq('disponivel_hoje', true)
+        .not('motorista_id', 'is', null)
+        .order('placa', { ascending: true })
+        .range(from, to),
+    ),
+    fetchAllPages<Record<string, unknown>>(
+      (from, to) => sb
+        .from('veiculo_disponibilidade')
+        .select('veiculo_id, disponivel')
+        .eq('data', hoje)
+        .range(from, to),
+    ),
   ])
 
-  if (veicResult.error) throw veicResult.error
-
   const dispMap = new Map<string, boolean>()
-  for (const d of dispResult.data ?? []) {
+  for (const d of dispRows) {
     dispMap.set(d.veiculo_id as string, d.disponivel as boolean)
   }
 
-  return (veicResult.data ?? []).map(row => {
-    const mot = row.motoristas as { nome?: string; celular?: string } | null
-    const dispHoje = dispMap.has(row.id)
-      ? dispMap.get(row.id)!
+  return veicRows.map(row => {
+    const mot   = row.motoristas as { nome?: string; celular?: string } | null
+    const id    = row.id    as string
+    const placa = row.placa as string
+    const tipoSiat = row.tipo_veiculo as string
+    const dispHoje = dispMap.has(id)
+      ? dispMap.get(id)!
       : ((row.disponivel_hoje as boolean | null) ?? false)
 
     return {
-      id:                  row.id,
-      placa:               row.placa,
-      modelo:              row.modelo ?? '',
-      tipo:                tipoVeiculoFromSiat(row.tipo_veiculo),
-      capacidadeKg:        capKgFromSiat(row.tipo_veiculo, row.capacidade_kg ? Number(row.capacidade_kg) : null),
-      sigla:               row.placa.replace(/\W/g, '').slice(-4),
-      status:              mapSituacao(row.situacao_siat),
-      codigoSiatMotorista: row.codigo_siat_motorista ?? undefined,
+      id,
+      placa,
+      modelo:              (row.modelo as string) ?? '',
+      tipo:                tipoVeiculoFromSiat(tipoSiat),
+      capacidadeKg:        capKgFromSiat(tipoSiat, row.capacidade_kg ? Number(row.capacidade_kg) : null),
+      sigla:               placa.replace(/\W/g, '').slice(-4),
+      status:              mapSituacao(row.situacao_siat as string | null),
+      codigoSiatMotorista: (row.codigo_siat_motorista as string | null) ?? undefined,
       disponivel_hoje:     dispHoje,
-      motoristaNome:       mot?.nome   ?? undefined,
+      motoristaNome:       mot?.nome    ?? undefined,
       motoristaCelular:    mot?.celular ?? undefined,
     }
   })

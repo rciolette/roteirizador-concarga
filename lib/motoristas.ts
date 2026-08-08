@@ -1,4 +1,5 @@
-import { supabase } from '@/lib/supabase'
+import { getSupabaseBrowser } from '@/lib/supabase-browser'
+import { fetchAllPages } from '@/lib/supabase-paginate'
 import type { Motorista } from '@/types'
 import type { MotoristaPayload } from '@/lib/webhooks'
 
@@ -7,20 +8,26 @@ function deriveSigla(nome: string): string {
 }
 
 export async function listarMotoristas(): Promise<Motorista[]> {
-  const { data, error } = await supabase
-    .from('motoristas')
-    .select('id, codigo_siat, nome, telefone, celular, sigla, ativo')
-    .order('nome', { ascending: true })
+  const sb = getSupabaseBrowser()
+  const rows = await fetchAllPages<Record<string, unknown>>(
+    (from, to) => sb
+      .from('motoristas')
+      .select('id, codigo_siat, nome, telefone, celular, sigla, ativo')
+      .eq('ativo', true)
+      .order('nome', { ascending: true })
+      .range(from, to),
+  )
 
-  if (error) throw error
-
-  return (data ?? []).map(row => ({
-    id:       row.id,
-    nome:     row.nome,
-    telefone: row.celular || row.telefone || '',
-    sigla:    row.sigla   || deriveSigla(row.nome),
-    status:   'disponivel' as const,
-  }))
+  return rows.map(row => {
+    const nome = row.nome as string
+    return {
+      id:       row.id as string,
+      nome,
+      telefone: (row.celular as string) || (row.telefone as string) || '',
+      sigla:    (row.sigla as string)   || deriveSigla(nome),
+      status:   'disponivel' as const,
+    }
+  })
 }
 
 export async function criarMotorista(dados: {
@@ -30,7 +37,8 @@ export async function criarMotorista(dados: {
   status:    'disponivel' | 'ausente'
 }): Promise<Motorista> {
   const sigla = deriveSigla(dados.nome)
-  const { data, error } = await supabase
+  const sb = getSupabaseBrowser()
+  const { data, error } = await sb
     .from('motoristas')
     .insert({
       nome:     dados.nome,
@@ -65,12 +73,12 @@ export async function atualizarMotorista(
   if (patch.placa    !== undefined)   update.placa  = patch.placa  || null
   if (patch.status   !== undefined)   update.status = patch.status
 
-  const { error } = await supabase.from('motoristas').update(update).eq('id', id)
+  const { error } = await getSupabaseBrowser().from('motoristas').update(update).eq('id', id)
   if (error) throw error
 }
 
 export async function removerMotorista(id: string): Promise<void> {
-  const { error } = await supabase.from('motoristas').update({ ativo: false }).eq('id', id)
+  const { error } = await getSupabaseBrowser().from('motoristas').update({ ativo: false }).eq('id', id)
   if (error) throw error
 }
 

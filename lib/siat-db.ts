@@ -1,5 +1,5 @@
 import sql from 'mssql'
-import type { SiatRow } from '@/lib/siat'
+import type { SiatRow, MotoristaAtividade } from '@/lib/siat'
 
 const config: sql.config = {
   server:   process.env.SIAT_HOST     ?? '',
@@ -197,4 +197,40 @@ export async function queryVeiculosDisponiveis(): Promise<SiatRow[]> {
     ORDER BY a.PLACA
   `)
   return result.recordset
+}
+
+// ── Histórico de entregas por motorista ──────────────────────────────────────
+
+// Ranking de atividade recente a partir dos romaneios de expedição do SIAT
+// (`TAB LG ROMEXP`). É a única fonte real de "quem rodou recentemente": a tabela
+// `rotas` do Supabase só passa a ter histórico depois que o painel gerar rotas.
+export async function queryMotoristasAtividade(dias = 90): Promise<MotoristaAtividade[]> {
+  const db = await getSiatPool()
+  const result = await db.request()
+    .input('dias', sql.Int, dias)
+    .query<{
+      CodMotorista: string; Nome: string | null; UltimaSaida: Date | null
+      RomaneiosPeriodo: number; NotasEntregues: number | null
+    }>(`
+      SELECT
+        a.MOTORISTA                AS CodMotorista,
+        c.NOME                     AS Nome,
+        MAX(a.DATSAI)              AS UltimaSaida,
+        COUNT(*)                   AS RomaneiosPeriodo,
+        SUM(CAST(a.QTDNFS AS int)) AS NotasEntregues
+      FROM [TAB LG ROMEXP] a
+      LEFT JOIN [TAB DE MOTORISTAS] c ON c.MOTORISTA = a.MOTORISTA
+      WHERE a.DATSAI >= DATEADD(day, -@dias, GETDATE())
+        AND a.MOTORISTA IS NOT NULL
+      GROUP BY a.MOTORISTA, c.NOME
+      ORDER BY MAX(a.DATSAI) DESC
+    `)
+
+  return result.recordset.map(r => ({
+    codMotorista:     String(r.CodMotorista ?? '').trim(),
+    nome:             (r.Nome ?? '').trim(),
+    ultimaSaida:      r.UltimaSaida ? new Date(r.UltimaSaida).toISOString() : null,
+    romaneiosPeriodo: Number(r.RomaneiosPeriodo ?? 0),
+    notasEntregues:   Number(r.NotasEntregues ?? 0),
+  }))
 }

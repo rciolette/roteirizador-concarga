@@ -12,12 +12,26 @@ import type { Motorista, NotaFiscal, Rota, Veiculo } from '@/types'
 import type { AppConfig } from '@/types'
 import type { SiatFilters, SiatSummary, SiatRow } from '@/lib/siat'
 import { normalizeSiatPayload, summarizeSiat, siatRowsToNotasPendentes } from '@/lib/siat'
+import type { MotoristaAtividade } from '@/lib/siat'
 import { listarMotoristas } from '@/lib/motoristas'
 import { listarVeiculos } from '@/lib/veiculos'
 import { carregarRotasSupabase } from '@/lib/webhooks'
 import { DEFAULT_CONFIG } from '@/lib/data'
 import { carregarConfig } from '@/lib/config-store'
 import { useAuth } from '@/components/providers/AuthProvider'
+
+// Atividade recente dos motoristas, direto do SIAT. Falha em silêncio: é um
+// recurso de ordenação, não pode impedir a tela de carregar.
+async function carregarAtividadeMotoristas(): Promise<MotoristaAtividade[]> {
+  try {
+    const res = await fetch('/api/siat/motoristas')
+    if (!res.ok) return []
+    const data = await res.json()
+    return Array.isArray(data) ? data as MotoristaAtividade[] : []
+  } catch {
+    return []
+  }
+}
 
 function todayISO(): string {
   return new Date().toISOString().slice(0, 10)
@@ -32,6 +46,7 @@ interface NfImportState {
 
 export interface AppData {
   motoristas:      Motorista[]
+  motoristasAtividade: MotoristaAtividade[]
   veiculos:        Veiculo[]
   rotas:           Rota[]
   loadingRotas:    boolean
@@ -59,6 +74,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const { usuario } = useAuth()
 
   const [motoristas,    setMotoristas]    = useState<Motorista[]>([])
+  const [motoristasAtividade, setMotoristasAtividade] = useState<MotoristaAtividade[]>([])
   const [veiculos,      setVeiculos]      = useState<Veiculo[]>([])
   const [rotas,         setRotas]         = useState<Rota[]>([])
   const [loadingRotas,  setLoadingRotas]  = useState(true)
@@ -150,19 +166,25 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
+  // Bootstrap só depois da autenticação: motoristas, veículos e configurações
+  // vivem atrás de RLS liberado apenas para o role `authenticated`. Rodar antes
+  // da sessão existir devolvia listas vazias em silêncio (RLS filtra linhas sem
+  // gerar erro), deixando o diálogo "Gerar rotas" sem motorista nem veículo.
   useEffect(() => {
-    if (bootstrapped.current) return
+    if (!usuario || bootstrapped.current) return
     bootstrapped.current = true
 
     async function bootstrap() {
-      const [mots, veics, cfg] = await Promise.all([
+      const [mots, veics, cfg, atividade] = await Promise.all([
         listarMotoristas().catch(() => [] as Motorista[]),
         listarVeiculos().catch(()    => [] as Veiculo[]),
         carregarConfig().catch(()    => DEFAULT_CONFIG),
+        carregarAtividadeMotoristas(),
       ])
       setMotoristas(mots)
       setVeiculos(veics)
       setConfig(cfg)
+      setMotoristasAtividade(atividade)
 
       try {
         const rotasDoDia = await carregarRotasSupabase(todayISO())
@@ -175,7 +197,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     }
 
     bootstrap()
-  }, [])
+  }, [usuario])
 
   // Dispara a consulta ao SIAT assim que o usuário estiver autenticado,
   // garantindo que a sessão já está disponível no servidor ao chamar /api/siat.
@@ -191,7 +213,9 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AppDataContext.Provider value={{
-      motoristas, veiculos, rotas, loadingRotas,
+      motoristas, motoristasAtividade, veiculos, rotas,
+      // sem sessão o bootstrap nem roda — não faz sentido exibir spinner
+      loadingRotas: usuario ? loadingRotas : false,
       nfRows, nfsPendentes, nfImportState, config,
       refresh, refreshVeiculos, importarNFs, dismissNFImport, setRotas, setConfig,
     }}>

@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { Topbar, Card, CardHeader, Btn, StatusPill, TextArea } from '@/components/ui'
 import { Checkbox, BulkBar } from '@/components/ui/SelectionControls'
 import { useAppData } from '@/components/providers/AppDataProvider'
-import { atualizarStatusRota, reprocessarRota, webhookEnviarMotorista } from '@/lib/webhooks'
+import { atualizarStatusRota, reprocessarRota } from '@/lib/webhooks'
 import { formatPeso, cn } from '@/lib/utils'
 import type { Rota, RouteStatus, NotaFiscal } from '@/types'
 import { MapaRota } from '@/components/ui/MapaRota'
@@ -360,18 +360,10 @@ export default function AprovacoesPage() {
     setBulking(true)
     const now = new Date().toISOString()
     try {
-      await Promise.allSettled(ids.map(async id => {
-        const rota = rotas.find(r => r.id === id)
-        await atualizarStatusRota(id, 'enviada')
-        if (rota?.motorista?.telefone) {
-          await webhookEnviarMotorista({
-            rotaId: id, codigoRota: rota.codigoRota,
-            motoristaNome: rota.motorista.nome, motoristaTel: rota.motorista.telefone,
-            linkMaps: rota.linkMaps, nfsConcatenadas: rota.nfsConcatenadas,
-            qtdNotas: rota.qtdNotas, pesoTotal: rota.pesoTotal,
-          }).catch(() => {})
-        }
-      }))
+      // Marcação de status apenas. O disparo de WhatsApp foi removido: o
+      // webhook `enviar-motorista` não existe no n8n e essa etapa do processo
+      // ainda não está definida.
+      await Promise.allSettled(ids.map(id => atualizarStatusRota(id, 'enviada')))
       setRotas(prev => prev.map(r =>
         selectedAp.has(r.id) ? { ...r, status: 'enviada' as RouteStatus, enviadoEm: now, notasFiscais: [] } : r
       ))

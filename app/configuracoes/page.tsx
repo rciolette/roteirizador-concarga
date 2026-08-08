@@ -80,7 +80,7 @@ export default function ConfiguracoesPage() {
   const [empresa, setEmpresa] = useState<Empresa>({ razao_social: '', nome_fantasia: '', cnpj: '', endereco: '', cidade: '', uf: '', telefone: '', email: '' })
   const [savingEmpresa, setSavingEmpresa] = useState(false)
   const [msgEmpresa, setMsgEmpresa] = useState('')
-  const [webhooks, setWebhooks] = useState<WebhookConfig>({ siatWebhookUrl: '', gerarRotasWebhookUrl: '', enviarMotoristaWebhookUrl: '' })
+  const [webhooks, setWebhooks] = useState<WebhookConfig>({ gerarRotasWebhookUrl: '' })
   const [saved, setSaved] = useState(false)
   const [hasChanges, setHasChanges] = useState(false)
   const [importDialog, setImportDialog] = useState(false)
@@ -606,9 +606,7 @@ export default function ConfiguracoesPage() {
                   <code className="font-mono bg-page px-1 rounded">.env.local</code>.
                 </p>
                 {([
-                  { label: 'Webhook — Importar NFs (SIAT)',     key: 'siatWebhookUrl'            as const },
-                  { label: 'Webhook — Gerar Rotas (agente IA)', key: 'gerarRotasWebhookUrl'      as const },
-                  { label: 'Webhook — Enviar ao Motorista',     key: 'enviarMotoristaWebhookUrl' as const },
+                  { label: 'Webhook — Gerar Rotas (agente IA)', key: 'gerarRotasWebhookUrl' as const },
                 ] as const).map(f => (
                   <div key={f.key}>
                     <Label>{f.label}</Label>

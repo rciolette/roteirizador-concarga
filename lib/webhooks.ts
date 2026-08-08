@@ -95,7 +95,11 @@ export interface GerarRotasPayload {
   observacoes:         string
   motoristas:          MotoristaPayload[]
   veiculosDisponiveis: VeiculoDisponivel[]
+  // Complemento da seleção do operador. O WF-B monta a frota a partir do
+  // Supabase e aplica estas duas listas como exclusão — é por elas que a
+  // escolha feita no diálogo chega ao roteirizador.
   veiculosBloqueados:  string[]
+  motoristasAusentes:  string[]
   restricoesExtras:    string
   prioridade:          Prioridade
   instrucaoGlobal:     string
@@ -291,6 +295,7 @@ export async function reprocessarRota(rotaId: string): Promise<void> {
       motoristas:        [],
       veiculosDisponiveis: [],
       veiculosBloqueados:  [],
+      motoristasAusentes:  [],
       restricoesExtras:  '',
       prioridade:        'padrao',
       instrucaoGlobal:   '',
@@ -303,29 +308,6 @@ export async function reprocessarRota(rotaId: string): Promise<void> {
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
     throw new Error((err as { error?: string }).error || `HTTP ${res.status}`)
-  }
-}
-
-export interface EnviarMotoristaPayload {
-  rotaId:           string
-  codigoRota:       string
-  motoristaNome:    string
-  motoristaTel:     string
-  linkMaps?:        string
-  nfsConcatenadas?: string
-  qtdNotas:         number
-  pesoTotal:        number
-}
-
-export async function webhookEnviarMotorista(payload: EnviarMotoristaPayload): Promise<void> {
-  const res = await fetch('/api/enviar-motorista', {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify(payload),
-  })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err.error || `HTTP ${res.status}`)
   }
 }
 

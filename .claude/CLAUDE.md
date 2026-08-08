@@ -1,16 +1,33 @@
 # Concarga Roteirizador — Contexto do Projeto
 
 ## Stack
-- Next.js 14 App Router + Tailwind CSS + shadcn/ui
+- Next.js 16 App Router + Tailwind CSS + shadcn/ui
 - Supabase: qtbaqcxxoygpqecezbdy
 - Deploy: Vercel (rciolette/roteirizador-concarga)
 - n8n: https://n8n.rcdigitais.com.br
 
-## MCP Supabase — regra crítica
-- Usar SEMPRE o MCP `mcp__supabase__*` (prefixo `mcp__supabase__`)
-- NUNCA usar `mcp__supabase-roi-ventures__*` (projeto errado) nem `mcp__claude_ai_Supabase__*` (sem permissão)
-- O .mcp.json do projeto já aponta para qtbaqcxxoygpqecezbdy — não alterar
-- Se ocorrer erro de autenticação: chamar `mcp__supabase__authenticate` uma vez e aguardar o usuário autorizar no browser
+## MCPs permitidos — regra crítica
+
+**Só existem DOIS MCPs válidos neste projeto. Qualquer outro é proibido.**
+
+| Serviço  | MCP autorizado                | Alvo                                    |
+|----------|-------------------------------|-----------------------------------------|
+| Supabase | `Supabase-rot-rc/concarga`    | project_ref `qtbaqcxxoygpqecezbdy`      |
+| n8n      | `mecp-n8n-rc-teste`           | `https://n8n.rcdigitais.com.br`         |
+
+Proibidos, sem exceção — são de outro produto (ROI Link Generator) ou de outra
+empresa (ROI Ventures), com outro banco e outros fluxos:
+`n8n-RoiVentures` (`n8n.ecossistemaroi.com.br`), `supabase-link-generator`,
+`supabase-roi-ventures`, `supabase-roi-mcp`, e o conector genérico `Supabase`.
+
+- Antes de usar um MCP de Supabase, confirmar a identidade com `get_project_url`:
+  tem que responder `https://qtbaqcxxoygpqecezbdy.supabase.co`. Nunca presumir
+  pelo nome ou pelo ID do servidor.
+- O `.mcp.json` do projeto já aponta para `qtbaqcxxoygpqecezbdy` — não alterar.
+- Atenção: existe um `supabase` em escopo de usuário apontando para outro
+  project_ref (`mnrnnmfaupvmjfgpzkou`). O escopo de projeto é o que vale.
+- Nunca colocar Personal Access Token (`sbp_...`) em `settings.local.json`,
+  comando de shell ou qualquer arquivo. Use os MCPs.
 
 ## Regras obrigatórias
 - Sempre consultar o Supabase antes de criar novas tabelas ou colunas

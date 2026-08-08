@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { getSupabaseBrowser } from '@/lib/supabase-browser'
 import { DEFAULT_CONFIG } from '@/lib/data'
 import type { AppConfig } from '@/types'
 
@@ -8,7 +8,7 @@ const LS_KEY = 'concarga_config_v1'
 
 export async function carregarConfig(): Promise<AppConfig> {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getSupabaseBrowser()
       .from('configuracoes')
       .select('chave, valor')
 
@@ -55,16 +55,16 @@ export async function salvarConfig(cfg: AppConfig): Promise<void> {
 
 // ── Webhooks ─────────────────────────────────────────────────────────────────
 
+// Só o gerador de rotas ainda passa por webhook do n8n. A importação de NFs foi
+// para `/api/siat` (MSSQL direto, lib/siat-db.ts) e o envio ao motorista foi
+// removido — não existe no n8n e essa etapa do processo não está definida.
 export interface WebhookConfig {
-  /** @deprecated — substituído por /api/siat direto (lib/siat-db.ts) */
-  siatWebhookUrl:            string
-  gerarRotasWebhookUrl:      string
-  enviarMotoristaWebhookUrl: string
+  gerarRotasWebhookUrl: string
 }
 
 export async function carregarWebhooks(): Promise<WebhookConfig> {
   try {
-    const { data } = await supabase
+    const { data } = await getSupabaseBrowser()
       .from('configuracoes')
       .select('valor')
       .eq('chave', 'webhooks')
@@ -73,11 +73,7 @@ export async function carregarWebhooks(): Promise<WebhookConfig> {
     if (data?.valor) return data.valor as WebhookConfig
   } catch { /* usa fallback */ }
 
-  return {
-    siatWebhookUrl:            '',
-    gerarRotasWebhookUrl:      '',
-    enviarMotoristaWebhookUrl: '',
-  }
+  return { gerarRotasWebhookUrl: '' }
 }
 
 export async function salvarWebhooks(wh: WebhookConfig): Promise<void> {
@@ -90,27 +86,8 @@ export async function salvarWebhooks(wh: WebhookConfig): Promise<void> {
   } catch { /* silencioso */ }
 }
 
-// Resolução server-side: env var → Supabase config → fallback hardcoded
-export async function resolveWebhookUrl(
-  key: keyof WebhookConfig,
-  envKey: string,
-  defaultUrl: string,
-): Promise<string> {
-  const envUrl = process.env[envKey]
-  if (envUrl) return envUrl
-
-  try {
-    const { data } = await supabase
-      .from('configuracoes')
-      .select('valor')
-      .eq('chave', 'webhooks')
-      .single()
-    const url = (data?.valor as WebhookConfig | null)?.[key]
-    if (url) return url
-  } catch { /* usa fallback */ }
-
-  return defaultUrl
-}
+// `resolveWebhookUrl` vive em `lib/config-server.ts`: depende de next/headers e
+// não pode ser importada por este módulo, que roda no cliente.
 
 // ── Helpers de configuração ───────────────────────────────────────────────────
 
