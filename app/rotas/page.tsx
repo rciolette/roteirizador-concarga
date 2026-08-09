@@ -97,6 +97,10 @@ function rotuloAtividade(m: MotoristaDoDia): { texto: string; recente: boolean }
   return { texto: `há ${Math.floor(d / 30)} meses`, recente: false }
 }
 
+// Acima disso o prompt do roteirizador cresce a ponto de a geração não fechar
+// dentro do tempo de execução do n8n.
+const LIMITE_FROTA_AVISO = 60
+
 function GerarRotasDialog({ onClose, onConfirm, veiculos, atividade }: {
   onClose:    () => void
   onConfirm:  (form: GerarRotasFormState, motoristas: MotoristaPayload[], veiculos: VeiculoDisponivel[]) => void
@@ -141,21 +145,15 @@ function GerarRotasDialog({ onClose, onConfirm, veiculos, atividade }: {
     })
   }, [veiculos, atividade])
 
+  // Nada vem marcado: o operador declara a frota do dia. O SIAT sugere quase
+  // toda a base como "disponível hoje" (>1.400 veículos) enquanto a operação
+  // real usa 40–50 — pré-marcar tudo obrigaria a desmarcar centenas e inflaria
+  // o prompt do roteirizador a ponto de a geração não terminar.
   const [motoristasSel, setMotoristasSel] = useState<Set<string>>(new Set())
-  const [veiculosSel,   setVeiculosSel]   = useState<Set<string>>(
-    () => new Set(veiculos.filter(v => v.disponivel_hoje && v.status === 'disponivel').map(v => v.id))
-  )
+  const [veiculosSel,   setVeiculosSel]   = useState<Set<string>>(new Set())
   const [buscaMot, setBuscaMot] = useState('')
   const [buscaVei, setBuscaVei] = useState('')
   const set = (k: string, v: string) => setForm(p => ({ ...p, [k]: v }))
-
-  // A lista chega junto com os veículos (assíncrono); marca todos assim que ela existir.
-  const semeado = useRef(false)
-  useEffect(() => {
-    if (semeado.current || motoristasDoDia.length === 0) return
-    semeado.current = true
-    setMotoristasSel(new Set(motoristasDoDia.map(m => m.key)))
-  }, [motoristasDoDia])
 
   function toggleSet(prev: Set<string>, id: string): Set<string> {
     const next = new Set(prev)
@@ -164,6 +162,37 @@ function GerarRotasDialog({ onClose, onConfirm, veiculos, atividade }: {
   }
 
   const veiDisabled = (v: Veiculo) => v.status === 'manutencao' || v.status === 'indisponivel'
+
+  // Veículo e motorista andam juntos: marcar o veículo traz o motorista, e
+  // desmarcar o motorista tira os veículos dele. Sem isso a combinação das duas
+  // listas podia resultar em frota vazia sem o operador entender por quê.
+  function toggleVeiculo(v: Veiculo) {
+    const next = toggleSet(veiculosSel, v.id)
+    setVeiculosSel(next)
+    if (!v.motoristaNome) return
+    const chave = normalizaNome(v.motoristaNome)
+    const aindaUsado = veiculos.some(x =>
+      next.has(x.id) && x.motoristaNome && normalizaNome(x.motoristaNome) === chave)
+    setMotoristasSel(prev => {
+      const n = new Set(prev)
+      aindaUsado ? n.add(chave) : n.delete(chave)
+      return n
+    })
+  }
+
+  function toggleMotorista(chave: string) {
+    const marcando = !motoristasSel.has(chave)
+    setMotoristasSel(prev => toggleSet(prev, chave))
+    setVeiculosSel(prev => {
+      const n = new Set(prev)
+      for (const v of veiculos) {
+        if (veiDisabled(v) || !v.motoristaNome) continue
+        if (normalizaNome(v.motoristaNome) !== chave) continue
+        marcando ? n.add(v.id) : n.delete(v.id)
+      }
+      return n
+    })
+  }
 
   const motoristasFiltrados = motoristasDoDia.filter(m => {
     const q = buscaMot.toLowerCase()
@@ -178,24 +207,27 @@ function GerarRotasDialog({ onClose, onConfirm, veiculos, atividade }: {
       return !q || v.placa.toLowerCase().includes(q) || v.modelo.toLowerCase().includes(q)
     })
 
-  function handleConfirmClick() {
-    // Só entram veículos marcados E cujo motorista foi mantido na seleção — é
-    // assim que a escolha do operador chega ao roteirizador (ver notas em
-    // handleConfirm sobre motoristasAusentes/veiculosBloqueados).
-    const veiculosNoPayload = veiculos.filter(v =>
-      veiculosSel.has(v.id)
-      && v.disponivel_hoje
-      && (!v.motoristaNome || motoristasSel.has(normalizaNome(v.motoristaNome)))
-    )
+  // A marcação do operador é a fonte da verdade da frota do dia — é exatamente
+  // esta lista que o roteirizador recebe e usa para montar as rotas.
+  const veiculosNoPayload = veiculos.filter(v => veiculosSel.has(v.id) && !veiDisabled(v))
 
-    const motoristasPayload: MotoristaPayload[] = motoristasDoDia
-      .filter(m => motoristasSel.has(m.key))
-      .map(m => ({
-        nome:     m.nome,
-        telefone: m.celular || undefined,
-        placa:    m.placas[0] || undefined,
+  function handleConfirmClick() {
+    if (veiculosNoPayload.length === 0) return
+
+    // Motoristas derivam dos veículos escolhidos: um motorista sem veículo
+    // marcado não tem como rodar.
+    const nomes = new Map<string, MotoristaPayload>()
+    for (const v of veiculosNoPayload) {
+      if (!v.motoristaNome) continue
+      const chave = normalizaNome(v.motoristaNome)
+      if (nomes.has(chave)) continue
+      nomes.set(chave, {
+        nome:     v.motoristaNome,
+        telefone: v.motoristaCelular || undefined,
+        placa:    v.placa,
         status:   'disponivel' as const,
-      }))
+      })
+    }
 
     const veiculosPayload: VeiculoDisponivel[] = veiculosNoPayload
       .map(v => ({
@@ -205,7 +237,7 @@ function GerarRotasDialog({ onClose, onConfirm, veiculos, atividade }: {
         motoristaNome:    v.motoristaNome,
         motoristaCelular: v.motoristaCelular,
       }))
-    onConfirm(form, motoristasPayload, veiculosPayload)
+    onConfirm(form, [...nomes.values()], veiculosPayload)
   }
 
   return (
@@ -289,7 +321,7 @@ function GerarRotasDialog({ onClose, onConfirm, veiculos, atividade }: {
                   <input
                     type="checkbox"
                     checked={motoristasSel.has(m.key)}
-                    onChange={() => setMotoristasSel(prev => toggleSet(prev, m.key))}
+                    onChange={() => toggleMotorista(m.key)}
                     className="w-3.5 h-3.5 shrink-0 accent-primary"
                   />
                   <span className="text-[11px] font-medium flex-1 truncate">{m.nome}</span>
@@ -315,11 +347,38 @@ function GerarRotasDialog({ onClose, onConfirm, veiculos, atividade }: {
         {/* ── Veículos disponíveis ── */}
         <div className="mt-4 pt-3 border-t border-[0.5px] border-[var(--border-faint)]">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] text-muted font-medium">Veículos disponíveis</span>
-            <span className="text-[10px] text-subtle">{veiculosSel.size} de {veiculos.filter(v => !veiDisabled(v)).length} selecionados</span>
+            <span className="text-[11px] text-muted font-medium">Veículos do dia</span>
+            <span className={cn('text-[10px] font-medium', veiculosSel.size === 0 ? 'text-warn' : 'text-subtle')}>
+              {veiculosSel.size} selecionado{veiculosSel.size === 1 ? '' : 's'}
+            </span>
           </div>
-          <div className="mb-2">
-            <TextInput value={buscaVei} onChange={setBuscaVei} placeholder="Buscar por placa ou modelo" />
+          <div className="text-[10px] text-subtle mb-2">
+            Marque os veículos que realmente saem hoje — só eles vão para o roteirizador,
+            com a capacidade de cada um.
+          </div>
+          <div className="mb-2 flex gap-2 items-center">
+            <div className="flex-1">
+              <TextInput value={buscaVei} onChange={setBuscaVei} placeholder="Buscar por placa ou modelo" />
+            </div>
+            <button
+              type="button"
+              onClick={() => veiculosFiltrados.filter(v => !veiDisabled(v)).forEach(v => {
+                if (!veiculosSel.has(v.id)) toggleVeiculo(v)
+              })}
+              disabled={!buscaVei}
+              className="text-[10px] px-2 h-8 rounded-lg border border-[0.5px] border-[var(--border-input)] text-muted hover:bg-cream dark:hover:bg-hover disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+              title={buscaVei ? 'Marca todos os resultados da busca' : 'Busque para marcar em lote'}
+            >
+              Marcar filtrados
+            </button>
+            <button
+              type="button"
+              onClick={() => { setVeiculosSel(new Set()); setMotoristasSel(new Set()) }}
+              disabled={veiculosSel.size === 0}
+              className="text-[10px] px-2 h-8 rounded-lg border border-[0.5px] border-[var(--border-input)] text-muted hover:bg-cream dark:hover:bg-hover disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+            >
+              Limpar
+            </button>
           </div>
           {veiculos.length === 0 ? (
             <div className="text-[11px] text-muted py-2">
@@ -340,7 +399,7 @@ function GerarRotasDialog({ onClose, onConfirm, veiculos, atividade }: {
                       type="checkbox"
                       checked={veiculosSel.has(v.id)}
                       disabled={disabled}
-                      onChange={() => !disabled && setVeiculosSel(prev => toggleSet(prev, v.id))}
+                      onChange={() => !disabled && toggleVeiculo(v)}
                       className="w-3.5 h-3.5 shrink-0 accent-primary"
                     />
                     <span className="text-[11px] font-medium font-mono shrink-0">{v.placa}</span>
@@ -359,13 +418,25 @@ function GerarRotasDialog({ onClose, onConfirm, veiculos, atividade }: {
           )}
         </div>
 
-        <div className="flex gap-2 justify-end mt-5">
+        {veiculosSel.size > LIMITE_FROTA_AVISO && (
+          <div className="mt-4 text-[11px] bg-warn-bg text-warn rounded-lg px-3 py-2">
+            {veiculosSel.size} veículos selecionados. Acima de ~{LIMITE_FROTA_AVISO} a
+            roteirização fica lenta e pode não concluir — marque só a frota que sai hoje.
+          </div>
+        )}
+
+        <div className="flex gap-2 justify-end items-center mt-5">
+          {veiculosSel.size === 0 && (
+            <span className="text-[11px] text-muted mr-auto">
+              Selecione ao menos um veículo para gerar rotas.
+            </span>
+          )}
           <Btn onClick={onClose}>Cancelar</Btn>
-          <Btn variant="primary" onClick={handleConfirmClick}>
+          <Btn variant="primary" onClick={handleConfirmClick} disabled={veiculosSel.size === 0}>
             <svg className="w-[13px] h-[13px]" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
               <circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 2"/>
             </svg>
-            Acionar IA e gerar rotas
+            Gerar rotas com {veiculosNoPayload.length} veículo{veiculosNoPayload.length === 1 ? '' : 's'}
           </Btn>
         </div>
       </div>
