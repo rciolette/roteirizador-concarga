@@ -4,6 +4,12 @@ import { exigirPermissao } from '@/lib/auth-server'
 
 const GERAR_ROTAS_DEFAULT = 'https://n8n.rcdigitais.com.br/webhook/gerar-rotas'
 
+// O WF-B responde na hora (202) e segue processando em background, gravando as
+// rotas direto no Supabase. Aqui só esperamos o aceite — a roteirização em si
+// leva minutos e o painel acompanha por polling. Este timeout cobre apenas o
+// handshake; não é o orçamento da geração.
+const TIMEOUT_ACEITE_MS = 45_000
+
 export async function POST(req: Request) {
   let webhookUrl = GERAR_ROTAS_DEFAULT
   try {
@@ -25,12 +31,12 @@ export async function POST(req: Request) {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify(payload),
-        signal:  AbortSignal.timeout(60_000),
+        signal:  AbortSignal.timeout(TIMEOUT_ACEITE_MS),
       })
     } catch (fetchErr) {
       let error: string
       if (fetchErr instanceof Error && fetchErr.name === 'AbortError') {
-        error = 'Timeout: n8n não respondeu em 60s'
+        error = 'Timeout: o n8n não confirmou o recebimento em 45s'
       } else if (fetchErr instanceof Error && (fetchErr as NodeJS.ErrnoException).code === 'ECONNREFUSED') {
         error = 'n8n indisponível (conexão recusada)'
       } else {
@@ -51,7 +57,13 @@ export async function POST(req: Request) {
 
     const body = await upstream.json().catch(() => null)
     if (body === null) return Response.json({ error: 'n8n retornou resposta inválida' }, { status: 502 })
-    return Response.json(body)
+
+    // Dois modos aceitos:
+    //  - assíncrono (atual): o WF-B confirma o aceite e grava as rotas depois;
+    //  - síncrono (legado): o WF-B devolve as rotas prontas no corpo.
+    // O painel decide o que fazer olhando `aceito`.
+    const rotasNoCorpo = Array.isArray((body as { rotas?: unknown }).rotas)
+    return Response.json({ ...body, aceito: !rotasNoCorpo }, { status: 202 })
 
   } catch (err) {
     const error = err instanceof Error ? err.message : 'erro interno'

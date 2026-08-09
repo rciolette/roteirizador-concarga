@@ -11,7 +11,8 @@ import { AgendadosHojeTable } from '@/components/ui/AgendadosHojeTable'
 import { MapaRota } from '@/components/ui/MapaRota'
 import { ImportarSIATButton } from '@/components/ui/ImportarSIATButton'
 import { SiatImportDialog } from '@/components/ui/SiatImportDialog'
-import { webhookGerarRotas, mapRetornoGerarRotas, salvarRotasSupabase, salvarNfsNaoAlocadas, atualizarStatusRota, Prioridade, MotoristaPayload, VeiculoDisponivel } from '@/lib/webhooks'
+import { webhookGerarRotas, mapRetornoGerarRotas, salvarRotasSupabase, salvarNfsNaoAlocadas, atualizarStatusRota, carregarRotasSupabase, aguardarRotasGeradas, Prioridade, MotoristaPayload, VeiculoDisponivel } from '@/lib/webhooks'
+import { gerarLinkMapsUrl } from '@/lib/maps'
 import { derivarCond } from '@/lib/siat'
 import { listarCapacidades, type CapacidadeVeiculo } from '@/lib/frota'
 import type { SiatRow } from '@/lib/siat'
@@ -372,12 +373,8 @@ function GerarRotasDialog({ onClose, onConfirm, veiculos, atividade }: {
   )
 }
 
-function gerarLinkMapsLocal(nfs: import('@/types').NotaFiscal[], origem?: string | null): string | null {
-  const paradas = nfs.map(nf => [nf.endereco, nf.municipio].filter(Boolean).join(', '))
-  if (paradas.length === 0) return null
-  const waypoints = origem ? [origem, ...paradas] : paradas
-  return 'https://www.google.com/maps/dir/' + waypoints.map(w => encodeURIComponent(w).replace(/%20/g, '+')).join('/')
-}
+// Link do Maps: ver lib/maps.ts — respeita a sequência de entrega e consolida
+// NFs do mesmo endereço numa única parada.
 
 // ── Route Card ────────────────────────────────────────────────────────────────
 const AVATAR_CLS = [
@@ -396,7 +393,7 @@ function RouteCard({ rota, onUpdateStatus, onAskConfirm, enderecoOrigem }: {
 }) {
   const [expanded, setExpanded] = useState(false)
   const { copied, copy } = useCopyToClipboard()
-  const mapsLink    = rota.linkMaps || (rota.notasFiscais.length > 0 ? gerarLinkMapsLocal(rota.notasFiscais, enderecoOrigem) : null)
+  const mapsLink    = rota.linkMaps || gerarLinkMapsUrl(rota.notasFiscais, enderecoOrigem)
   const capacidade  = rota.veiculo?.capacidadeKg || 1500
   const pct         = rota.ocupacaoPercent ?? Math.min(100, Math.round((rota.pesoTotal / capacidade) * 100))
   const barColor    = pct >= 95 ? 'bg-danger-mid' : pct >= 80 ? 'bg-warn-mid' : 'bg-primary'
@@ -780,6 +777,7 @@ export default function RotasPage() {
   }, [usuario]) // eslint-disable-line react-hooks/exhaustive-deps
   const [showDialog,     setShowDialog]     = useState(false)
   const [generating,     setGenerating]     = useState(false)
+  const [progresso,      setProgresso]      = useState('')
   const [toast,          setToast]          = useState('')
   const [log,            setLog]            = useState<LogEntry[]>([])
   const [pendingConfirm, setPendingConfirm] = useState<{ action: ConfirmAction; execute: () => void } | null>(null)
@@ -897,6 +895,21 @@ export default function RotasPage() {
           .filter((n): n is string => !!n && !nomesEscolhidos.has(n))
       )]
 
+      const dataRota = form.dataInicio || hoje
+
+      // Fotografa o que já existe para reconhecer as rotas novas depois. O WF-B
+      // grava direto no Supabase, então é por diferença que sabemos que terminou.
+      let idsAntes = new Set<string>()
+      try {
+        idsAntes = new Set((await carregarRotasSupabase(dataRota)).map(r => r.id))
+      } catch {
+        // Sem a foto inicial o polling ainda funciona: as rotas do estado atual
+        // servem de referência.
+        idsAntes = new Set(routes.map(r => r.id))
+      }
+
+      setProgresso('Enviando NFs e frota ao roteirizador...')
+
       const raw = await webhookGerarRotas({
         dataInicio:          form.dataInicio || hoje,
         dataFim:             form.dataFim    || hoje,
@@ -913,38 +926,54 @@ export default function RotasPage() {
         grades:              config.grades.map(g => ({ nome: g.nome, seg: g.seg, ter: g.ter, qua: g.qua, qui: g.qui, sex: g.sex, sab: g.sab })),
         horarios:            config.operacao,
         notasFiscais:        nfRows.length > 0 ? nfRows : undefined,
-      }) as RetornoGerarRotas
+      })
 
-      const novas = mapRetornoGerarRotas(raw)
-      const dataRota = form.dataInicio || new Date().toISOString().slice(0, 10)
+      let rotasSalvas: Rota[]
 
-      let rotasSalvas = novas
-      try {
-        rotasSalvas = await salvarRotasSupabase(novas, dataRota)
-      } catch {
-        // falha silenciosa — rotas ficam visíveis mas sem persistência
+      if (raw.aceito) {
+        // Assíncrono: o WF-B confirmou o recebimento e vai gravar as rotas no
+        // Supabase. Acompanhamos por polling — a roteirização leva alguns
+        // minutos e não cabe no tempo de uma requisição HTTP.
+        setProgresso('Roteirizando... isso leva alguns minutos')
+        rotasSalvas = await aguardarRotasGeradas(dataRota, idsAntes, {
+          onTick: (seg, encontradas) => {
+            setProgresso(encontradas > 0
+              ? `${encontradas} rotas gravadas · finalizando (${seg}s)`
+              : `Roteirizando... ${seg}s`)
+          },
+        })
+      } else {
+        // Síncrono legado: o WF-B devolveu as rotas prontas e não persistiu.
+        const novas = mapRetornoGerarRotas(raw as unknown as RetornoGerarRotas)
+        try {
+          rotasSalvas = await salvarRotasSupabase(novas, dataRota)
+        } catch {
+          rotasSalvas = novas  // visíveis, mas sem persistência
+        }
+
+        const legado = raw as unknown as RetornoGerarRotas
+        if (legado.nfsNaoAlocadas?.length > 0) {
+          salvarNfsNaoAlocadas(legado.nfsNaoAlocadas, dataRota, legado.motivoNaoAlocacao).catch(() => {})
+          setTimeout(() => {
+            showToast(`Atenção: ${legado.nfsNaoAlocadas.length} NFs não alocadas — ${legado.motivoNaoAlocacao}`)
+          }, 4200)
+        }
       }
 
       setRoutes(prev => {
         const ids = new Set(prev.map(r => r.id))
         return [...prev, ...rotasSalvas.filter(r => !ids.has(r.id))]
       })
-      showToast(`✓ IA gerou ${novas.length} rotas — aguardando aprovação`)
+      showToast(`✓ IA gerou ${rotasSalvas.length} rotas — aguardando aprovação`)
       setFilter('aguardando')
-      addLog('geracao', '—', `IA gerou ${novas.length} rotas — aguardando aprovação`)
-
-      if (raw.nfsNaoAlocadas?.length > 0) {
-        salvarNfsNaoAlocadas(raw.nfsNaoAlocadas, dataRota, raw.motivoNaoAlocacao).catch(() => {})
-        setTimeout(() => {
-          showToast(`Atenção: ${raw.nfsNaoAlocadas.length} NFs não alocadas — ${raw.motivoNaoAlocacao}`)
-        }, 4200)
-      }
+      addLog('geracao', '—', `IA gerou ${rotasSalvas.length} rotas — aguardando aprovação`)
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'erro desconhecido'
       showToast(`Falha ao gerar rotas: ${msg}`)
       addLog('geracao', '—', `Falha na geração por IA: ${msg}`)
     } finally {
       setGenerating(false)
+      setProgresso('')
     }
   }
 
@@ -1064,7 +1093,7 @@ export default function RotasPage() {
             <div>
               <div className="text-xs font-medium text-primary-dark">Agente de IA processando as rotas...</div>
               <div className="text-[11px] text-primary mt-0.5">
-                Analisando {routes.reduce((a, r) => a + r.qtdNotas, 0)} NFs · aplicando regras GRADE/COND · alocando nos veículos
+                {progresso || 'Aplicando regras GRADE/COND · alocando nos veículos'}
               </div>
             </div>
           </div>

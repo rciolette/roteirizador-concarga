@@ -48,14 +48,19 @@ export async function seedDisponibilidadeHoje(
 
   if (placasDisp.length === 0) return 0
 
-  // Buscar IDs dos veículos pelas placas
-  const { data: veics } = await admin
-    .from('veiculos')
-    .select('id, placa')
-    .in('placa', placasDisp)
-
+  // Buscar IDs dos veículos pelas placas.
+  // Em lotes de 500: o PostgREST devolve no máximo 1000 linhas por request e a
+  // frota passa de 2.000 — num `.in()` único o resto sumia sem erro, e só metade
+  // dos veículos ficava marcada como disponível.
   const placaToId = new Map<string, string>()
-  for (const v of veics ?? []) placaToId.set(v.placa as string, v.id as string)
+  for (const chunk of chunked(placasDisp, 500)) {
+    const { data: veics, error } = await admin
+      .from('veiculos')
+      .select('id, placa')
+      .in('placa', chunk)
+    if (error) throw new Error(`Seed disponibilidade (busca de placas): ${error.message}`)
+    for (const v of veics ?? []) placaToId.set(v.placa as string, v.id as string)
+  }
 
   const payload = placasDisp
     .map(placa => {
@@ -68,13 +73,34 @@ export async function seedDisponibilidadeHoje(
   if (payload.length === 0) return 0
 
   // ignoreDuplicates preserva registros com origem='operador' já existentes
-  const { error } = await admin.from('veiculo_disponibilidade')
-    .upsert(payload, { onConflict: 'veiculo_id,data', ignoreDuplicates: true })
-  if (error) throw new Error(`Seed disponibilidade: ${error.message}`)
+  for (const chunk of chunked(payload, 500)) {
+    const { error } = await admin.from('veiculo_disponibilidade')
+      .upsert(chunk, { onConflict: 'veiculo_id,data', ignoreDuplicates: true })
+    if (error) throw new Error(`Seed disponibilidade: ${error.message}`)
+  }
 
-  // Sincroniza cache em veiculos
-  const ids = payload.map(p => p.veiculo_id)
-  await admin.from('veiculos').update({ disponivel_hoje: true }).in('id', ids)
+  // Sincroniza o cache `veiculos.disponivel_hoje` com a disponibilidade do dia.
+  // Reconstrói a partir de veiculo_disponibilidade (a fonte de verdade) em vez
+  // de só marcar os sugeridos agora: assim as confirmações do operador entram e
+  // os veículos que estavam disponíveis ontem deixam de aparecer como do dia.
+  const disponiveisHoje: string[] = []
+  const PAGINA = 1000
+  for (let inicio = 0; ; inicio += PAGINA) {
+    const { data, error } = await admin
+      .from('veiculo_disponibilidade')
+      .select('veiculo_id')
+      .eq('data', hoje)
+      .eq('disponivel', true)
+      .range(inicio, inicio + PAGINA - 1)
+    if (error) throw new Error(`Seed disponibilidade (leitura do dia): ${error.message}`)
+    disponiveisHoje.push(...(data ?? []).map(d => d.veiculo_id as string))
+    if (!data || data.length < PAGINA) break
+  }
+
+  await admin.from('veiculos').update({ disponivel_hoje: false }).not('id', 'is', null)
+  for (const chunk of chunked(disponiveisHoje, 500)) {
+    await admin.from('veiculos').update({ disponivel_hoje: true }).in('id', chunk)
+  }
 
   return payload.length
 }

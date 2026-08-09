@@ -23,6 +23,8 @@ export interface NotaFiscal {
   sac?: string
   indRee: boolean
   valor?: number
+  /** Ordem da parada na rota, definida pelo roteirizador. */
+  sequencia?: number
 }
 
 export interface Veiculo {

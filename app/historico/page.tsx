@@ -7,6 +7,7 @@ import { cn, formatPeso } from '@/lib/utils'
 import { useCopyToClipboard } from '@/lib/hooks'
 import { useAppData } from '@/components/providers/AppDataProvider'
 import { carregarRotasPorPeriodo } from '@/lib/webhooks'
+import { gerarLinkMapsUrl } from '@/lib/maps'
 import { exportarCSV, exportarXLSX, rotasParaLinhas } from '@/lib/export'
 import type { Rota, RouteStatus } from '@/types'
 
@@ -78,8 +79,8 @@ function DetalheModal({ rota, onClose }: { rota: Rota; onClose: () => void }) {
               {copied ? '✓ Copiado!' : 'Copiar NFs (;)'}
             </Btn>
           )}
-          {rota.linkMaps && (
-            <Btn size="sm" onClick={() => window.open(rota.linkMaps, '_blank')}>
+          {(rota.linkMaps || gerarLinkMapsUrl(rota.notasFiscais)) && (
+            <Btn size="sm" onClick={() => window.open(rota.linkMaps || gerarLinkMapsUrl(rota.notasFiscais)!, '_blank')}>
               <svg className="w-[11px] h-[11px]" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
                 <path d="M8 2C5.8 2 4 3.8 4 6c0 3.3 4 8 4 8s4-4.7 4-8c0-2.2-1.8-4-4-4z"/>
                 <circle cx="8" cy="6" r="1.5"/>

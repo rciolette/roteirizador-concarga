@@ -35,6 +35,7 @@ export async function carregarRotasSupabase(data: string): Promise<Rota[]> {
       observacao:      (nf.observacao       as string) ?? undefined,
       sac:             (nf.sac              as string) ?? undefined,
       indRee:          (nf.reentrega        as boolean) ?? false,
+      sequencia:       (nf.sequencia        as number) ?? undefined,
     }))
 
     return {
@@ -110,7 +111,15 @@ export interface GerarRotasPayload {
   notasFiscais?:       unknown[]
 }
 
-export async function webhookGerarRotas(payload: GerarRotasPayload): Promise<unknown> {
+export interface AceiteGerarRotas {
+  /** true = o WF-B aceitou o job e vai gravar as rotas no Supabase depois. */
+  aceito: boolean
+  /** Presente apenas no modo síncrono legado. */
+  rotas?: unknown[]
+  [chave: string]: unknown
+}
+
+export async function webhookGerarRotas(payload: GerarRotasPayload): Promise<AceiteGerarRotas> {
   const res = await fetch('/api/gerar-rotas', {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -120,7 +129,64 @@ export async function webhookGerarRotas(payload: GerarRotasPayload): Promise<unk
     const err = await res.json().catch(() => ({}))
     throw new Error(err.error || `HTTP ${res.status}`)
   }
-  return res.json()
+  return res.json() as Promise<AceiteGerarRotas>
+}
+
+export class GeracaoTimeout extends Error {
+  constructor(minutos: number) {
+    super(`A geração passou de ${minutos} min sem devolver rotas`)
+    this.name = 'GeracaoTimeout'
+  }
+}
+
+export interface AguardarOpts {
+  /** Desiste depois disso. A roteirização costuma levar 1–3 min. */
+  timeoutMs?:   number
+  intervaloMs?: number
+  /** Chamado a cada ciclo com os segundos decorridos e as rotas já vistas. */
+  onTick?:      (segundos: number, encontradas: number) => void
+}
+
+/**
+ * Espera o WF-B terminar de gravar as rotas do dia.
+ *
+ * Compara contra os IDs que já existiam antes do disparo em vez de comparar
+ * timestamps: o `criado_em` é gerado pelo Postgres e o relógio do navegador
+ * pode estar adiantado, o que faria rotas legítimas serem descartadas.
+ *
+ * Como o WF-B insere uma rota por vez, só devolve quando a contagem para de
+ * crescer entre dois ciclos — assim o painel não mostra um resultado parcial.
+ */
+export async function aguardarRotasGeradas(
+  data:      string,
+  idsAntes:  Set<string>,
+  opts:      AguardarOpts = {},
+): Promise<Rota[]> {
+  const timeoutMs   = opts.timeoutMs   ?? 10 * 60_000
+  const intervaloMs = opts.intervaloMs ?? 5_000
+  const inicio      = Date.now()
+
+  let anterior = 0
+
+  while (Date.now() - inicio < timeoutMs) {
+    await new Promise(r => setTimeout(r, intervaloMs))
+
+    let novas: Rota[] = []
+    try {
+      const todas = await carregarRotasSupabase(data)
+      novas = todas.filter(r => !idsAntes.has(r.id))
+    } catch {
+      // Falha de rede num ciclo não aborta a espera — tenta de novo.
+      continue
+    }
+
+    opts.onTick?.(Math.round((Date.now() - inicio) / 1000), novas.length)
+
+    if (novas.length > 0 && novas.length === anterior) return novas
+    anterior = novas.length
+  }
+
+  throw new GeracaoTimeout(Math.round(timeoutMs / 60_000))
 }
 
 export function mapRetornoGerarRotas(retorno: RetornoGerarRotas): Rota[] {
@@ -361,6 +427,7 @@ export async function carregarRotasPorPeriodo(dataInicio: string, dataFim: strin
       observacao:      (nf.observacao       as string) ?? undefined,
       sac:             (nf.sac              as string) ?? undefined,
       indRee:          (nf.reentrega        as boolean) ?? false,
+      sequencia:       (nf.sequencia        as number) ?? undefined,
     }))
 
     return {
