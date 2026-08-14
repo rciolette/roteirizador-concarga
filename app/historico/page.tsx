@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Topbar, Card, StatusPill, Btn, TextInput } from '@/components/ui'
+import { Topbar, Card, StatusPill, Btn, TextInput, statusRowBg } from '@/components/ui'
 import { NotasFiscaisTable } from '@/components/ui/NotasFiscaisTable'
 import { MapaRota } from '@/components/ui/MapaRota'
 import { cn, formatPeso } from '@/lib/utils'
@@ -367,13 +367,14 @@ export default function HistoricoPage() {
               </tr>
             </thead>
             <tbody>
-              {itens.slice(0, visibleCount).map((rota, i) => (
+              {itens.slice(0, visibleCount).map((rota) => (
                 <tr
                   key={rota.id}
                   onClick={() => setRotaSelecionada(rota)}
                   className={cn(
                     'cursor-pointer transition-colors duration-100',
-                    i % 2 === 0 ? 'bg-surface hover:bg-page' : 'bg-page hover:bg-cream',
+                    statusRowBg(rota.status),
+                    'hover:brightness-95',
                   )}
                 >
                   <td className="px-3 py-[7px] border-b border-[0.5px] border-[var(--border-faint)] text-muted tabular-nums whitespace-nowrap">{rota.data}</td>

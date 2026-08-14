@@ -1,6 +1,6 @@
 'use client'
 import { cn } from '@/lib/utils'
-import { useNotasFiscais, type PageSize } from '@/hooks/useNotasFiscais'
+import { useNotasFiscais, type PageSize, type NotasFiltros } from '@/hooks/useNotasFiscais'
 
 const COND_CLS: Record<string, string> = {
   vermelho: 'bg-danger-bg text-danger',
@@ -32,7 +32,7 @@ function Skeleton({ rows }: { rows: number }) {
     <>
       {Array.from({ length: rows }).map((_, i) => (
         <tr key={i} className={i % 2 === 0 ? 'bg-page' : 'bg-cream/40 dark:bg-[#1A1918]/60'}>
-          {[40, 120, 90, 70, 60, 55, 55].map((w, j) => (
+          {[24, 40, 120, 90, 70, 60, 55, 55, 70, 40].map((w, j) => (
             <td key={j} className="px-3 py-2">
               <div className="h-3 rounded animate-pulse bg-cream dark:bg-hover" style={{ width: w }} />
             </td>
@@ -45,12 +45,26 @@ function Skeleton({ rows }: { rows: number }) {
 
 const PAGE_SIZES: PageSize[] = [25, 50, 100]
 
+// Pedido do Marcelo (11/08/26, item 7): filtros de seleção de notas.
+const FILTRO_LABELS: Record<keyof NotasFiltros, string> = {
+  solucaoSac:  'Solução SAC',
+  tipoCarga:   'Tipo Carga',
+  rota:        'Rota de Entrega',
+  municipio:   'Município/Bairro',
+  tipoCliente: 'Tipo Cliente',
+  remetente:   'Remetente',
+}
+
 export function NotasTable() {
-  const { rows, total, page, pageSize, setPage, setPageSize, loading, error } = useNotasFiscais(25)
+  const {
+    rows, total, totalDesmarcadas, page, pageSize, setPage, setPageSize, loading, error,
+    filtros, setFiltro, limparFiltros, opcoesFiltro, toggleSelecionada, limparDesmarcacoes,
+  } = useNotasFiscais(25)
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
   const from = page * pageSize + 1
   const to = Math.min((page + 1) * pageSize, total)
+  const filtrosAtivos = Object.values(filtros).some(Boolean)
 
   return (
     <div className="flex flex-col min-h-0">
@@ -60,11 +74,43 @@ export function NotasTable() {
         </div>
       )}
 
+      {/* Filtros (item 7) */}
+      <div className="flex flex-wrap items-center gap-1.5 mb-2">
+        {(Object.keys(FILTRO_LABELS) as (keyof NotasFiltros)[]).map(campo => (
+          <select
+            key={campo}
+            value={filtros[campo]}
+            onChange={e => setFiltro(campo, e.target.value)}
+            className="text-[11px] px-1.5 py-1 rounded-md border border-[var(--border-input)] bg-surface text-mid max-w-[150px]"
+          >
+            <option value="">{FILTRO_LABELS[campo]}</option>
+            {opcoesFiltro[campo].map(op => (
+              <option key={op} value={op}>{op}</option>
+            ))}
+          </select>
+        ))}
+        {filtrosAtivos && (
+          <button
+            onClick={limparFiltros}
+            className="text-[11px] px-2 py-1 rounded-md text-primary hover:underline"
+          >
+            Limpar filtros
+          </button>
+        )}
+        {totalDesmarcadas > 0 && (
+          <span className="text-[11px] text-muted ml-auto flex items-center gap-1.5">
+            {totalDesmarcadas} nota{totalDesmarcadas !== 1 ? 's' : ''} desmarcada{totalDesmarcadas !== 1 ? 's' : ''} da roteirização
+            <button onClick={limparDesmarcacoes} className="text-primary hover:underline">restaurar</button>
+          </span>
+        )}
+      </div>
+
       {/* Tabela com scroll */}
       <div className="overflow-auto rounded-xl border border-[var(--border-card)] bg-surface">
         <table className="w-full text-[12px] border-collapse">
           <thead className="sticky top-0 z-10">
             <tr className="bg-cream dark:bg-hover border-b border-[var(--border-light)]">
+              <th className="px-2 py-2 text-center font-medium text-muted whitespace-nowrap w-8">✓</th>
               <th className="px-3 py-2 text-left font-medium text-muted whitespace-nowrap">NF</th>
               <th className="px-3 py-2 text-left font-medium text-muted whitespace-nowrap">Destinatário</th>
               <th className="px-3 py-2 text-left font-medium text-muted whitespace-nowrap">Município</th>
@@ -72,6 +118,8 @@ export function NotasTable() {
               <th className="px-3 py-2 text-right font-medium text-muted whitespace-nowrap">Peso</th>
               <th className="px-3 py-2 text-left font-medium text-muted whitespace-nowrap">Cond.</th>
               <th className="px-3 py-2 text-left font-medium text-muted whitespace-nowrap">Grade</th>
+              <th className="px-3 py-2 text-left font-medium text-muted whitespace-nowrap">Observação</th>
+              <th className="px-3 py-2 text-center font-medium text-muted whitespace-nowrap">Reent.</th>
             </tr>
           </thead>
           <tbody>
@@ -79,7 +127,7 @@ export function NotasTable() {
               <Skeleton rows={pageSize > 25 ? 25 : pageSize} />
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-muted text-[12px]">
+                <td colSpan={10} className="px-4 py-8 text-center text-muted text-[12px]">
                   Nenhuma NF pendente
                 </td>
               </tr>
@@ -89,13 +137,25 @@ export function NotasTable() {
                   key={row.id}
                   className={cn(
                     'border-b border-[var(--border-faint)] last:border-0',
-                    i % 2 === 0 ? 'bg-surface' : 'bg-cream/30 dark:bg-[#1A1918]/40',
+                    !row.selecionada
+                      ? 'opacity-40'
+                      : row.mesmoDestAnterior
+                        ? 'bg-success-bg'
+                        : (i % 2 === 0 ? 'bg-surface' : 'bg-cream/30 dark:bg-[#1A1918]/40'),
                   )}
                 >
+                  <td className="px-2 py-2 text-center">
+                    <input
+                      type="checkbox"
+                      checked={row.selecionada}
+                      onChange={() => toggleSelecionada(row.n_nfs)}
+                      title={row.selecionada ? 'Desmarcar da roteirização' : 'Marcar para roteirização'}
+                    />
+                  </td>
                   <td className="px-3 py-2 font-mono text-[11px] text-base whitespace-nowrap">
                     {row.n_nfs ?? '—'}
                   </td>
-                  <td className="px-3 py-2 text-base max-w-[200px] truncate" title={row.destinatario ?? undefined}>
+                  <td className={cn('px-3 py-2 max-w-[200px] truncate', row.mesmoDestAnterior ? 'text-success-dark font-medium' : 'text-base')} title={row.destinatario ?? undefined}>
                     {row.destinatario ?? '—'}
                   </td>
                   <td className="px-3 py-2 text-mid whitespace-nowrap">
@@ -114,6 +174,12 @@ export function NotasTable() {
                   </td>
                   <td className="px-3 py-2 text-mid whitespace-nowrap">
                     {row.grade ?? '—'}
+                  </td>
+                  <td className="px-3 py-2 text-mid max-w-[160px] truncate" title={row.observacao ?? undefined}>
+                    {row.observacao ?? '—'}
+                  </td>
+                  <td className="px-3 py-2 text-center">
+                    {row.ind_ree ? '↩' : '—'}
                   </td>
                 </tr>
               ))

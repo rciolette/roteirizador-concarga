@@ -169,7 +169,14 @@ export async function syncFrotaDoSiat(): Promise<{ motoristas: number; veiculos:
         situacao_siat:         row.Situacao      ? String(row.Situacao)      : null,
         codigo_siat_motorista: cod,
         motorista_id:          cod ? (motoristaIdMap.get(cod) ?? null) : null,
-        ativo:                 true,
+        // Pedido do Marcelo (11/08/26, item 2): veículo nasce ativo por padrão
+        // quando a situação SIAT indica frota disponível. `situacaoEhDisponivel`
+        // já existia aqui (usada em seedDisponibilidadeHoje) — é um proxy pelo
+        // texto da situação (`d.VEISIT_D`), já que a query atual não traz o
+        // código numérico "005". Se precisar do código exato, ajustar a query
+        // em lib/siat-db.ts:queryVeiculosDisponiveis para trazer `a.VEISIT`
+        // (código) e comparar === '005'.
+        ativo:                 situacaoEhDisponivel(row.Situacao),
         updated_at:            new Date().toISOString(),
       }
     })

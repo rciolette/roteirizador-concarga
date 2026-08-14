@@ -165,6 +165,12 @@ export function StatusPill({ status }: { status: RouteStatus }) {
   )
 }
 
+// Pedido do Marcelo (11/08/26, item 6): cor de status na LINHA da tabela, não
+// numa coluna à parte. Reaproveita as mesmas classes de fundo do PILL acima.
+export function statusRowBg(status: RouteStatus): string {
+  return PILL[status]?.pill ?? ''
+}
+
 // ── Cond Dot ─────────────────────────────────────────────────────────────────
 const COND_DOT: Record<CondStatus, string> = { ok: 'bg-cond-ok', laranja: 'bg-cond-warn', vermelho: 'bg-cond-err' }
 const COND_LBL: Record<CondStatus, string> = { ok: 'Ok', laranja: 'Laran.', vermelho: 'Verm.' }

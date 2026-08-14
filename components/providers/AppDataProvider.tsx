@@ -60,6 +60,12 @@ export interface AppData {
   dismissNFImport: () => void
   setRotas:        React.Dispatch<React.SetStateAction<Rota[]>>
   setConfig:       React.Dispatch<React.SetStateAction<AppConfig>>
+  /** Pedido do Marcelo (11/08/26, item 8): números de NF desmarcados pelo
+   *  operador — ficam de fora da próxima geração de rotas mesmo que tenham
+   *  vindo do SIAT. */
+  nfsDesmarcadas:    Set<string>
+  toggleNfDesmarcada: (numnfs: string) => void
+  limparNfsDesmarcadas: () => void
 }
 
 const AppDataContext = createContext<AppData | null>(null)
@@ -84,6 +90,18 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const [nfImportState, setNfImportState] = useState<NfImportState>({
     running: false, step: '', progress: 0,
   })
+  const [nfsDesmarcadas, setNfsDesmarcadas] = useState<Set<string>>(new Set())
+
+  const toggleNfDesmarcada = useCallback((numnfs: string) => {
+    setNfsDesmarcadas(prev => {
+      const next = new Set(prev)
+      if (next.has(numnfs)) next.delete(numnfs)
+      else next.add(numnfs)
+      return next
+    })
+  }, [])
+
+  const limparNfsDesmarcadas = useCallback(() => setNfsDesmarcadas(new Set()), [])
 
   const bootstrapped   = useRef(false)
   const nfImportedRef  = useRef(false)
@@ -141,6 +159,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       const pendentes = siatRowsToNotasPendentes(rows)
       setNfRows(rows)
       setNfsPendentes(pendentes)
+      setNfsDesmarcadas(new Set()) // nova importação zera as desmarcações anteriores
 
       // Pré-aquece o cache de geocoding em background (fire-and-forget)
       const addrs = pendentes
@@ -218,6 +237,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       loadingRotas: usuario ? loadingRotas : false,
       nfRows, nfsPendentes, nfImportState, config,
       refresh, refreshVeiculos, importarNFs, dismissNFImport, setRotas, setConfig,
+      nfsDesmarcadas, toggleNfDesmarcada, limparNfsDesmarcadas,
     }}>
       {children}
     </AppDataContext.Provider>

@@ -10,55 +10,118 @@ export interface NfPendenteRow {
   destinatario: string
   municipio: string
   municipio_dest: string | null
+  bairro: string
   tipo_cliente: string
   peso_kg: number
   cond: string
   grade: string
+  rota: string
+  observacao: string | null
+  ind_ree: boolean
+  solucao_sac: string | null
+  remetente: string | null
+  /** false quando o operador desmarcou a nota da roteirização (item 8). */
+  selecionada: boolean
+  /** true quando esta linha repete o destinatário da anterior, já ordenado (item 10). */
+  mesmoDestAnterior: boolean
+}
+
+// Pedido do Marcelo (11/08/26, item 7): filtros sobre as notas pendentes antes
+// de gerar as rotas.
+export interface NotasFiltros {
+  solucaoSac:   string
+  tipoCarga:    string
+  rota:         string
+  municipio:    string
+  tipoCliente:  string
+  remetente:    string
+}
+
+const FILTROS_VAZIOS: NotasFiltros = {
+  solucaoSac: '', tipoCarga: '', rota: '', municipio: '', tipoCliente: '', remetente: '',
 }
 
 interface UseNotasFiscaisResult {
   rows: NfPendenteRow[]
   total: number
+  totalDesmarcadas: number
   page: number
   pageSize: PageSize
   setPage: (p: number) => void
   setPageSize: (s: PageSize) => void
   loading: boolean
   error: string | null
+  filtros: NotasFiltros
+  setFiltro: (campo: keyof NotasFiltros, valor: string) => void
+  limparFiltros: () => void
+  opcoesFiltro: Record<keyof NotasFiltros, string[]>
+  toggleSelecionada: (numnfs: string) => void
+  limparDesmarcacoes: () => void
 }
 
-const COND_ORDEM: Record<string, number> = { vermelho: 0, laranja: 1, ok: 2 }
+function opcoesUnicas(valores: (string | undefined)[]): string[] {
+  return [...new Set(valores.filter((v): v is string => Boolean(v) && v !== '—'))].sort()
+}
 
 export function useNotasFiscais(defaultPageSize: PageSize = 25): UseNotasFiscaisResult {
-  const { nfsPendentes, nfImportState } = useAppData()
+  const { nfsPendentes, nfImportState, nfsDesmarcadas, toggleNfDesmarcada, limparNfsDesmarcadas } = useAppData()
   const [page, setPage] = useState(0)
   const [pageSize, setPageSizeState] = useState<PageSize>(defaultPageSize)
+  const [filtros, setFiltros] = useState<NotasFiltros>(FILTROS_VAZIOS)
 
+  const opcoesFiltro = useMemo(() => ({
+    solucaoSac:  opcoesUnicas(nfsPendentes.map(n => n.solucaoSac)),
+    tipoCarga:   opcoesUnicas(nfsPendentes.map(n => n.grade)),
+    rota:        opcoesUnicas(nfsPendentes.map(n => n.rota)),
+    municipio:   opcoesUnicas(nfsPendentes.map(n => n.municipio)),
+    tipoCliente: opcoesUnicas(nfsPendentes.map(n => n.tipoCliente)),
+    remetente:   opcoesUnicas(nfsPendentes.map(n => n.remetente)),
+  }), [nfsPendentes])
+
+  const filtradas = useMemo(() => {
+    return nfsPendentes.filter(n =>
+      (!filtros.solucaoSac  || n.solucaoSac  === filtros.solucaoSac) &&
+      (!filtros.tipoCarga   || n.grade       === filtros.tipoCarga) &&
+      (!filtros.rota        || n.rota        === filtros.rota) &&
+      (!filtros.municipio   || n.municipio   === filtros.municipio) &&
+      (!filtros.tipoCliente || n.tipoCliente === filtros.tipoCliente) &&
+      (!filtros.remetente   || n.remetente   === filtros.remetente),
+    )
+  }, [nfsPendentes, filtros])
+
+  // Pedido do Marcelo (item 10): ordenado por Tipo Carga / Rota / Destinatário.
   const sorted = useMemo(() => {
-    return [...nfsPendentes].sort((a, b) => {
-      const condA = COND_ORDEM[a.cond] ?? 3
-      const condB = COND_ORDEM[b.cond] ?? 3
-      if (condA !== condB) return condA - condB
-      return a.numnfs.localeCompare(b.numnfs, undefined, { numeric: true })
-    })
-  }, [nfsPendentes])
+    return [...filtradas].sort((a, b) =>
+      (a.grade || '').localeCompare(b.grade || '') ||
+      (a.rota  || '').localeCompare(b.rota  || '') ||
+      a.destinatario.localeCompare(b.destinatario, undefined, { numeric: true }),
+    )
+  }, [filtradas])
 
   const total = sorted.length
   const from = page * pageSize
 
   const rows = useMemo<NfPendenteRow[]>(
-    () => sorted.slice(from, from + pageSize).map(nf => ({
-      id:             nf.id,
-      n_nfs:          nf.numnfs,
-      destinatario:   nf.destinatario,
-      municipio:      nf.municipio,
-      municipio_dest: null,
-      tipo_cliente:   nf.tipoCliente,
-      peso_kg:        nf.peso,
-      cond:           nf.cond,
-      grade:          nf.grade,
+    () => sorted.slice(from, from + pageSize).map((nf, i, arr) => ({
+      id:                nf.id,
+      n_nfs:             nf.numnfs,
+      destinatario:      nf.destinatario,
+      municipio:         nf.municipio,
+      municipio_dest:    null,
+      bairro:            nf.bairro,
+      tipo_cliente:      nf.tipoCliente,
+      peso_kg:           nf.peso,
+      cond:              nf.cond,
+      grade:             nf.grade,
+      rota:              nf.rota,
+      observacao:        nf.observacao ?? null,
+      ind_ree:           nf.indRee,
+      solucao_sac:       nf.solucaoSac ?? null,
+      remetente:         nf.remetente ?? null,
+      selecionada:       !nfsDesmarcadas.has(nf.numnfs),
+      mesmoDestAnterior: i > 0 && arr[i - 1].destinatario === nf.destinatario,
     })),
-    [sorted, from, pageSize],
+    [sorted, from, pageSize, nfsDesmarcadas],
   )
 
   function handleSetPage(p: number) {
@@ -70,14 +133,31 @@ export function useNotasFiscais(defaultPageSize: PageSize = 25): UseNotasFiscais
     setPage(0)
   }
 
+  function setFiltro(campo: keyof NotasFiltros, valor: string) {
+    setFiltros(prev => ({ ...prev, [campo]: valor }))
+    setPage(0)
+  }
+
+  function limparFiltros() {
+    setFiltros(FILTROS_VAZIOS)
+    setPage(0)
+  }
+
   return {
     rows,
     total,
+    totalDesmarcadas: nfsDesmarcadas.size,
     page,
     pageSize,
     setPage: handleSetPage,
     setPageSize: handleSetPageSize,
     loading: nfImportState.running && nfsPendentes.length === 0,
     error: null,
+    filtros,
+    setFiltro,
+    limparFiltros,
+    opcoesFiltro,
+    toggleSelecionada: toggleNfDesmarcada,
+    limparDesmarcacoes: limparNfsDesmarcadas,
   }
 }

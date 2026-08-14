@@ -35,11 +35,16 @@ export interface VinculadoDaFrota {
   id: string
   placa: string
   modelo: string
+  tipo_veiculo: string
   capacidade_kg: number
   situacao_siat: string
   motorista_nome: string | null
   motorista_celular: string | null
   motorista_sigla: string | null
+  // NOTA (pedido do Marcelo, item 3): ANTT, CPF, Fornecedor, TAG e Vld.Seguro
+  // foram pedidos na grade mas não existem hoje em `motoristas`/`veiculos` nem
+  // na query SIAT (`lib/siat-db.ts:queryVeiculosDisponiveis`). Precisam ser
+  // mapeados no SIAT e adicionados ao sync antes de aparecerem aqui.
 }
 
 export interface CapacidadeVeiculo {
@@ -116,13 +121,16 @@ export async function listarVeiculos(): Promise<VeiculoDaFrota[]> {
   })
 }
 
+// Pedido do Marcelo (11/08/26, item 3): mostrar só a frota disponível — mesmo
+// critério (disponivel_hoje=true) já usado em listarVeiculos().
 export async function listarVinculados(): Promise<VinculadoDaFrota[]> {
   const sb = getSupabaseBrowser()
   const rows = await fetchAllPages<Record<string, unknown>>(
     (from, to) => sb
       .from('veiculos')
-      .select('id, placa, modelo, capacidade_kg, situacao_siat, motorista_id, motoristas(nome, celular, sigla)')
+      .select('id, placa, modelo, tipo_veiculo, capacidade_kg, situacao_siat, motorista_id, disponivel_hoje, motoristas(nome, celular, sigla)')
       .eq('ativo', true)
+      .eq('disponivel_hoje', true)
       .not('motorista_id', 'is', null)
       .order('placa', { ascending: true })
       .range(from, to),
@@ -134,6 +142,7 @@ export async function listarVinculados(): Promise<VinculadoDaFrota[]> {
       id:                row.id as string,
       placa:             row.placa as string,
       modelo:            (row.modelo       as string | null) ?? '',
+      tipo_veiculo:      (row.tipo_veiculo  as string | null) ?? '',
       capacidade_kg:     (row.capacidade_kg as number | null) ?? 0,
       situacao_siat:     (row.situacao_siat as string | null) ?? '',
       motorista_nome:    m?.nome    ?? null,

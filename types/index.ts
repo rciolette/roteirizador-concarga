@@ -25,6 +25,10 @@ export interface NotaFiscal {
   valor?: number
   /** Ordem da parada na rota, definida pelo roteirizador. */
   sequencia?: number
+  /** Solução SAC (descrição da última ocorrência) — pedido do Marcelo, item 7. */
+  solucaoSac?: string
+  /** Código do remetente (CODCLI) — pedido do Marcelo, item 7. */
+  remetente?: string
 }
 
 export interface Veiculo {

@@ -25,6 +25,8 @@ export interface SiatRow {
   SAC?:              string | null
   Observacao?:       string | null
   TipoOperacao?:     number | null
+  SolucaoSAC?:       string | null
+  Remetente?:        string | number | null
 
   // Endereço do destinatário
   CNPJDestinatario?: string | null
@@ -201,6 +203,8 @@ export function siatRowsToNotasPendentes(rows: SiatRow[]): NotaFiscal[] {
       sac:              row.SAC            ?? undefined,
       indRee:           reentrega,
       valor:            typeof row.Valor === 'number' ? row.Valor : undefined,
+      solucaoSac:       row.SolucaoSAC     ?? undefined,
+      remetente:        row.Remetente != null ? String(row.Remetente) : undefined,
     })
   }
 
@@ -277,6 +281,8 @@ export function siatRowsToRotas(
         sac:             row.SAC            ?? undefined,
         indRee:          reentrega,
         valor:           typeof row.Valor === 'number' ? row.Valor : undefined,
+        solucaoSac:      row.SolucaoSAC     ?? undefined,
+        remetente:       row.Remetente != null ? String(row.Remetente) : undefined,
       }
     })
 

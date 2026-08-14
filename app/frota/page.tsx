@@ -255,6 +255,10 @@ export default function FrotaPage() {
   // ── Paginação vinculados ────────────────────────────────────────────────────
   const [pageVi, setPageVi] = useState(0)
 
+  // ── Filtros vinculados (pedido do Marcelo, item 3: filtro por Tipo e Nome) ──
+  const [buscaVi,     setBuscaVi]     = useState('')
+  const [filtroTipoVi, setFiltroTipoVi] = useState('')
+
   // ── Seleção ─────────────────────────────────────────────────────────────────
   const [selectedM,  setSelectedM]  = useState<Set<string>>(new Set())
   const [selectedV,  setSelectedV]  = useState<Set<string>>(new Set())
@@ -462,8 +466,20 @@ export default function FrotaPage() {
   })
   const paginatedV  = veiculosFiltrados.slice(0, visibleCountV)
 
-  const totalPagesVi = Math.max(1, Math.ceil(vinculados.length / PAGE_SIZE_DEFAULT))
-  const paginatedVi  = vinculados.slice(pageVi * PAGE_SIZE_DEFAULT, (pageVi + 1) * PAGE_SIZE_DEFAULT)
+  const tiposVinculado = [...new Set(vinculados.map(v => v.tipo_veiculo).filter(Boolean))].sort()
+
+  const vinculadosFiltrados = vinculados.filter(v => {
+    if (buscaVi) {
+      const q = buscaVi.toLowerCase()
+      if (!v.placa.toLowerCase().includes(q) &&
+          !(v.motorista_nome ?? '').toLowerCase().includes(q)) return false
+    }
+    if (filtroTipoVi && v.tipo_veiculo !== filtroTipoVi) return false
+    return true
+  })
+
+  const totalPagesVi = Math.max(1, Math.ceil(vinculadosFiltrados.length / PAGE_SIZE_DEFAULT))
+  const paginatedVi  = vinculadosFiltrados.slice(pageVi * PAGE_SIZE_DEFAULT, (pageVi + 1) * PAGE_SIZE_DEFAULT)
 
   // ── Estado da seleção ────────────────────────────────────────────────────────
   const allMSel  = motoristasFiltrados.length > 0 && motoristasFiltrados.every(m => selectedM.has(m.id))
@@ -834,20 +850,47 @@ export default function FrotaPage() {
               )}
             </CardHeader>
 
-            {loadingVi ? <TableSkeleton cols={7} /> : vinculados.length === 0 ? (
+            {/* Filtros por Tipo e Nome (pedido do Marcelo, item 3) */}
+            <div className="flex flex-wrap items-center gap-2 px-4 pb-2">
+              <input
+                value={buscaVi}
+                onChange={e => { setBuscaVi(e.target.value); setPageVi(0) }}
+                placeholder="Buscar por nome ou placa..."
+                className="text-xs px-2.5 py-1.5 rounded-md border border-[var(--border-input)] bg-surface min-w-[200px]"
+              />
+              <select
+                value={filtroTipoVi}
+                onChange={e => { setFiltroTipoVi(e.target.value); setPageVi(0) }}
+                className="text-xs px-2.5 py-1.5 rounded-md border border-[var(--border-input)] bg-surface"
+              >
+                <option value="">Tipo (todos)</option>
+                {tiposVinculado.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+              {(buscaVi || filtroTipoVi) && (
+                <button
+                  onClick={() => { setBuscaVi(''); setFiltroTipoVi(''); setPageVi(0) }}
+                  className="text-[11px] text-primary hover:underline"
+                >
+                  Limpar filtros
+                </button>
+              )}
+            </div>
+
+            {loadingVi ? <TableSkeleton cols={8} /> : vinculadosFiltrados.length === 0 ? (
               <div className="py-10 text-center text-subtle text-[13px]">Nenhum vínculo encontrado.</div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-[0.5px] border-[var(--border-subtle)]">
-                      <TH>Placa</TH><TH>Modelo</TH><TH>Cap. (kg)</TH>
+                      <TH>Tipo</TH><TH>Placa</TH><TH>Modelo</TH><TH>Cap. (kg)</TH>
                       <TH>Motorista</TH><TH>Sigla</TH><TH>Celular</TH><TH>Situação SIAT</TH>
                     </tr>
                   </thead>
                   <tbody>
                     {paginatedVi.map((v, i) => (
                       <tr key={v.id} className={cn('border-b border-[0.5px] border-[var(--border-faint)] transition-colors', i % 2 !== 0 && 'bg-cream/40', 'hover:bg-primary-bg/30')}>
+                        <TD medium>{v.tipo_veiculo || '—'}</TD>
                         <td className="px-4 py-2.5 text-xs font-mono font-medium text-base">{v.placa}</td>
                         <TD medium>{v.modelo || '—'}</TD>
                         <td className="px-4 py-2.5 text-xs text-muted tabular-nums text-right">
@@ -865,7 +908,7 @@ export default function FrotaPage() {
                 </table>
               </div>
             )}
-            <Paginacao page={pageVi} totalItems={vinculados.length} totalPages={totalPagesVi} onChange={setPageVi} />
+            <Paginacao page={pageVi} totalItems={vinculadosFiltrados.length} totalPages={totalPagesVi} onChange={setPageVi} />
           </Card>
         )}
       </div>

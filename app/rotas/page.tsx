@@ -828,7 +828,16 @@ function CargaPorVeiculoPanel({ rotas }: { rotas: Rota[] }) {
 // ── Rotas Page ────────────────────────────────────────────────────────────────
 export default function RotasPage() {
   const { usuario } = useAuth()
-  const { nfImportState, importarNFs, dismissNFImport, nfRows, rotas: routes, setRotas: setRoutes, loadingRotas, motoristasAtividade, veiculos, config, refreshVeiculos } = useAppData()
+  const { nfImportState, importarNFs, dismissNFImport, nfRows, rotas: routes, setRotas: setRoutes, loadingRotas, motoristasAtividade, veiculos, config, refreshVeiculos, nfsDesmarcadas } = useAppData()
+
+  // Pedido do Marcelo (11/08/26, item 8): NFs desmarcadas pelo operador na
+  // grade de pendentes não entram na próxima geração de rotas.
+  const nfRowsParaRoteirizar = useMemo(
+    () => nfsDesmarcadas.size === 0
+      ? nfRows
+      : nfRows.filter(r => !nfsDesmarcadas.has(String(r.NUMNFS ?? ''))),
+    [nfRows, nfsDesmarcadas],
+  )
   const [filter,         setFilter]         = useState<RouteStatus | 'todos'>('todos')
   const [busca,          setBusca]          = useState('')
   const [ordenar,        setOrdenar]        = useState('')
@@ -839,11 +848,13 @@ export default function RotasPage() {
     [nfRows],
   )
 
-  // Atualiza notas e veículos ao abrir a página — só com sessão ativa, senão o
-  // RLS devolve lista vazia e sobrescreve o que o AppDataProvider já carregou.
+  // Atualiza veículos ao abrir a página — só com sessão ativa, senão o RLS
+  // devolve lista vazia e sobrescreve o que o AppDataProvider já carregou.
+  // Pedido do Marcelo (11/08/26, item 4): as notas NÃO são mais importadas
+  // automaticamente ao entrar em "Rotas do dia" — só via botão manual
+  // "Importar NFs" (ImportarSIATButton / SiatImportDialog).
   useEffect(() => {
     if (!usuario) return
-    importarNFs()
     refreshVeiculos()
   }, [usuario]) // eslint-disable-line react-hooks/exhaustive-deps
   const [showDialog,     setShowDialog]     = useState(false)
@@ -996,7 +1007,7 @@ export default function RotasPage() {
         pesos:               config.pesos,
         grades:              config.grades.map(g => ({ nome: g.nome, seg: g.seg, ter: g.ter, qua: g.qua, qui: g.qui, sex: g.sex, sab: g.sab })),
         horarios:            config.operacao,
-        notasFiscais:        nfRows.length > 0 ? nfRows : undefined,
+        notasFiscais:        nfRowsParaRoteirizar.length > 0 ? nfRowsParaRoteirizar : undefined,
       })
 
       let rotasSalvas: Rota[]
