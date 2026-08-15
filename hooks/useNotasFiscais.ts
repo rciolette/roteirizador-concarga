@@ -33,12 +33,13 @@ export interface NotasFiltros {
   tipoCarga:    string
   rota:         string
   municipio:    string
+  bairro:       string
   tipoCliente:  string
   remetente:    string
 }
 
 const FILTROS_VAZIOS: NotasFiltros = {
-  solucaoSac: '', tipoCarga: '', rota: '', municipio: '', tipoCliente: '', remetente: '',
+  solucaoSac: '', tipoCarga: '', rota: '', municipio: '', bairro: '', tipoCliente: '', remetente: '',
 }
 
 interface UseNotasFiscaisResult {
@@ -80,6 +81,7 @@ export function useNotasFiscais(defaultPageSize: PageSize = 25): UseNotasFiscais
     tipoCarga:   opcoesUnicas(nfsPendentes.map(n => n.grade)),
     rota:        opcoesUnicas(nfsPendentes.map(n => n.rota)),
     municipio:   opcoesUnicas(nfsPendentes.map(n => n.municipio)),
+    bairro:      opcoesUnicas(nfsPendentes.map(n => n.bairro)),
     tipoCliente: opcoesUnicas(nfsPendentes.map(n => n.tipoCliente)),
     remetente:   opcoesUnicas(nfsPendentes.map(n => n.remetente)),
   }), [nfsPendentes])
@@ -90,6 +92,7 @@ export function useNotasFiscais(defaultPageSize: PageSize = 25): UseNotasFiscais
       (!filtros.tipoCarga   || n.grade       === filtros.tipoCarga) &&
       (!filtros.rota        || n.rota        === filtros.rota) &&
       (!filtros.municipio   || n.municipio   === filtros.municipio) &&
+      (!filtros.bairro      || n.bairro      === filtros.bairro) &&
       (!filtros.tipoCliente || n.tipoCliente === filtros.tipoCliente) &&
       (!filtros.remetente   || n.remetente   === filtros.remetente),
     )

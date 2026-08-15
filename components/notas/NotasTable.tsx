@@ -51,7 +51,8 @@ const FILTRO_LABELS: Record<keyof NotasFiltros, string> = {
   solucaoSac:  'Solução SAC',
   tipoCarga:   'Tipo Carga',
   rota:        'Rota de Entrega',
-  municipio:   'Município/Bairro',
+  municipio:   'Município',
+  bairro:      'Bairro',
   tipoCliente: 'Tipo Cliente',
   remetente:   'Remetente',
 }
