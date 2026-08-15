@@ -20,12 +20,21 @@ export interface VeiculoDaFrota {
   categoria: string
   tipo_veiculo: string
   tipo_carroceria: string
+  tipo_frota: string
   capacidade_kg: number
   pbt: number | null
   volume_m3: number | null
   situacao_siat: string
+  numero_tag: string | null
+  tag_pedagio: boolean | null
   motorista_id: string | null
   motorista_nome: string | null
+  motorista_sigla: string | null
+  motorista_celular: string | null
+  motorista_cpf: string | null
+  motorista_fornecedor: string | null
+  motorista_cert_antt: string | null
+  motorista_cert_antt_validade: string | null
   ativo: boolean
   disponivel_hoje: boolean
   disponibilidade_origem: 'siat_sugerido' | 'operador' | null
@@ -87,7 +96,7 @@ export async function listarVeiculos(): Promise<VeiculoDaFrota[]> {
     fetchAllPages<Record<string, unknown>>(
       (from, to) => sb
         .from('veiculos')
-        .select('id, placa, modelo, categoria, tipo_veiculo, tipo_carroceria, capacidade_kg, pbt, volume_m3, situacao_siat, motorista_id, ativo, motoristas(nome, celular, sigla)')
+        .select('id, placa, modelo, categoria, tipo_veiculo, tipo_carroceria, tipo_frota, capacidade_kg, pbt, volume_m3, situacao_siat, numero_tag, tag_pedagio, motorista_id, ativo, motoristas(nome, celular, sigla, cpf, fornecedor, cert_antt, cert_antt_validade)')
         .order('placa', { ascending: true })
         .range(from, to),
     ),
@@ -106,6 +115,10 @@ export async function listarVeiculos(): Promise<VeiculoDaFrota[]> {
 
   return rows.map(row => {
     const disp = dispMap.get(row.id as string)
+    const m = row.motoristas as {
+      nome?: string; celular?: string; sigla?: string
+      cpf?: string; fornecedor?: string; cert_antt?: string; cert_antt_validade?: string
+    } | null
     return {
       id:                     row.id as string,
       placa:                  row.placa as string,
@@ -113,12 +126,21 @@ export async function listarVeiculos(): Promise<VeiculoDaFrota[]> {
       categoria:              (row.categoria       as string | null) ?? '',
       tipo_veiculo:           (row.tipo_veiculo    as string | null) ?? '',
       tipo_carroceria:        (row.tipo_carroceria as string | null) ?? '',
+      tipo_frota:             (row.tipo_frota      as string | null) ?? '',
       capacidade_kg:          parseFloat(String(row.capacidade_kg ?? '0')) || 0,
       pbt:                    row.pbt      != null ? parseFloat(String(row.pbt))      : null,
       volume_m3:              row.volume_m3 != null ? parseFloat(String(row.volume_m3)) : null,
       situacao_siat:          (row.situacao_siat   as string | null) ?? '',
+      numero_tag:             (row.numero_tag      as string | null) ?? null,
+      tag_pedagio:            (row.tag_pedagio     as boolean | null) ?? null,
       motorista_id:           (row.motorista_id    as string | null) ?? null,
-      motorista_nome:         (row.motoristas as { nome?: string } | null)?.nome ?? null,
+      motorista_nome:         m?.nome    ?? null,
+      motorista_sigla:        m?.sigla   ?? null,
+      motorista_celular:      m?.celular ?? null,
+      motorista_cpf:                m?.cpf                ?? null,
+      motorista_fornecedor:         m?.fornecedor         ?? null,
+      motorista_cert_antt:          m?.cert_antt          ?? null,
+      motorista_cert_antt_validade: m?.cert_antt_validade ?? null,
       ativo:                  (row.ativo           as boolean | null) ?? true,
       disponivel_hoje:        disp?.disponivel ?? false,
       disponibilidade_origem: disp?.origem ?? null,

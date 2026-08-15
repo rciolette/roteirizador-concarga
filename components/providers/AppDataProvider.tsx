@@ -117,7 +117,6 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const bootstrapped   = useRef(false)
-  const nfImportedRef  = useRef(false)
 
   const refresh = useCallback(async () => {
     setLoadingRotas(true)
@@ -231,13 +230,10 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     bootstrap()
   }, [usuario])
 
-  // Dispara a consulta ao SIAT assim que o usuário estiver autenticado,
-  // garantindo que a sessão já está disponível no servidor ao chamar /api/siat.
-  useEffect(() => {
-    if (!usuario || nfImportedRef.current) return
-    nfImportedRef.current = true
-    importarNFs()
-  }, [usuario, importarNFs])
+  // Pedido do Marcelo (11/08/26, item 4) — reforço em 15/08: NENHUMA importação
+  // automática de notas, nem mesmo no login/recarga da página. O useEffect que
+  // disparava importarNFs() aqui foi removido; a importação é sempre manual
+  // (botão "Importar NFs" / SiatImportDialog).
 
   const dismissNFImport = useCallback(() => {
     setNfImportState({ running: false, step: '', progress: 0 })
