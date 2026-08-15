@@ -191,7 +191,13 @@ export async function queryVeiculosDisponiveis(): Promise<SiatRow[]> {
       c.TIPMOT                             AS TipoMotoristaCodigo,
       h.TIPMOT_DES                         AS TipoMotoristaDesc,
       a.TIPFRO                             AS TipoFrotaCodigo,
-      g.TIPFRO_D                           AS TipoFrotaDesc
+      g.TIPFRO_D                           AS TipoFrotaDesc,
+      c.CPF                                AS CpfMotorista,
+      c.FORNECEDOR                         AS Fornecedor,
+      c.CERT_ANTT                          AS CertAntt,
+      c.CERT_ANTT_VALIDADE                 AS CertAnttValidade,
+      a.NumeroTag                          AS NumeroTag,
+      a.TAG_PEDAGIO                        AS TagPedagio
     FROM [TAB DE VEICULOS] a
     INNER JOIN [TAB MOT ADM] b         ON b.PLACA_VEI = a.PLACA
     INNER JOIN [TAB DE MOTORISTAS] c   ON c.MOTORISTA = b.MOTORISTA

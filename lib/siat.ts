@@ -67,6 +67,14 @@ export interface SiatRow {
   TipoMotoristaDesc?:   string | null
   TipoFrotaCodigo?:     string | null
   TipoFrotaDesc?:       string | null
+  // Campos para o grid de Vinculados (item 3 do Marcelo). Vld.Seguro não
+  // existe nas tabelas de veículo/motorista do SIAT — pendência com o Marcelo.
+  CpfMotorista?:        string | null
+  Fornecedor?:          string | null
+  CertAntt?:            string | null
+  CertAnttValidade?:    string | Date | null
+  NumeroTag?:           string | null
+  TagPedagio?:          boolean | number | null
   Capacidade?:       number | null   // alias legado
   Volume_M3?:        number | null   // alias legado
   Motorista?:        string | null   // alias legado

@@ -472,7 +472,9 @@ export default function FrotaPage() {
     if (buscaVi) {
       const q = buscaVi.toLowerCase()
       if (!v.placa.toLowerCase().includes(q) &&
-          !(v.motorista_nome ?? '').toLowerCase().includes(q)) return false
+          !(v.motorista_nome ?? '').toLowerCase().includes(q) &&
+          !(v.motorista_cpf ?? '').includes(q) &&
+          !(v.motorista_fornecedor ?? '').toLowerCase().includes(q)) return false
     }
     if (filtroTipoVi && v.tipo_veiculo !== filtroTipoVi) return false
     return true
@@ -876,15 +878,18 @@ export default function FrotaPage() {
               )}
             </div>
 
-            {loadingVi ? <TableSkeleton cols={8} /> : vinculadosFiltrados.length === 0 ? (
+            {loadingVi ? <TableSkeleton cols={11} /> : vinculadosFiltrados.length === 0 ? (
               <div className="py-10 text-center text-subtle text-[13px]">Nenhum vínculo encontrado.</div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-[0.5px] border-[var(--border-subtle)]">
-                      <TH>Tipo</TH><TH>Placa</TH><TH>Modelo</TH><TH>Cap. (kg)</TH>
-                      <TH>Motorista</TH><TH>Sigla</TH><TH>Celular</TH><TH>Situação SIAT</TH>
+                      {/* Ordem pedida pelo Marcelo (item 3). Vld.Seguro não existe
+                          no SIAT — coluna omitida até definir a fonte. */}
+                      <TH>Tipo</TH><TH>Placa</TH><TH>ANTT</TH><TH>Sigla</TH><TH>CPF</TH>
+                      <TH>Motorista</TH><TH>Celular</TH><TH>Fornecedor</TH><TH>TAG</TH>
+                      <TH>Cap. (kg)</TH><TH>Situação SIAT</TH>
                     </tr>
                   </thead>
                   <tbody>
@@ -892,15 +897,24 @@ export default function FrotaPage() {
                       <tr key={v.id} className={cn('border-b border-[0.5px] border-[var(--border-faint)] transition-colors', i % 2 !== 0 && 'bg-cream/40', 'hover:bg-primary-bg/30')}>
                         <TD medium>{v.tipo_veiculo || '—'}</TD>
                         <td className="px-4 py-2.5 text-xs font-mono font-medium text-base">{v.placa}</td>
-                        <TD medium>{v.modelo || '—'}</TD>
-                        <td className="px-4 py-2.5 text-xs text-muted tabular-nums text-right">
-                          {v.capacidade_kg ? v.capacidade_kg.toLocaleString('pt-BR') : '—'}
+                        <td className="px-4 py-2.5 text-xs font-mono text-muted whitespace-nowrap" title={v.motorista_cert_antt_validade ? `Validade: ${v.motorista_cert_antt_validade.split('-').reverse().join('/')}` : undefined}>
+                          {v.motorista_cert_antt || '—'}
                         </td>
+                        <TD mono>{v.motorista_sigla || '—'}</TD>
+                        <td className="px-4 py-2.5 text-xs font-mono text-muted whitespace-nowrap">{v.motorista_cpf || '—'}</td>
                         <td className="px-4 py-2.5 text-xs font-medium text-base">
                           {v.motorista_nome ?? <span className="italic text-subtle">sem motorista</span>}
                         </td>
-                        <TD mono>{v.motorista_sigla || '—'}</TD>
                         <td className="px-4 py-2.5 text-xs font-mono text-muted">{v.motorista_celular || '—'}</td>
+                        <td className="px-4 py-2.5 text-xs text-muted max-w-[140px] truncate" title={v.motorista_fornecedor || undefined}>
+                          {v.motorista_fornecedor || '—'}
+                        </td>
+                        <td className="px-4 py-2.5 text-xs font-mono text-muted whitespace-nowrap">
+                          {v.numero_tag || (v.tag_pedagio ? '✓' : '—')}
+                        </td>
+                        <td className="px-4 py-2.5 text-xs text-muted tabular-nums text-right">
+                          {v.capacidade_kg ? v.capacidade_kg.toLocaleString('pt-BR') : '—'}
+                        </td>
                         <td className="px-4 py-2.5"><SituacaoBadge situacao={v.situacao_siat} /></td>
                       </tr>
                     ))}

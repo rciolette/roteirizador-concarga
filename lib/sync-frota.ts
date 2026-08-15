@@ -110,7 +110,10 @@ export async function syncFrotaDoSiat(): Promise<{ motoristas: number; veiculos:
   const admin = getAdminSupabase()
 
   // 1. Coletar motoristas únicos pelo CodMotorista
-  const motoristasMap = new Map<string, { nome: string; telefone: string; celular: string; tipoCod: string; tipoDesc: string }>()
+  const motoristasMap = new Map<string, {
+    nome: string; telefone: string; celular: string; tipoCod: string; tipoDesc: string
+    cpf: string; fornecedor: string; certAntt: string; certAnttValidade: string | null
+  }>()
   for (const row of rows) {
     const cod = row.CodMotorista ? String(row.CodMotorista).trim() : null
     if (!cod || motoristasMap.has(cod)) continue
@@ -121,6 +124,12 @@ export async function syncFrotaDoSiat(): Promise<{ motoristas: number; veiculos:
       celular:  cleanPhone(row.Celular),
       tipoCod:  row.TipoMotoristaCodigo ? String(row.TipoMotoristaCodigo).trim() : '',
       tipoDesc: row.TipoMotoristaDesc   ? String(row.TipoMotoristaDesc).trim()   : '',
+      cpf:        row.CpfMotorista ? String(row.CpfMotorista).trim() : '',
+      fornecedor: row.Fornecedor && String(row.Fornecedor).trim() !== '.' ? String(row.Fornecedor).trim() : '',
+      certAntt:   row.CertAntt ? String(row.CertAntt).trim() : '',
+      certAnttValidade: row.CertAnttValidade
+        ? new Date(row.CertAnttValidade as string | Date).toISOString().slice(0, 10)
+        : null,
     })
   }
 
@@ -137,6 +146,11 @@ export async function syncFrotaDoSiat(): Promise<{ motoristas: number; veiculos:
     sigla:          deriveSigla(m.nome),
     tipo_motorista: m.tipoCod ? `${m.tipoCod}/${m.tipoDesc || '?'}` : null,
     ativo:          m.tipoCod === '03',
+    // Campos do grid de Vinculados (item 3 do Marcelo)
+    cpf:                m.cpf        || null,
+    fornecedor:         m.fornecedor || null,
+    cert_antt:          m.certAntt   || null,
+    cert_antt_validade: m.certAnttValidade,
   }))
 
   for (const chunk of chunked(motoristasPayload, 500)) {
@@ -184,6 +198,9 @@ export async function syncFrotaDoSiat(): Promise<{ motoristas: number; veiculos:
         // o Marcelo usa para marcar a frota real do projeto.
         tipo_frota:            tipoFroCod ? `${tipoFroCod}/${tipoFroDesc || '?'}` : null,
         ativo:                 tipoFroCod === '005',
+        // TAG de pedágio (item 3 do Marcelo)
+        numero_tag:            row.NumeroTag ? String(row.NumeroTag).trim() : null,
+        tag_pedagio:           row.TagPedagio != null ? Boolean(row.TagPedagio) : null,
         updated_at:            new Date().toISOString(),
       }
     })

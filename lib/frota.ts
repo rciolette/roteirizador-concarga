@@ -36,15 +36,20 @@ export interface VinculadoDaFrota {
   placa: string
   modelo: string
   tipo_veiculo: string
+  tipo_frota: string
   capacidade_kg: number
   situacao_siat: string
+  numero_tag: string | null
+  tag_pedagio: boolean | null
   motorista_nome: string | null
   motorista_celular: string | null
   motorista_sigla: string | null
-  // NOTA (pedido do Marcelo, item 3): ANTT, CPF, Fornecedor, TAG e Vld.Seguro
-  // foram pedidos na grade mas não existem hoje em `motoristas`/`veiculos` nem
-  // na query SIAT (`lib/siat-db.ts:queryVeiculosDisponiveis`). Precisam ser
-  // mapeados no SIAT e adicionados ao sync antes de aparecerem aqui.
+  motorista_cpf: string | null
+  motorista_fornecedor: string | null
+  motorista_cert_antt: string | null
+  motorista_cert_antt_validade: string | null
+  // NOTA: Vld.Seguro (pedido do Marcelo, item 3) não existe nas tabelas de
+  // veículo/motorista do SIAT — pendência em aberto com o Marcelo.
 }
 
 export interface CapacidadeVeiculo {
@@ -128,7 +133,7 @@ export async function listarVinculados(): Promise<VinculadoDaFrota[]> {
   const rows = await fetchAllPages<Record<string, unknown>>(
     (from, to) => sb
       .from('veiculos')
-      .select('id, placa, modelo, tipo_veiculo, capacidade_kg, situacao_siat, motorista_id, disponivel_hoje, motoristas(nome, celular, sigla)')
+      .select('id, placa, modelo, tipo_veiculo, tipo_frota, capacidade_kg, situacao_siat, numero_tag, tag_pedagio, motorista_id, disponivel_hoje, motoristas(nome, celular, sigla, cpf, fornecedor, cert_antt, cert_antt_validade)')
       .eq('ativo', true)
       .eq('disponivel_hoje', true)
       .not('motorista_id', 'is', null)
@@ -137,17 +142,27 @@ export async function listarVinculados(): Promise<VinculadoDaFrota[]> {
   )
 
   return rows.map(row => {
-    const m = row.motoristas as { nome?: string; celular?: string; sigla?: string } | null
+    const m = row.motoristas as {
+      nome?: string; celular?: string; sigla?: string
+      cpf?: string; fornecedor?: string; cert_antt?: string; cert_antt_validade?: string
+    } | null
     return {
       id:                row.id as string,
       placa:             row.placa as string,
       modelo:            (row.modelo       as string | null) ?? '',
       tipo_veiculo:      (row.tipo_veiculo  as string | null) ?? '',
+      tipo_frota:        (row.tipo_frota    as string | null) ?? '',
       capacidade_kg:     (row.capacidade_kg as number | null) ?? 0,
       situacao_siat:     (row.situacao_siat as string | null) ?? '',
+      numero_tag:        (row.numero_tag    as string | null) ?? null,
+      tag_pedagio:       (row.tag_pedagio   as boolean | null) ?? null,
       motorista_nome:    m?.nome    ?? null,
       motorista_celular: m?.celular ?? null,
       motorista_sigla:   m?.sigla   ?? null,
+      motorista_cpf:                m?.cpf                ?? null,
+      motorista_fornecedor:         m?.fornecedor         ?? null,
+      motorista_cert_antt:          m?.cert_antt          ?? null,
+      motorista_cert_antt_validade: m?.cert_antt_validade ?? null,
     }
   })
 }
