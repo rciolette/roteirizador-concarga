@@ -66,6 +66,8 @@ export interface AppData {
   nfsDesmarcadas:    Set<string>
   toggleNfDesmarcada: (numnfs: string) => void
   limparNfsDesmarcadas: () => void
+  /** Marca ou desmarca várias NFs de uma vez (seleção múltipla no grid). */
+  setNfsDesmarcadasBulk: (numnfs: string[], desmarcar: boolean) => void
 }
 
 const AppDataContext = createContext<AppData | null>(null)
@@ -102,6 +104,17 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const limparNfsDesmarcadas = useCallback(() => setNfsDesmarcadas(new Set()), [])
+
+  const setNfsDesmarcadasBulk = useCallback((numnfs: string[], desmarcar: boolean) => {
+    setNfsDesmarcadas(prev => {
+      const next = new Set(prev)
+      for (const n of numnfs) {
+        if (desmarcar) next.add(n)
+        else next.delete(n)
+      }
+      return next
+    })
+  }, [])
 
   const bootstrapped   = useRef(false)
   const nfImportedRef  = useRef(false)
@@ -237,7 +250,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       loadingRotas: usuario ? loadingRotas : false,
       nfRows, nfsPendentes, nfImportState, config,
       refresh, refreshVeiculos, importarNFs, dismissNFImport, setRotas, setConfig,
-      nfsDesmarcadas, toggleNfDesmarcada, limparNfsDesmarcadas,
+      nfsDesmarcadas, toggleNfDesmarcada, limparNfsDesmarcadas, setNfsDesmarcadasBulk,
     }}>
       {children}
     </AppDataContext.Provider>

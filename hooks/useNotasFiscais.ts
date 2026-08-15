@@ -57,6 +57,12 @@ interface UseNotasFiscaisResult {
   opcoesFiltro: Record<keyof NotasFiltros, string[]>
   toggleSelecionada: (numnfs: string) => void
   limparDesmarcacoes: () => void
+  /** Seleção múltipla: quantas NFs do conjunto filtrado estão selecionadas. */
+  totalFiltradasSelecionadas: number
+  /** Marca todas as NFs do filtro atual para roteirização. */
+  marcarFiltradas: () => void
+  /** Desmarca todas as NFs do filtro atual da roteirização. */
+  desmarcarFiltradas: () => void
 }
 
 function opcoesUnicas(valores: (string | undefined)[]): string[] {
@@ -64,7 +70,7 @@ function opcoesUnicas(valores: (string | undefined)[]): string[] {
 }
 
 export function useNotasFiscais(defaultPageSize: PageSize = 25): UseNotasFiscaisResult {
-  const { nfsPendentes, nfImportState, nfsDesmarcadas, toggleNfDesmarcada, limparNfsDesmarcadas } = useAppData()
+  const { nfsPendentes, nfImportState, nfsDesmarcadas, toggleNfDesmarcada, limparNfsDesmarcadas, setNfsDesmarcadasBulk } = useAppData()
   const [page, setPage] = useState(0)
   const [pageSize, setPageSizeState] = useState<PageSize>(defaultPageSize)
   const [filtros, setFiltros] = useState<NotasFiltros>(FILTROS_VAZIOS)
@@ -143,6 +149,21 @@ export function useNotasFiscais(defaultPageSize: PageSize = 25): UseNotasFiscais
     setPage(0)
   }
 
+  // Seleção múltipla sobre o conjunto FILTRADO inteiro (não só a página atual).
+  const numsFiltradas = useMemo(() => sorted.map(n => n.numnfs), [sorted])
+  const totalFiltradasSelecionadas = useMemo(
+    () => numsFiltradas.reduce((acc, n) => acc + (nfsDesmarcadas.has(n) ? 0 : 1), 0),
+    [numsFiltradas, nfsDesmarcadas],
+  )
+
+  function marcarFiltradas() {
+    setNfsDesmarcadasBulk(numsFiltradas, false)
+  }
+
+  function desmarcarFiltradas() {
+    setNfsDesmarcadasBulk(numsFiltradas, true)
+  }
+
   return {
     rows,
     total,
@@ -159,5 +180,8 @@ export function useNotasFiscais(defaultPageSize: PageSize = 25): UseNotasFiscais
     opcoesFiltro,
     toggleSelecionada: toggleNfDesmarcada,
     limparDesmarcacoes: limparNfsDesmarcadas,
+    totalFiltradasSelecionadas,
+    marcarFiltradas,
+    desmarcarFiltradas,
   }
 }

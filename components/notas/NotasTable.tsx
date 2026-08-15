@@ -1,4 +1,5 @@
 'use client'
+import { useEffect, useRef } from 'react'
 import { cn } from '@/lib/utils'
 import { useNotasFiscais, type PageSize, type NotasFiltros } from '@/hooks/useNotasFiscais'
 
@@ -59,12 +60,22 @@ export function NotasTable() {
   const {
     rows, total, totalDesmarcadas, page, pageSize, setPage, setPageSize, loading, error,
     filtros, setFiltro, limparFiltros, opcoesFiltro, toggleSelecionada, limparDesmarcacoes,
+    totalFiltradasSelecionadas, marcarFiltradas, desmarcarFiltradas,
   } = useNotasFiscais(25)
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
   const from = page * pageSize + 1
   const to = Math.min((page + 1) * pageSize, total)
   const filtrosAtivos = Object.values(filtros).some(Boolean)
+
+  // Checkbox-mestre do cabeçalho: marcado quando todas as NFs filtradas estão
+  // selecionadas, indeterminado quando só parte delas está.
+  const todasSelecionadas = total > 0 && totalFiltradasSelecionadas === total
+  const algumaSelecionada = totalFiltradasSelecionadas > 0 && !todasSelecionadas
+  const masterRef = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    if (masterRef.current) masterRef.current.indeterminate = algumaSelecionada
+  }, [algumaSelecionada])
 
   return (
     <div className="flex flex-col min-h-0">
@@ -97,12 +108,16 @@ export function NotasTable() {
             Limpar filtros
           </button>
         )}
-        {totalDesmarcadas > 0 && (
-          <span className="text-[11px] text-muted ml-auto flex items-center gap-1.5">
-            {totalDesmarcadas} nota{totalDesmarcadas !== 1 ? 's' : ''} desmarcada{totalDesmarcadas !== 1 ? 's' : ''} da roteirização
-            <button onClick={limparDesmarcacoes} className="text-primary hover:underline">restaurar</button>
-          </span>
-        )}
+        <span className="text-[11px] text-muted ml-auto flex items-center gap-2">
+          {total > 0 && (
+            <span className={cn(totalFiltradasSelecionadas < total && 'text-warn font-medium')}>
+              {totalFiltradasSelecionadas}/{total} selecionada{totalFiltradasSelecionadas !== 1 ? 's' : ''} p/ roteirizar
+            </span>
+          )}
+          {totalDesmarcadas > 0 && (
+            <button onClick={limparDesmarcacoes} className="text-primary hover:underline">restaurar todas</button>
+          )}
+        </span>
       </div>
 
       {/* Tabela com scroll */}
@@ -110,7 +125,15 @@ export function NotasTable() {
         <table className="w-full text-[12px] border-collapse">
           <thead className="sticky top-0 z-10">
             <tr className="bg-cream dark:bg-hover border-b border-[var(--border-light)]">
-              <th className="px-2 py-2 text-center font-medium text-muted whitespace-nowrap w-8">✓</th>
+              <th className="px-2 py-2 text-center font-medium text-muted whitespace-nowrap w-8">
+                <input
+                  ref={masterRef}
+                  type="checkbox"
+                  checked={todasSelecionadas}
+                  onChange={() => (todasSelecionadas ? desmarcarFiltradas() : marcarFiltradas())}
+                  title={todasSelecionadas ? 'Desmarcar todas as filtradas' : 'Marcar todas as filtradas'}
+                />
+              </th>
               <th className="px-3 py-2 text-left font-medium text-muted whitespace-nowrap">NF</th>
               <th className="px-3 py-2 text-left font-medium text-muted whitespace-nowrap">Destinatário</th>
               <th className="px-3 py-2 text-left font-medium text-muted whitespace-nowrap">Município</th>
