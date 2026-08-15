@@ -1,13 +1,18 @@
+import { after } from 'next/server'
 import type { GerarRotasPayload } from '@/lib/webhooks'
 import { resolveWebhookUrl } from '@/lib/config-server'
 import { exigirPermissao } from '@/lib/auth-server'
+import { executarRoteirizacaoInterna } from '@/lib/roteirizador/engine'
+import { resolveEngineConfig } from '@/lib/roteirizador/config'
 
 const GERAR_ROTAS_DEFAULT = 'https://n8n.rcdigitais.com.br/webhook/gerar-rotas'
 
-// O WF-B responde na hora (202) e segue processando em background, gravando as
-// rotas direto no Supabase. Aqui só esperamos o aceite — a roteirização em si
-// leva minutos e o painel acompanha por polling. Este timeout cobre apenas o
-// handshake; não é o orçamento da geração.
+// Engine interno roda a IA dentro desta função (após responder o 202) — a
+// roteirização leva minutos, então estendemos o orçamento da função na Vercel.
+export const maxDuration = 300
+
+// O aceite responde na hora (202) e o processamento segue em background,
+// gravando as rotas direto no Supabase. O painel acompanha por polling.
 const TIMEOUT_ACEITE_MS = 45_000
 
 export async function POST(req: Request) {
@@ -23,6 +28,29 @@ export async function POST(req: Request) {
       return Response.json({ error: 'payload inválido' }, { status: 400 })
     }
 
+    const config = await resolveEngineConfig()
+
+    // ── Engine INTERNO: IA roda no próprio app; prompt mestre no repositório ──
+    if (config.engine === 'interno') {
+      if (!process.env.OPENAI_API_KEY) {
+        return Response.json(
+          { error: 'Engine interno ativado mas OPENAI_API_KEY não está configurada na Vercel' },
+          { status: 500 },
+        )
+      }
+      // Responde o aceite imediatamente e processa depois da resposta.
+      after(async () => {
+        try {
+          await executarRoteirizacaoInterna(payload, config.modelo)
+        } catch { /* já logado no engine */ }
+      })
+      return Response.json(
+        { aceito: true, engine: 'interno', recebidoEm: new Date().toISOString() },
+        { status: 202 },
+      )
+    }
+
+    // ── Engine n8n (legado): proxy para o webhook do WF-B ────────────────────
     webhookUrl = await resolveWebhookUrl('gerarRotasWebhookUrl', 'GERAR_ROTAS_WEBHOOK_URL', GERAR_ROTAS_DEFAULT)
 
     let upstream: globalThis.Response
@@ -58,10 +86,6 @@ export async function POST(req: Request) {
     const body = await upstream.json().catch(() => null)
     if (body === null) return Response.json({ error: 'n8n retornou resposta inválida' }, { status: 502 })
 
-    // Dois modos aceitos:
-    //  - assíncrono (atual): o WF-B confirma o aceite e grava as rotas depois;
-    //  - síncrono (legado): o WF-B devolve as rotas prontas no corpo.
-    // O painel decide o que fazer olhando `aceito`.
     const rotasNoCorpo = Array.isArray((body as { rotas?: unknown }).rotas)
     return Response.json({ ...body, aceito: !rotasNoCorpo }, { status: 202 })
 

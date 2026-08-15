@@ -11,6 +11,7 @@ import { useAuth } from '@/components/providers/AuthProvider'
 import { salvarConfig, salvarWebhooks, carregarWebhooks, type WebhookConfig } from '@/lib/config-store'
 import { cn } from '@/lib/utils'
 import { GradeCidadesTable } from '@/components/ui/GradeCidadesTable'
+import { AgenteRoteirizadorCard } from '@/components/ui/AgenteRoteirizadorCard'
 import { RotasCadastradasTable } from '@/components/ui/RotasCadastradasTable'
 import { LogsAtividadeTable } from '@/components/ui/LogsAtividadeTable'
 import type { Perfil } from '@/lib/auth'
@@ -268,6 +269,8 @@ export default function ConfiguracoesPage() {
         {/* ── Aba Operação ── */}
         {tab === 'operacao' && (
           <>
+            {/* So renderiza para rciolette@gmail.com (gate duplo: UI + API) */}
+            <AgenteRoteirizadorCard />
             <Card>
               <CardHeader><span className="text-xs font-medium">Horários de operação</span></CardHeader>
               <div className="px-4 py-4">
