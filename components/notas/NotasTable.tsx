@@ -161,13 +161,13 @@ export function NotasTable() {
                   key={row.id}
                   className={cn(
                     'border-b border-[var(--border-faint)] last:border-0',
-                    // A cor da linha é sempre aplicada (verde p/ destinatário
-                    // repetido, zebra nas demais); desmarcar só esmaece a linha
-                    // por cima da cor — pedido do Raphael, 15/08/26.
+                    // Pedido do Raphael (15/08/26): a linha mantém SEMPRE sua
+                    // cor normal (verde p/ destinatário repetido, zebra nas
+                    // demais) — desmarcar não escurece nem esmaece nada; o
+                    // estado é indicado apenas pelo checkbox.
                     row.mesmoDestAnterior
                       ? 'bg-success-bg'
                       : (i % 2 === 0 ? 'bg-surface' : 'bg-cream/30 dark:bg-[#1A1918]/40'),
-                    !row.selecionada && 'opacity-40',
                   )}
                 >
                   <td className="px-2 py-2 text-center">

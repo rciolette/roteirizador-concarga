@@ -109,6 +109,18 @@ export async function syncFrotaDoSiat(): Promise<{ motoristas: number; veiculos:
   const rows = await queryVeiculosDisponiveis()
   const admin = getAdminSupabase()
 
+  // O sync é AUTORITATIVO sobre `ativo`: primeiro desativa toda a base, depois
+  // o upsert reativa apenas quem é TAC (motoristas, TIPMOT=03) ou frota
+  // disponível (veículos, TIPFRO=005). Sem isso, cadastros que ficam fora da
+  // consulta do SIAT (ex.: veículo sem motorista vinculado) nunca eram
+  // desativados e a frota "ativa" ficava inflada (~1.6k em vez de ~108).
+  {
+    const { error: e1 } = await admin.from('motoristas').update({ ativo: false }).not('id', 'is', null)
+    if (e1) throw new Error(`Erro ao resetar ativo de motoristas: ${e1.message}`)
+    const { error: e2 } = await admin.from('veiculos').update({ ativo: false }).not('id', 'is', null)
+    if (e2) throw new Error(`Erro ao resetar ativo de veículos: ${e2.message}`)
+  }
+
   // 1. Coletar motoristas únicos pelo CodMotorista
   const motoristasMap = new Map<string, {
     nome: string; telefone: string; celular: string; tipoCod: string; tipoDesc: string
