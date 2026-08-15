@@ -60,6 +60,13 @@ export interface SiatRow {
   NomeMotorista?:    string | null
   Telefone?:         string | null
   Celular?:          string | null
+  // Tipos confirmados no SIAT em 14/08/26 (itens 1 e 2 do Marcelo):
+  // TAB TIPMOT: 01=AJUDANTE, 02=DESCARGA, 03=TAC
+  // TAB TIPFRO: 001=FROTA, 002=AGREGADO, 003=CARRETEIRO, 004=ENTR.FRAC., 005=DISPONIVEL
+  TipoMotoristaCodigo?: string | null
+  TipoMotoristaDesc?:   string | null
+  TipoFrotaCodigo?:     string | null
+  TipoFrotaDesc?:       string | null
   Capacidade?:       number | null   // alias legado
   Volume_M3?:        number | null   // alias legado
   Motorista?:        string | null   // alias legado

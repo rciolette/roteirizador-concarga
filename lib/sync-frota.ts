@@ -110,7 +110,7 @@ export async function syncFrotaDoSiat(): Promise<{ motoristas: number; veiculos:
   const admin = getAdminSupabase()
 
   // 1. Coletar motoristas únicos pelo CodMotorista
-  const motoristasMap = new Map<string, { nome: string; telefone: string; celular: string }>()
+  const motoristasMap = new Map<string, { nome: string; telefone: string; celular: string; tipoCod: string; tipoDesc: string }>()
   for (const row of rows) {
     const cod = row.CodMotorista ? String(row.CodMotorista).trim() : null
     if (!cod || motoristasMap.has(cod)) continue
@@ -119,17 +119,24 @@ export async function syncFrotaDoSiat(): Promise<{ motoristas: number; veiculos:
       nome,
       telefone: cleanPhone(row.Telefone),
       celular:  cleanPhone(row.Celular),
+      tipoCod:  row.TipoMotoristaCodigo ? String(row.TipoMotoristaCodigo).trim() : '',
+      tipoDesc: row.TipoMotoristaDesc   ? String(row.TipoMotoristaDesc).trim()   : '',
     })
   }
 
   // 2. Upsert motoristas em lotes
+  // Pedido do Marcelo (11/08/26, item 1): motorista nasce ativo por padrão
+  // quando tipo motorista = 03/TAC ([TAB TIPMOT], campo TIPMOT em
+  // [TAB DE MOTORISTAS] — confirmado no SIAT em 14/08/26). Os demais tipos
+  // (ou sem tipo) entram inativos e podem ser ativados manualmente na Frota.
   const motoristasPayload = Array.from(motoristasMap.entries()).map(([cod, m]) => ({
-    codigo_siat: cod,
-    nome:        m.nome,
-    telefone:    m.telefone,
-    celular:     m.celular,
-    sigla:       deriveSigla(m.nome),
-    ativo:       true,
+    codigo_siat:    cod,
+    nome:           m.nome,
+    telefone:       m.telefone,
+    celular:        m.celular,
+    sigla:          deriveSigla(m.nome),
+    tipo_motorista: m.tipoCod ? `${m.tipoCod}/${m.tipoDesc || '?'}` : null,
+    ativo:          m.tipoCod === '03',
   }))
 
   for (const chunk of chunked(motoristasPayload, 500)) {
@@ -157,6 +164,8 @@ export async function syncFrotaDoSiat(): Promise<{ motoristas: number; veiculos:
     .filter(r => r.Placa)
     .map(row => {
       const cod = row.CodMotorista ? String(row.CodMotorista).trim() : null
+      const tipoFroCod  = row.TipoFrotaCodigo ? String(row.TipoFrotaCodigo).trim() : ''
+      const tipoFroDesc = row.TipoFrotaDesc   ? String(row.TipoFrotaDesc).trim()   : ''
       return {
         placa:                 String(row.Placa!).trim().toUpperCase(),
         modelo:                row.Modelo        ? String(row.Modelo)        : null,
@@ -170,13 +179,11 @@ export async function syncFrotaDoSiat(): Promise<{ motoristas: number; veiculos:
         codigo_siat_motorista: cod,
         motorista_id:          cod ? (motoristaIdMap.get(cod) ?? null) : null,
         // Pedido do Marcelo (11/08/26, item 2): veículo nasce ativo por padrão
-        // quando a situação SIAT indica frota disponível. `situacaoEhDisponivel`
-        // já existia aqui (usada em seedDisponibilidadeHoje) — é um proxy pelo
-        // texto da situação (`d.VEISIT_D`), já que a query atual não traz o
-        // código numérico "005". Se precisar do código exato, ajustar a query
-        // em lib/siat-db.ts:queryVeiculosDisponiveis para trazer `a.VEISIT`
-        // (código) e comparar === '005'.
-        ativo:                 situacaoEhDisponivel(row.Situacao),
+        // quando tipo de frota = 005/Disponível ([TAB TIPFRO], campo TIPFRO em
+        // [TAB DE VEICULOS] — confirmado no SIAT em 14/08/26). É o código que
+        // o Marcelo usa para marcar a frota real do projeto.
+        tipo_frota:            tipoFroCod ? `${tipoFroCod}/${tipoFroDesc || '?'}` : null,
+        ativo:                 tipoFroCod === '005',
         updated_at:            new Date().toISOString(),
       }
     })

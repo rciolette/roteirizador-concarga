@@ -187,13 +187,19 @@ export async function queryVeiculosDisponiveis(): Promise<SiatRow[]> {
       c.MOTORISTA                          AS CodMotorista,
       c.NOME                               AS NomeMotorista,
       CONCAT(c.FONE_DDD,    '-', c.FONE)   AS Telefone,
-      CONCAT(c.CELULAR_DDD, '-', c.CELULAR) AS Celular
+      CONCAT(c.CELULAR_DDD, '-', c.CELULAR) AS Celular,
+      c.TIPMOT                             AS TipoMotoristaCodigo,
+      h.TIPMOT_DES                         AS TipoMotoristaDesc,
+      a.TIPFRO                             AS TipoFrotaCodigo,
+      g.TIPFRO_D                           AS TipoFrotaDesc
     FROM [TAB DE VEICULOS] a
     INNER JOIN [TAB MOT ADM] b         ON b.PLACA_VEI = a.PLACA
     INNER JOIN [TAB DE MOTORISTAS] c   ON c.MOTORISTA = b.MOTORISTA
     LEFT JOIN [TAB VEISIT] d          ON d.VEISIT    = a.VEISIT
     LEFT JOIN [TAB TIPO VEICULO] e    ON e.TIPVEI    = a.TIPVEI
     LEFT JOIN [TAB TIPO CARROCERIA] f ON f.TIPCAR    = a.TIPCAR
+    LEFT JOIN [TAB TIPFRO] g          ON g.TIPFRO    = a.TIPFRO
+    LEFT JOIN [TAB TIPMOT] h          ON h.TIPMOT    = c.TIPMOT
     ORDER BY a.PLACA
   `)
   return result.recordset
