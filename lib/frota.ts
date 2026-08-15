@@ -92,7 +92,7 @@ export async function listarVeiculos(): Promise<VeiculoDaFrota[]> {
   const sb = getSupabaseBrowser()
   const hoje = new Date().toISOString().slice(0, 10)
 
-  const [rows, dispResult] = await Promise.all([
+  const [rows, dispRows] = await Promise.all([
     fetchAllPages<Record<string, unknown>>(
       (from, to) => sb
         .from('veiculos')
@@ -100,13 +100,19 @@ export async function listarVeiculos(): Promise<VeiculoDaFrota[]> {
         .order('placa', { ascending: true })
         .range(from, to),
     ),
-    sb.from('veiculo_disponibilidade')
-      .select('veiculo_id, disponivel, origem')
-      .eq('data', hoje),
+    // fetchAllPages: o PostgREST corta em 1000 linhas — sem paginar, a tela
+    // mostrava "1000 disponíveis hoje" como teto artificial.
+    fetchAllPages<Record<string, unknown>>(
+      (from, to) => sb
+        .from('veiculo_disponibilidade')
+        .select('veiculo_id, disponivel, origem')
+        .eq('data', hoje)
+        .range(from, to),
+    ),
   ])
 
   const dispMap = new Map<string, { disponivel: boolean; origem: 'siat_sugerido' | 'operador' }>()
-  for (const d of dispResult.data ?? []) {
+  for (const d of dispRows) {
     dispMap.set(d.veiculo_id as string, {
       disponivel: d.disponivel as boolean,
       origem: d.origem as 'siat_sugerido' | 'operador',

@@ -381,6 +381,7 @@ export default function FrotaPage() {
         {/* ── Veículos ── */}
 
           <Card>
+            {/* Cabeçalho: título + contadores à esquerda, busca à direita */}
             <CardHeader>
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-xs font-medium text-base">Veículos</span>
@@ -393,59 +394,68 @@ export default function FrotaPage() {
                   </span>
                 )}
               </div>
-              <div className="flex items-center gap-2 flex-wrap justify-end">
-                <ExportMenuFrota rows={veiculosParaLinhas(veiculosFiltrados)} nomeBase="veiculos" />
-                <Btn size="sm" onClick={handleSincronizarSIAT} disabled={syncingM}>
-                  {syncingM ? 'Sincronizando...' : '↺ Sincronizar com SIAT'}
-                </Btn>
-                <Btn
-                  size="sm"
-                  variant="primary"
-                  onClick={handleMarcarFrotaPadrao}
-                  disabled={veiculos.length === 0}
-                >
-                  ✓ Frota padrão disponível hoje
-                </Btn>
-                <TextInput value={buscaV} onChange={v => { setBuscaV(v); setVisibleCountV(25) }} placeholder="Placa, motorista, CPF, fornecedor..." style={{ width: 210 }} />
-                <Select value={filtroAtV} onChange={v => { setFiltroAtV(v as typeof filtroAtV); setVisibleCountV(25) }} className="w-[130px]">
-                  <option value="todos">Todos</option>
+              <TextInput value={buscaV} onChange={v => { setBuscaV(v); setVisibleCountV(25) }} placeholder="Placa, motorista, CPF, fornecedor..." style={{ width: 240 }} />
+            </CardHeader>
+
+            {/* Linha de filtros — horizontal, compacta (layout revisado 15/08) */}
+            <div className="px-4 py-2.5 border-b border-[0.5px] border-[var(--border-faint)]">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+                <Select value={filtroAtV} onChange={v => { setFiltroAtV(v as typeof filtroAtV); setVisibleCountV(25) }}>
+                  <option value="todos">Ativo: todos</option>
                   <option value="ativos">Somente ativos</option>
                   <option value="inativos">Somente inativos</option>
                 </Select>
-                <Select value={filtroTipo} onChange={v => { setFiltroTipo(v); setVisibleCountV(25) }} className="w-[130px]">
-                  <option value="">Todos os tipos</option>
+                <Select value={filtroTipo} onChange={v => { setFiltroTipo(v); setVisibleCountV(25) }}>
+                  <option value="">Tipo: todos</option>
                   {tiposVeiculo.map(t => <option key={t} value={t}>{t}</option>)}
                 </Select>
-                <Select value={filtroCategoria} onChange={v => { setFiltroCategoria(v); setVisibleCountV(25) }} className="w-[140px]">
-                  <option value="">Todas categ.</option>
+                <Select value={filtroCategoria} onChange={v => { setFiltroCategoria(v); setVisibleCountV(25) }}>
+                  <option value="">Categoria: todas</option>
                   {categorias.map(c => <option key={c} value={c}>{c}</option>)}
                 </Select>
-                <Select value={filtroCarroceria} onChange={v => { setFiltroCarroceria(v); setVisibleCountV(25) }} className="w-[140px]">
-                  <option value="">Todas carrocerias</option>
+                <Select value={filtroCarroceria} onChange={v => { setFiltroCarroceria(v); setVisibleCountV(25) }}>
+                  <option value="">Carroceria: todas</option>
                   {carrocerias.map(c => <option key={c} value={c}>{c}</option>)}
                 </Select>
-                <Select value={filtroDisp} onChange={v => { setFiltroDisp(v as typeof filtroDisp); setVisibleCountV(25) }} className="w-[155px]">
-                  <option value="todos">Qualquer disp.</option>
+                <Select value={filtroDisp} onChange={v => { setFiltroDisp(v as typeof filtroDisp); setVisibleCountV(25) }}>
+                  <option value="todos">Disp. hoje: todas</option>
                   <option value="sim">Disponíveis hoje</option>
                   <option value="nao">Não disponíveis</option>
                 </Select>
-                <Select value={filtroSiat} onChange={v => { setFiltroSiat(v); setVisibleCountV(25) }} className="w-[155px]">
-                  <option value="">Todas as situações</option>
+                <Select value={filtroSiat} onChange={v => { setFiltroSiat(v); setVisibleCountV(25) }}>
+                  <option value="">Situação: todas</option>
                   {situacoesSiat.map(s => <option key={s} value={s}>{s}</option>)}
                 </Select>
-                <label className="cursor-pointer inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-[0.5px] border-[var(--border-input)] text-xs text-mid hover:bg-cream transition-colors whitespace-nowrap">
-                  <svg className="w-3 h-3 shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                    <path d="M2 4h12M5 8h6M7 12h2"/>
-                  </svg>
-                  CSV/XLSX
-                  <input type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={handleImportarDisponibilidade} />
-                </label>
-                <Btn size="sm" onClick={handleSeedSIAT} disabled={seedingV}>
-                  {seedingV ? 'Carregando…' : '⇩ Sugestão SIAT'}
-                </Btn>
-                <Btn size="sm" onClick={handleResetarDisponibilidade}>Resetar dia</Btn>
               </div>
-            </CardHeader>
+            </div>
+
+            {/* Barra de ações — abaixo dos filtros (layout revisado 15/08) */}
+            <div className="px-4 py-2.5 border-b border-[0.5px] border-[var(--border-faint)] flex items-center gap-2 flex-wrap">
+              <Btn size="sm" onClick={handleSincronizarSIAT} disabled={syncingM}>
+                {syncingM ? 'Sincronizando...' : '↺ Sincronizar com SIAT'}
+              </Btn>
+              <Btn
+                size="sm"
+                variant="primary"
+                onClick={handleMarcarFrotaPadrao}
+                disabled={veiculos.length === 0}
+              >
+                ✓ Frota padrão disponível hoje
+              </Btn>
+              <Btn size="sm" onClick={handleSeedSIAT} disabled={seedingV}>
+                {seedingV ? 'Carregando…' : '⇩ Sugestão SIAT'}
+              </Btn>
+              <Btn size="sm" onClick={handleResetarDisponibilidade}>Resetar dia</Btn>
+              <span className="flex-1" />
+              <label className="cursor-pointer inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-[0.5px] border-[var(--border-input)] text-xs text-mid hover:bg-cream transition-colors whitespace-nowrap">
+                <svg className="w-3 h-3 shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <path d="M2 4h12M5 8h6M7 12h2"/>
+                </svg>
+                Importar disponibilidade (CSV/XLSX)
+                <input type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={handleImportarDisponibilidade} />
+              </label>
+              <ExportMenuFrota rows={veiculosParaLinhas(veiculosFiltrados)} nomeBase="veiculos" />
+            </div>
 
             {toastV && (
               <div className={cn('mx-4 mt-3 mb-1 text-[11px] rounded-lg px-3 py-2',
