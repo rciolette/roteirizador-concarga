@@ -121,6 +121,17 @@ export default function ConfiguracoesPage() {
     setHasChanges(true)
   }, [cfg])
 
+  // O bootstrap do AppDataProvider carrega a config do Supabase DEPOIS que esta
+  // página monta — sincroniza o formulário quando ela chegar, desde que o
+  // usuário não tenha edições pendentes (senão sobrescreveríamos o que digitou).
+  const hasChangesRef = useRef(hasChanges)
+  hasChangesRef.current = hasChanges
+  useEffect(() => {
+    if (hasChangesRef.current) return
+    initialRender.current = true
+    setCfg(globalConfig)
+  }, [globalConfig])
+
   async function loadAcessos() {
     setLoadingUsuarios(true)
     try {
@@ -163,7 +174,8 @@ export default function ConfiguracoesPage() {
     setCfg(p => ({ ...p, instrucoesPorRota: p.instrucoesPorRota.map(i => i.id === id ? { ...i, [k]: v } : i) }))
   }
   function handleDiscard() {
-    setCfg(DEFAULT_CONFIG); setHasChanges(false); initialRender.current = true
+    // Volta para a última config CARREGADA (Supabase), não para os valores demo.
+    setCfg(globalConfig); setHasChanges(false); initialRender.current = true
   }
   function handleRestaurarPadrao() {
     setCfg(DEFAULT_CONFIG); setGlobalConfig(DEFAULT_CONFIG); salvarConfig(DEFAULT_CONFIG)
