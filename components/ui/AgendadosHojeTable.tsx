@@ -31,37 +31,38 @@ function CondDot({ cond }: { cond: string }) {
   return <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-cream text-muted">OK</span>
 }
 
-// Pedido do Marcelo (11/08/26, item 5): três situações de agendamento em vez
-// de um filtro único de "vencidos":
-//   Agendar    — NF sem data de agendamento nenhuma
-//   Reagendar  — data de agendamento <= hoje (vencida ou de hoje)
-//   Roteirizar — data de agendamento >= amanhã (agendamento futuro confirmado)
-//
-// NOTA: esta é só a classificação/visualização. Ainda não existe um caminho
-// de escrita de volta ao SIAT (é SQL Server read-only aqui) nem uma tabela no
-// Supabase para registrar "reagendei para X" — as ações de fato (mudar a
-// data) precisam de um endpoint novo antes de virar "agendar por aqui".
-type Situacao = 'agendar' | 'reagendar' | 'roteirizar'
+// Item 5 do Marcelo — regra CONFIRMADA por ele em 14/08/26: isto é
+// SEGMENTAÇÃO de dados (filtro), não uma função de edição. As três situações
+// de uma nota agendada:
+//   Agendar    — cliente tipo CD que NÃO possui data de agenda
+//   Reagendar  — data de agenda <= data atual (se já passou, perdemos a agenda)
+//   Roteirizar — data de agendamento futura (a partir de amanhã), possível de
+//                roteirizar
+// Notas sem data que não são CD ficam fora destes grupos — seguem o fluxo
+// normal de pendentes.
+type Situacao = 'agendar' | 'reagendar' | 'roteirizar' | 'nenhuma'
 
 function classificar(nf: NotaFiscal, hoje: string): Situacao {
-  if (!nf.dataAgendamento) return 'agendar'
+  if (!nf.dataAgendamento) {
+    return nf.tipoCliente === 'CD' ? 'agendar' : 'nenhuma'
+  }
   const data = nf.dataAgendamento.slice(0, 10)
   return data <= hoje ? 'reagendar' : 'roteirizar'
 }
 
-const TABS: { key: Situacao; label: string; hint: string }[] = [
-  { key: 'reagendar',  label: 'Reagendar',  hint: 'data de agendamento vencida ou de hoje' },
-  { key: 'agendar',    label: 'Agendar',    hint: 'sem data de agendamento' },
-  { key: 'roteirizar', label: 'Roteirizar', hint: 'agendamento confirmado a partir de amanhã' },
+const TABS: { key: Exclude<Situacao, 'nenhuma'>; label: string; hint: string }[] = [
+  { key: 'reagendar',  label: 'Reagendar',  hint: 'data de agenda vencida ou de hoje — agenda perdida, precisa reagendar' },
+  { key: 'agendar',    label: 'Agendar',    hint: 'clientes CD sem data de agenda' },
+  { key: 'roteirizar', label: 'Roteirizar', hint: 'agendamento futuro — possível de roteirizar' },
 ]
 
 export function AgendadosHojeTable() {
   const { nfsPendentes } = useAppData()
   const hoje = new Date().toISOString().slice(0, 10)
-  const [tab, setTab] = useState<Situacao>('reagendar')
+  const [tab, setTab] = useState<Exclude<Situacao, 'nenhuma'>>('reagendar')
 
   const grupos = useMemo(() => {
-    const g: Record<Situacao, NotaFiscal[]> = { agendar: [], reagendar: [], roteirizar: [] }
+    const g: Record<Situacao, NotaFiscal[]> = { agendar: [], reagendar: [], roteirizar: [], nenhuma: [] }
     for (const nf of nfsPendentes) g[classificar(nf, hoje)].push(nf)
     for (const key of Object.keys(g) as Situacao[]) {
       g[key].sort((a, b) => {
