@@ -47,23 +47,21 @@ function Toggle({ checked, onChange, color = 'primary', disabled = false }: {
 
 
 
-const SITUACAO_BADGE: Record<string, string> = {
-  'DISPONÍVEL':  'bg-green-100 text-green-800',
-  'RESERVADO':   'bg-yellow-100 text-yellow-800',
-  'CARREGADO':   'bg-blue-100 text-blue-800',
-  'VIAJANDO':    'bg-purple-100 text-purple-800',
-  'MANUTENÇÃO':  'bg-red-100 text-red-800',
-}
-
-function SituacaoSiatBadge({ situacao }: { situacao: string }) {
-  const norm = (situacao ?? '').toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
-  const key   = Object.keys(SITUACAO_BADGE).find(k =>
-    k.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase() === norm
-  )
-  const cls = key ? SITUACAO_BADGE[key] : 'bg-gray-100 text-gray-600'
+// Pedido do Raphael (15/08/26): a coluna "Situação" mostra ATIVO/INATIVO
+// (regra do tipo de frota — TIPFRO 005), para não confundir com a coluna
+// "Disponível hoje". A situação operacional do SIAT (DISPONÍVEL/RESERVADO/
+// VIAJANDO/MANUTENÇÃO) fica no tooltip da badge.
+function StatusVeiculoBadge({ ativo, situacaoSiat }: { ativo: boolean; situacaoSiat: string }) {
   return (
-    <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap', cls)}>
-      {situacao || '—'}
+    <span
+      title={situacaoSiat ? `Situação SIAT: ${situacaoSiat}` : undefined}
+      className={cn(
+        'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap',
+        ativo ? 'bg-success-bg text-success-dark' : 'bg-cream text-muted',
+      )}
+    >
+      <span className={cn('w-[5px] h-[5px] rounded-full shrink-0', ativo ? 'bg-cond-ok' : 'bg-subtle')} />
+      {ativo ? 'ATIVO' : 'INATIVO'}
     </span>
   )
 }
@@ -535,7 +533,7 @@ export default function FrotaPage() {
                           {v.capacidade_kg ? v.capacidade_kg.toLocaleString('pt-BR') : '—'}
                         </td>
                         <td className="px-4 py-2.5" onClick={e => e.stopPropagation()}>
-                          <SituacaoSiatBadge situacao={v.situacao_siat} />
+                          <StatusVeiculoBadge ativo={v.ativo} situacaoSiat={v.situacao_siat} />
                         </td>
                         <td className="px-4 py-2.5" onClick={e => e.stopPropagation()}>
                           {(() => {
