@@ -65,18 +65,6 @@ type GerarRotasFormState = {
   prioridade: string
 }
 
-// Motorista elegível para roteirização = motorista vinculado a um veículo
-// disponível hoje. O roteirizador aloca veículos, não motoristas soltos: listar
-// os ~1,6 mil motoristas ativos da base dava uma escolha que não tinha efeito.
-interface MotoristaDoDia {
-  key:         string
-  nome:        string
-  celular?:    string
-  placas:      string[]
-  ultimaSaida: string | null
-  romaneios:   number
-}
-
 function normalizaNome(nome: string): string {
   return nome.trim().toUpperCase().replace(/\s+/g, ' ')
 }
@@ -87,7 +75,7 @@ function diasDesde(iso: string | null): number | null {
   return Math.max(0, Math.floor(ms / 86_400_000))
 }
 
-function rotuloAtividade(m: MotoristaDoDia): { texto: string; recente: boolean } {
+function rotuloAtividade(m: { ultimaSaida: string | null; romaneios: number }): { texto: string; recente: boolean } {
   const d = diasDesde(m.ultimaSaida)
   if (d === null)      return { texto: 'sem histórico', recente: false }
   if (d === 0)         return { texto: 'rodou hoje',    recente: true }
@@ -112,100 +100,68 @@ function GerarRotasDialog({ onClose, onConfirm, veiculos, atividade }: {
     dataInicio: hoje, dataFim: hoje, observacoes: '', restricoesExtras: '', prioridade: 'padrao',
   })
 
-  // Motoristas do dia, ordenados por atividade recente no SIAT (romaneios de
-  // expedição). Quem rodou há menos tempo aparece primeiro.
-  const motoristasDoDia = useMemo<MotoristaDoDia[]>(() => {
+  // Atividade recente por motorista (romaneios de expedição no SIAT), usada
+  // como badge e como critério de ordenação da lista unificada.
+  const atividadePorNome = useMemo(() => {
     const porNome = new Map<string, MotoristaAtividade>()
     for (const a of atividade) {
       if (a.nome) porNome.set(normalizaNome(a.nome), a)
     }
-
-    const agrupado = new Map<string, MotoristaDoDia>()
-    for (const v of veiculos) {
-      if (!v.disponivel_hoje || v.status !== 'disponivel' || !v.motoristaNome) continue
-      const key = normalizaNome(v.motoristaNome)
-      const existente = agrupado.get(key)
-      if (existente) { existente.placas.push(v.placa); continue }
-      const act = porNome.get(key)
-      agrupado.set(key, {
-        key,
-        nome:        v.motoristaNome,
-        celular:     v.motoristaCelular,
-        placas:      [v.placa],
-        ultimaSaida: act?.ultimaSaida ?? null,
-        romaneios:   act?.romaneiosPeriodo ?? 0,
-      })
-    }
-
-    return [...agrupado.values()].sort((a, b) => {
-      if (a.ultimaSaida && b.ultimaSaida) return b.ultimaSaida.localeCompare(a.ultimaSaida)
-      if (a.ultimaSaida) return -1
-      if (b.ultimaSaida) return 1
-      return a.nome.localeCompare(b.nome, 'pt-BR')
-    })
-  }, [veiculos, atividade])
+    return porNome
+  }, [atividade])
 
   // Nada vem marcado: o operador declara a frota do dia. O SIAT sugere quase
   // toda a base como "disponível hoje" (>1.400 veículos) enquanto a operação
   // real usa 40–50 — pré-marcar tudo obrigaria a desmarcar centenas e inflaria
   // o prompt do roteirizador a ponto de a geração não terminar.
-  const [motoristasSel, setMotoristasSel] = useState<Set<string>>(new Set())
-  const [veiculosSel,   setVeiculosSel]   = useState<Set<string>>(new Set())
-  const [buscaMot, setBuscaMot] = useState('')
-  const [buscaVei, setBuscaVei] = useState('')
+  //
+  // Layout revisado 15/08 (pedido do Raphael): busca única e UMA lista de
+  // pares veículo+motorista — como andam sempre vinculados, marcar o veículo
+  // é marcar o conjunto.
+  const [veiculosSel, setVeiculosSel] = useState<Set<string>>(new Set())
+  const [busca, setBusca] = useState('')
   const set = (k: string, v: string) => setForm(p => ({ ...p, [k]: v }))
-
-  function toggleSet(prev: Set<string>, id: string): Set<string> {
-    const next = new Set(prev)
-    next.has(id) ? next.delete(id) : next.add(id)
-    return next
-  }
 
   const veiDisabled = (v: Veiculo) => v.status === 'manutencao' || v.status === 'indisponivel'
 
-  // Veículo e motorista andam juntos: marcar o veículo traz o motorista, e
-  // desmarcar o motorista tira os veículos dele. Sem isso a combinação das duas
-  // listas podia resultar em frota vazia sem o operador entender por quê.
   function toggleVeiculo(v: Veiculo) {
-    const next = toggleSet(veiculosSel, v.id)
-    setVeiculosSel(next)
-    if (!v.motoristaNome) return
-    const chave = normalizaNome(v.motoristaNome)
-    const aindaUsado = veiculos.some(x =>
-      next.has(x.id) && x.motoristaNome && normalizaNome(x.motoristaNome) === chave)
-    setMotoristasSel(prev => {
-      const n = new Set(prev)
-      aindaUsado ? n.add(chave) : n.delete(chave)
-      return n
-    })
-  }
-
-  function toggleMotorista(chave: string) {
-    const marcando = !motoristasSel.has(chave)
-    setMotoristasSel(prev => toggleSet(prev, chave))
     setVeiculosSel(prev => {
-      const n = new Set(prev)
-      for (const v of veiculos) {
-        if (veiDisabled(v) || !v.motoristaNome) continue
-        if (normalizaNome(v.motoristaNome) !== chave) continue
-        marcando ? n.add(v.id) : n.delete(v.id)
-      }
-      return n
+      const next = new Set(prev)
+      next.has(v.id) ? next.delete(v.id) : next.add(v.id)
+      return next
     })
   }
 
-  const motoristasFiltrados = motoristasDoDia.filter(m => {
-    const q = buscaMot.toLowerCase()
-    return !q || m.nome.toLowerCase().includes(q) || m.placas.some(p => p.toLowerCase().includes(q))
-  })
+  const veiculosFiltrados = useMemo(() => {
+    const q = busca.toLowerCase()
+    return veiculos
+      .slice()
+      .sort((a, b) => {
+        // Disponíveis hoje primeiro; entre eles, motorista com atividade mais
+        // recente no SIAT; por fim, placa.
+        const dispDiff = (b.disponivel_hoje ? 1 : 0) - (a.disponivel_hoje ? 1 : 0)
+        if (dispDiff !== 0) return dispDiff
+        const atvA = a.motoristaNome ? atividadePorNome.get(normalizaNome(a.motoristaNome))?.ultimaSaida ?? '' : ''
+        const atvB = b.motoristaNome ? atividadePorNome.get(normalizaNome(b.motoristaNome))?.ultimaSaida ?? '' : ''
+        if (atvA !== atvB) return atvB.localeCompare(atvA)
+        return a.placa.localeCompare(b.placa)
+      })
+      .filter(v =>
+        !q ||
+        v.placa.toLowerCase().includes(q) ||
+        v.modelo.toLowerCase().includes(q) ||
+        (v.motoristaNome ?? '').toLowerCase().includes(q),
+      )
+  }, [veiculos, busca, atividadePorNome])
 
-  const veiculosFiltrados = veiculos
-    .slice()
-    .sort((a, b) => (b.disponivel_hoje ? 1 : 0) - (a.disponivel_hoje ? 1 : 0))
-    .filter(v => {
-      const q = buscaVei.toLowerCase()
-      return !q || v.placa.toLowerCase().includes(q) || v.modelo.toLowerCase().includes(q)
-    })
+  // Motoristas únicos entre os veículos marcados (informativo).
+  const motoristasSelecionados = useMemo(() => {
+    const nomes = new Set<string>()
+    for (const v of veiculos) {
+      if (veiculosSel.has(v.id) && v.motoristaNome) nomes.add(normalizaNome(v.motoristaNome))
+    }
+    return nomes.size
+  }, [veiculos, veiculosSel])
 
   // A marcação do operador é a fonte da verdade da frota do dia — é exatamente
   // esta lista que o roteirizador recebe e usa para montar as rotas.
@@ -242,14 +198,15 @@ function GerarRotasDialog({ onClose, onConfirm, veiculos, atividade }: {
 
   return (
     <div className="fixed inset-0 bg-black/55 flex items-center justify-center z-50">
-      <div className="animate-fade-in bg-surface rounded-xl border border-[0.5px] border-[var(--border-light)] p-6 w-[640px] max-w-[95vw] max-h-[90vh] overflow-y-auto">
+      <div className="animate-fade-in bg-surface rounded-xl border border-[0.5px] border-[var(--border-light)] p-6 w-[760px] max-w-[95vw] max-h-[90vh] overflow-y-auto">
         <div className="text-sm font-medium mb-1">Instrução para o agente de IA</div>
         <div className="text-[11px] text-muted mb-4">
           Estas informações serão combinadas com as regras fixas e os dados do SIAT.
         </div>
 
-        <div className="mb-2.5 flex gap-2">
-          <div className="flex-1">
+        {/* Datas + prioridade numa linha só */}
+        <div className="mb-2.5 grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <div>
             <label className="block text-[11px] text-muted mb-1">Data início</label>
             <input
               type="date"
@@ -258,7 +215,7 @@ function GerarRotasDialog({ onClose, onConfirm, veiculos, atividade }: {
               className="w-full h-8 border border-[0.5px] border-[var(--border-input)] rounded-lg bg-page px-2 text-xs font-sans outline-none"
             />
           </div>
-          <div className="flex-1">
+          <div>
             <label className="block text-[11px] text-muted mb-1">Data fim</label>
             <input
               type="date"
@@ -267,113 +224,67 @@ function GerarRotasDialog({ onClose, onConfirm, veiculos, atividade }: {
               className="w-full h-8 border border-[0.5px] border-[var(--border-input)] rounded-lg bg-page px-2 text-xs font-sans outline-none"
             />
           </div>
+          <div>
+            <label className="block text-[11px] text-muted mb-1">Prioridade</label>
+            <Select value={form.prioridade} onChange={v => set('prioridade', v)}>
+              <option value="padrao">Padrão — peso e distância</option>
+              <option value="vermelho">🔴 Prioridade COND vermelho</option>
+              <option value="menos-veiculos">Menos veículos possível</option>
+              <option value="menor-distancia">Menor distância total</option>
+            </Select>
+          </div>
         </div>
 
-        {[
-          { key: 'observacoes',      label: 'Observações',      ph: 'Instruções gerais para o roteirizador...' },
-          { key: 'restricoesExtras', label: 'Restrições extras', ph: 'Ex: Não entregar no centro de BH hoje' },
-        ].map(f => (
-          <div key={f.key} className="mb-2.5">
-            <label className="block text-[11px] text-muted mb-1">{f.label}</label>
-            <TextArea
-              value={(form as Record<string, string>)[f.key]}
-              onChange={v => set(f.key, v)}
-              placeholder={f.ph}
-              rows={2}
-            />
-          </div>
-        ))}
-
-        <div className="mb-2.5">
-          <label className="block text-[11px] text-muted mb-1">Prioridade</label>
-          <Select value={form.prioridade} onChange={v => set('prioridade', v)}>
-            <option value="padrao">Padrão — balancear peso e distância</option>
-            <option value="vermelho">🔴 Prioridade COND vermelho</option>
-            <option value="menos-veiculos">Menos veículos possível</option>
-            <option value="menor-distancia">Menor distância total</option>
-          </Select>
-        </div>
-
-        {/* ── Motoristas do dia ── */}
-        <div className="mt-4 pt-3 border-t border-[0.5px] border-[var(--border-faint)]">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] text-muted font-medium">Motoristas do dia</span>
-            <span className="text-[10px] text-subtle">{motoristasSel.size} de {motoristasDoDia.length} selecionados</span>
-          </div>
-          <div className="text-[10px] text-subtle mb-2">
-            Motoristas dos veículos disponíveis hoje, ordenados por atividade recente no SIAT.
-          </div>
-          <div className="mb-2">
-            <TextInput value={buscaMot} onChange={setBuscaMot} placeholder="Buscar por nome ou placa" />
-          </div>
-          {motoristasDoDia.length === 0 ? (
-            <div className="text-[11px] text-muted py-2">
-              Nenhum motorista disponível hoje. Marque a disponibilidade dos veículos na tela <strong>Frota</strong> — os motoristas vinculados aparecem aqui.
+        {/* Observações + restrições lado a lado */}
+        <div className="mb-2.5 grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {[
+            { key: 'observacoes',      label: 'Observações',      ph: 'Instruções gerais para o roteirizador...' },
+            { key: 'restricoesExtras', label: 'Restrições extras', ph: 'Ex: Não entregar no centro de BH hoje' },
+          ].map(f => (
+            <div key={f.key}>
+              <label className="block text-[11px] text-muted mb-1">{f.label}</label>
+              <TextArea
+                value={(form as Record<string, string>)[f.key]}
+                onChange={v => set(f.key, v)}
+                placeholder={f.ph}
+                rows={2}
+              />
             </div>
-          ) : motoristasFiltrados.length === 0 ? (
-            <div className="text-[11px] text-muted py-2">Nenhum resultado para &ldquo;{buscaMot}&rdquo;.</div>
-          ) : (
-            <div className="flex flex-col gap-0.5 max-h-[160px] overflow-y-auto pr-0.5">
-              {motoristasFiltrados.map(m => {
-                const atv = rotuloAtividade(m)
-                return (
-                <label key={m.key} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-cream dark:hover:bg-hover cursor-pointer select-none transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={motoristasSel.has(m.key)}
-                    onChange={() => toggleMotorista(m.key)}
-                    className="w-3.5 h-3.5 shrink-0 accent-primary"
-                  />
-                  <span className="text-[11px] font-medium flex-1 truncate">{m.nome}</span>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-page border border-[0.5px] border-[var(--border-input)] text-subtle font-mono shrink-0">
-                    {m.placas.join(' · ')}
-                  </span>
-                  {m.romaneios > 0 && (
-                    <span className="text-[10px] text-muted shrink-0">{m.romaneios} rom./90d</span>
-                  )}
-                  <span className={cn(
-                    'text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0',
-                    atv.recente ? 'bg-success-bg text-success-dark' : 'bg-page text-subtle',
-                  )}>
-                    {atv.texto}
-                  </span>
-                </label>
-                )
-              })}
-            </div>
-          )}
+          ))}
         </div>
 
-        {/* ── Veículos disponíveis ── */}
+        {/* ── Frota do dia — lista unificada veículo + motorista ── */}
         <div className="mt-4 pt-3 border-t border-[0.5px] border-[var(--border-faint)]">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] text-muted font-medium">Veículos do dia</span>
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[11px] text-muted font-medium">Frota do dia</span>
             <span className={cn('text-[10px] font-medium', veiculosSel.size === 0 ? 'text-warn' : 'text-subtle')}>
-              {veiculosSel.size} selecionado{veiculosSel.size === 1 ? '' : 's'}
+              {veiculosSel.size} veículo{veiculosSel.size === 1 ? '' : 's'}
+              {motoristasSelecionados > 0 && ` · ${motoristasSelecionados} motorista${motoristasSelecionados === 1 ? '' : 's'}`}
             </span>
           </div>
           <div className="text-[10px] text-subtle mb-2">
-            Marque os veículos que realmente saem hoje — só eles vão para o roteirizador,
-            com a capacidade de cada um.
+            Marque os conjuntos veículo + motorista que realmente saem hoje — só eles vão
+            para o roteirizador. Disponíveis hoje e motoristas com atividade recente aparecem primeiro.
           </div>
           <div className="mb-2 flex gap-2 items-center">
             <div className="flex-1">
-              <TextInput value={buscaVei} onChange={setBuscaVei} placeholder="Buscar por placa ou modelo" />
+              <TextInput value={busca} onChange={setBusca} placeholder="Buscar por placa, modelo ou motorista..." />
             </div>
             <button
               type="button"
-              onClick={() => veiculosFiltrados.filter(v => !veiDisabled(v)).forEach(v => {
-                if (!veiculosSel.has(v.id)) toggleVeiculo(v)
-              })}
-              disabled={!buscaVei}
+              onClick={() => {
+                const ids = veiculosFiltrados.filter(v => !veiDisabled(v)).map(v => v.id)
+                setVeiculosSel(prev => new Set([...prev, ...ids]))
+              }}
+              disabled={!busca}
               className="text-[10px] px-2 h-8 rounded-lg border border-[0.5px] border-[var(--border-input)] text-muted hover:bg-cream dark:hover:bg-hover disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
-              title={buscaVei ? 'Marca todos os resultados da busca' : 'Busque para marcar em lote'}
+              title={busca ? 'Marca todos os resultados da busca' : 'Busque para marcar em lote'}
             >
               Marcar filtrados
             </button>
             <button
               type="button"
-              onClick={() => { setVeiculosSel(new Set()); setMotoristasSel(new Set()) }}
+              onClick={() => setVeiculosSel(new Set())}
               disabled={veiculosSel.size === 0}
               className="text-[10px] px-2 h-8 rounded-lg border border-[0.5px] border-[var(--border-input)] text-muted hover:bg-cream dark:hover:bg-hover disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
             >
@@ -385,15 +296,20 @@ function GerarRotasDialog({ onClose, onConfirm, veiculos, atividade }: {
               Nenhum veículo marcado como disponível hoje. Marque a disponibilidade na tela <strong>Frota</strong> para que apareçam aqui.
             </div>
           ) : veiculosFiltrados.length === 0 ? (
-            <div className="text-[11px] text-muted py-2">Nenhum resultado para &ldquo;{buscaVei}&rdquo;.</div>
+            <div className="text-[11px] text-muted py-2">Nenhum resultado para &ldquo;{busca}&rdquo;.</div>
           ) : (
-            <div className="flex flex-col gap-0.5 max-h-[160px] overflow-y-auto pr-0.5">
+            <div className="flex flex-col gap-0.5 max-h-[300px] overflow-y-auto pr-0.5">
               {veiculosFiltrados.map(v => {
                 const disabled = veiDisabled(v)
+                const atv = v.motoristaNome
+                  ? atividadePorNome.get(normalizaNome(v.motoristaNome))
+                  : undefined
+                const rotulo = atv ? rotuloAtividade({ ultimaSaida: atv.ultimaSaida, romaneios: atv.romaneiosPeriodo }) : null
                 return (
                   <label key={v.id} className={cn(
                     'flex items-center gap-2 px-2 py-1.5 rounded-lg select-none transition-colors',
                     disabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-cream dark:hover:bg-hover cursor-pointer',
+                    veiculosSel.has(v.id) && 'bg-primary-bg/50 dark:bg-primary/10',
                   )}>
                     <input
                       type="checkbox"
@@ -402,13 +318,20 @@ function GerarRotasDialog({ onClose, onConfirm, veiculos, atividade }: {
                       onChange={() => !disabled && toggleVeiculo(v)}
                       className="w-3.5 h-3.5 shrink-0 accent-primary"
                     />
-                    <span className="text-[11px] font-medium font-mono shrink-0">{v.placa}</span>
-                    <span className="text-[10px] text-muted truncate flex-1">{v.modelo}</span>
+                    <span className="text-[11px] font-medium font-mono shrink-0 w-[68px]">{v.placa}</span>
+                    <span className="text-[11px] font-medium truncate flex-1">
+                      {v.motoristaNome ?? <span className="italic text-subtle font-normal">sem motorista</span>}
+                    </span>
+                    {rotulo?.recente && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0 bg-success-bg text-success-dark">
+                        {rotulo.texto}
+                      </span>
+                    )}
+                    <span className="text-[10px] text-muted truncate max-w-[110px] shrink-0 hidden sm:inline">{v.modelo}</span>
                     <span className="text-[10px] px-1.5 py-0.5 rounded bg-page border border-[0.5px] border-[var(--border-input)] text-subtle shrink-0">{v.tipo}</span>
-                    <span className="text-[10px] text-muted shrink-0">{formatPeso(v.capacidadeKg)}</span>
-                    {v.motoristaNome && <span className="text-[10px] text-subtle truncate max-w-[80px] shrink-0">{v.motoristaNome}</span>}
+                    <span className="text-[10px] text-muted shrink-0 w-[42px] text-right">{formatPeso(v.capacidadeKg)}</span>
                     {v.disponivel_hoje
-                      ? <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0 bg-teal-bg text-teal-dark">Disponível hoje</span>
+                      ? <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0 bg-teal-bg text-teal-dark">Disp. hoje</span>
                       : <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0 bg-warn-bg text-warn">Ativo</span>
                     }
                   </label>
