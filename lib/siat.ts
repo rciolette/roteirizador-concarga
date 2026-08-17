@@ -220,6 +220,7 @@ export function siatRowsToNotasPendentes(rows: SiatRow[]): NotaFiscal[] {
       valor:            typeof row.Valor === 'number' ? row.Valor : undefined,
       solucaoSac:       row.SolucaoSAC     ?? undefined,
       remetente:        row.Remetente != null ? String(row.Remetente) : undefined,
+      regiao:           row.Regiao != null && row.Regiao !== '' ? String(row.Regiao) : undefined,
     })
   }
 
@@ -298,6 +299,7 @@ export function siatRowsToRotas(
         valor:           typeof row.Valor === 'number' ? row.Valor : undefined,
         solucaoSac:      row.SolucaoSAC     ?? undefined,
         remetente:       row.Remetente != null ? String(row.Remetente) : undefined,
+        regiao:          row.Regiao != null && row.Regiao !== '' ? String(row.Regiao) : undefined,
       }
     })
 

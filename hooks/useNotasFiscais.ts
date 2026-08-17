@@ -29,6 +29,7 @@ export interface NfPendenteRow {
 // Pedido do Marcelo (11/08/26, item 7): filtros sobre as notas pendentes antes
 // de gerar as rotas.
 export interface NotasFiltros {
+  regiao:       string
   solucaoSac:   string
   tipoCarga:    string
   rota:         string
@@ -39,7 +40,7 @@ export interface NotasFiltros {
 }
 
 const FILTROS_VAZIOS: NotasFiltros = {
-  solucaoSac: '', tipoCarga: '', rota: '', municipio: '', bairro: '', tipoCliente: '', remetente: '',
+  regiao: '', solucaoSac: '', tipoCarga: '', rota: '', municipio: '', bairro: '', tipoCliente: '', remetente: '',
 }
 
 interface UseNotasFiscaisResult {
@@ -77,6 +78,7 @@ export function useNotasFiscais(defaultPageSize: PageSize = 25): UseNotasFiscais
   const [filtros, setFiltros] = useState<NotasFiltros>(FILTROS_VAZIOS)
 
   const opcoesFiltro = useMemo(() => ({
+    regiao:      opcoesUnicas(nfsPendentes.map(n => n.regiao)),
     solucaoSac:  opcoesUnicas(nfsPendentes.map(n => n.solucaoSac)),
     tipoCarga:   opcoesUnicas(nfsPendentes.map(n => n.grade)),
     rota:        opcoesUnicas(nfsPendentes.map(n => n.rota)),
@@ -88,6 +90,7 @@ export function useNotasFiscais(defaultPageSize: PageSize = 25): UseNotasFiscais
 
   const filtradas = useMemo(() => {
     return nfsPendentes.filter(n =>
+      (!filtros.regiao      || n.regiao      === filtros.regiao) &&
       (!filtros.solucaoSac  || n.solucaoSac  === filtros.solucaoSac) &&
       (!filtros.tipoCarga   || n.grade       === filtros.tipoCarga) &&
       (!filtros.rota        || n.rota        === filtros.rota) &&

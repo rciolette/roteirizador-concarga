@@ -171,7 +171,12 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       const pendentes = siatRowsToNotasPendentes(rows)
       setNfRows(rows)
       setNfsPendentes(pendentes)
-      setNfsDesmarcadas(new Set()) // nova importação zera as desmarcações anteriores
+      // Regra padrão (Marcelo 17/08): nota com motivo de SAC que NÃO é reentrega
+      // ainda não foi tratada — entra automaticamente DESMARCADA da roteirização.
+      // O operador pode remarcar manualmente pelo checkbox.
+      setNfsDesmarcadas(new Set(
+        pendentes.filter(n => Boolean(n.solucaoSac) && !n.indRee).map(n => n.numnfs),
+      ))
 
       // Pré-aquece o cache de geocoding em background (fire-and-forget)
       const addrs = pendentes

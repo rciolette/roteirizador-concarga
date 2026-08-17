@@ -29,6 +29,8 @@ export interface NotaFiscal {
   solucaoSac?: string
   /** Código do remetente (CODCLI) — pedido do Marcelo, item 7. */
   remetente?: string
+  /** Região do município (REGMUN) — segmentação por região (Marcelo, 17/08). */
+  regiao?: string
 }
 
 export interface Veiculo {

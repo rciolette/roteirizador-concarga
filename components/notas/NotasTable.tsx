@@ -48,6 +48,7 @@ const PAGE_SIZES: PageSize[] = [25, 50, 100]
 
 // Pedido do Marcelo (11/08/26, item 7): filtros de seleção de notas.
 const FILTRO_LABELS: Record<keyof NotasFiltros, string> = {
+  regiao:      'Região',
   solucaoSac:  'Solução SAC',
   tipoCarga:   'Tipo Carga',
   rota:        'Rota de Entrega',
