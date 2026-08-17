@@ -65,6 +65,10 @@ interface UseNotasFiscaisResult {
   marcarFiltradas: () => void
   /** Desmarca todas as NFs do filtro atual da roteirização. */
   desmarcarFiltradas: () => void
+  /** Conjunto completo (não paginado) das NFs filtradas — usado na prévia do mapa. */
+  notasFiltradas: import('@/types').NotaFiscal[]
+  /** NFs desmarcadas da roteirização (para o mapa esmaecer). */
+  desmarcadas: Set<string>
 }
 
 function opcoesUnicas(valores: (string | undefined)[]): string[] {
@@ -189,5 +193,7 @@ export function useNotasFiscais(defaultPageSize: PageSize = 25): UseNotasFiscais
     totalFiltradasSelecionadas,
     marcarFiltradas,
     desmarcarFiltradas,
+    notasFiltradas: sorted,
+    desmarcadas: nfsDesmarcadas,
   }
 }

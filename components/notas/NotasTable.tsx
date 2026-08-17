@@ -1,7 +1,13 @@
 'use client'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import dynamic from 'next/dynamic'
 import { cn } from '@/lib/utils'
 import { useNotasFiscais, type PageSize, type NotasFiltros } from '@/hooks/useNotasFiscais'
+
+const MapaNotasDialog = dynamic(
+  () => import('@/components/notas/MapaNotasDialog').then(m => m.MapaNotasDialog),
+  { ssr: false },
+)
 
 const COND_CLS: Record<string, string> = {
   vermelho: 'bg-danger-bg text-danger',
@@ -63,7 +69,9 @@ export function NotasTable() {
     rows, total, totalDesmarcadas, page, pageSize, setPage, setPageSize, loading, error,
     filtros, setFiltro, limparFiltros, opcoesFiltro, toggleSelecionada, limparDesmarcacoes,
     totalFiltradasSelecionadas, marcarFiltradas, desmarcarFiltradas,
+    notasFiltradas, desmarcadas,
   } = useNotasFiscais(25)
+  const [mapaAberto, setMapaAberto] = useState(false)
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
   const from = page * pageSize + 1
@@ -108,6 +116,15 @@ export function NotasTable() {
             className="text-[11px] px-2 py-1 rounded-md text-primary hover:underline"
           >
             Limpar filtros
+          </button>
+        )}
+        {total > 0 && (
+          <button
+            onClick={() => setMapaAberto(true)}
+            className="text-[11px] px-2 py-1 rounded-md border border-[var(--border-input)] bg-surface text-mid hover:text-base cursor-pointer"
+            title="Prévia no mapa das notas filtradas (cores por região)"
+          >
+            🗺 Ver no mapa
           </button>
         )}
         <span className="text-[11px] text-muted ml-auto flex items-center gap-2">
@@ -265,6 +282,14 @@ export function NotasTable() {
           </div>
         </div>
       </div>
+
+      {mapaAberto && (
+        <MapaNotasDialog
+          notas={notasFiltradas}
+          desmarcadas={desmarcadas}
+          onClose={() => setMapaAberto(false)}
+        />
+      )}
     </div>
   )
 }
