@@ -20,6 +20,8 @@ export interface NfPendenteRow {
   ind_ree: boolean
   solucao_sac: string | null
   remetente: string | null
+  /** true quando a NF tem Solução SAC preenchida ≠ reentrega — analisar antes de incluir em rota (Marcelo, 17/08). */
+  alertaSac: boolean
   /** false quando o operador desmarcou a nota da roteirização (item 8). */
   selecionada: boolean
   /** true quando esta linha repete o destinatário da anterior, já ordenado (item 10). */
@@ -69,10 +71,26 @@ interface UseNotasFiscaisResult {
   notasFiltradas: import('@/types').NotaFiscal[]
   /** NFs desmarcadas da roteirização (para o mapa esmaecer). */
   desmarcadas: Set<string>
+  /** Incluir rotas parciais 996/999 na listagem (padrão: ocultas). */
+  incluirParciais: boolean
+  setIncluirParciais: (v: boolean) => void
 }
 
 function opcoesUnicas(valores: (string | undefined)[]): string[] {
   return [...new Set(valores.filter((v): v is string => Boolean(v) && v !== '—'))].sort()
+}
+
+/** Rotas parciais 996/999 ficam fora da listagem padrão (Marcelo, 17/08). */
+function isRotaParcial(rota: string | undefined): boolean {
+  const cod = (rota ?? '').trim()
+  return cod.startsWith('996') || cod.startsWith('999')
+}
+
+/** Solução SAC preenchida que não é reentrega → alerta "analisar antes de incluir". */
+function temAlertaSac(n: { solucaoSac?: string; indRee: boolean }): boolean {
+  if (!n.solucaoSac) return false
+  if (n.indRee) return false
+  return n.solucaoSac.trim().toUpperCase() !== 'REENTREGA'
 }
 
 export function useNotasFiscais(defaultPageSize: PageSize = 25): UseNotasFiscaisResult {
@@ -80,30 +98,55 @@ export function useNotasFiscais(defaultPageSize: PageSize = 25): UseNotasFiscais
   const [page, setPage] = useState(0)
   const [pageSize, setPageSizeState] = useState<PageSize>(defaultPageSize)
   const [filtros, setFiltros] = useState<NotasFiltros>(FILTROS_VAZIOS)
+  // Rotas 996/999 (parciais) só entram quando o operador pedir (Marcelo, 17/08).
+  const [incluirParciais, setIncluirParciais] = useState(false)
 
-  const opcoesFiltro = useMemo(() => ({
-    regiao:      opcoesUnicas(nfsPendentes.map(n => n.regiao)),
-    solucaoSac:  opcoesUnicas(nfsPendentes.map(n => n.solucaoSac)),
-    tipoCarga:   opcoesUnicas(nfsPendentes.map(n => n.grade)),
-    rota:        opcoesUnicas(nfsPendentes.map(n => n.rota)),
-    municipio:   opcoesUnicas(nfsPendentes.map(n => n.municipio)),
-    bairro:      opcoesUnicas(nfsPendentes.map(n => n.bairro)),
-    tipoCliente: opcoesUnicas(nfsPendentes.map(n => n.tipoCliente)),
-    remetente:   opcoesUnicas(nfsPendentes.map(n => n.remetente)),
-  }), [nfsPendentes])
+  // Base da listagem: sem as rotas parciais, a menos que o operador inclua.
+  const base = useMemo(
+    () => incluirParciais ? nfsPendentes : nfsPendentes.filter(n => !isRotaParcial(n.rota)),
+    [nfsPendentes, incluirParciais],
+  )
+
+  // Predicado de um filtro individual
+  const passa = useMemo(() => ({
+    regiao:      (n: typeof base[number]) => !filtros.regiao      || n.regiao      === filtros.regiao,
+    solucaoSac:  (n: typeof base[number]) => !filtros.solucaoSac  || n.solucaoSac  === filtros.solucaoSac,
+    tipoCarga:   (n: typeof base[number]) => !filtros.tipoCarga   || n.grade       === filtros.tipoCarga,
+    rota:        (n: typeof base[number]) => !filtros.rota        || n.rota        === filtros.rota,
+    municipio:   (n: typeof base[number]) => !filtros.municipio   || n.municipio   === filtros.municipio,
+    bairro:      (n: typeof base[number]) => !filtros.bairro      || n.bairro      === filtros.bairro,
+    tipoCliente: (n: typeof base[number]) => !filtros.tipoCliente || n.tipoCliente === filtros.tipoCliente,
+    remetente:   (n: typeof base[number]) => !filtros.remetente   || n.remetente   === filtros.remetente,
+  }), [filtros])
+
+  // Filtros em CASCATA (Marcelo, 17/08): as opções de cada seletor são
+  // calculadas sobre as notas que passam em todos os OUTROS filtros — escolher
+  // Tipo Carga reduz os municípios; escolher município reduz os bairros; etc.
+  const opcoesFiltro = useMemo(() => {
+    const campos = Object.keys(passa) as (keyof NotasFiltros)[]
+    const valor: Record<keyof NotasFiltros, (n: typeof base[number]) => string | undefined> = {
+      regiao:      n => n.regiao,
+      solucaoSac:  n => n.solucaoSac,
+      tipoCarga:   n => n.grade,
+      rota:        n => n.rota,
+      municipio:   n => n.municipio,
+      bairro:      n => n.bairro,
+      tipoCliente: n => n.tipoCliente,
+      remetente:   n => n.remetente,
+    }
+    const out = {} as Record<keyof NotasFiltros, string[]>
+    for (const campo of campos) {
+      const outros = campos.filter(c => c !== campo)
+      const subset = base.filter(n => outros.every(c => passa[c](n)))
+      out[campo] = opcoesUnicas(subset.map(valor[campo]))
+    }
+    return out
+  }, [base, passa])
 
   const filtradas = useMemo(() => {
-    return nfsPendentes.filter(n =>
-      (!filtros.regiao      || n.regiao      === filtros.regiao) &&
-      (!filtros.solucaoSac  || n.solucaoSac  === filtros.solucaoSac) &&
-      (!filtros.tipoCarga   || n.grade       === filtros.tipoCarga) &&
-      (!filtros.rota        || n.rota        === filtros.rota) &&
-      (!filtros.municipio   || n.municipio   === filtros.municipio) &&
-      (!filtros.bairro      || n.bairro      === filtros.bairro) &&
-      (!filtros.tipoCliente || n.tipoCliente === filtros.tipoCliente) &&
-      (!filtros.remetente   || n.remetente   === filtros.remetente),
-    )
-  }, [nfsPendentes, filtros])
+    const campos = Object.keys(passa) as (keyof NotasFiltros)[]
+    return base.filter(n => campos.every(c => passa[c](n)))
+  }, [base, passa])
 
   // Pedido do Marcelo (item 10): ordenado por Tipo Carga / Rota / Destinatário.
   const sorted = useMemo(() => {
@@ -134,6 +177,7 @@ export function useNotasFiscais(defaultPageSize: PageSize = 25): UseNotasFiscais
       ind_ree:           nf.indRee,
       solucao_sac:       nf.solucaoSac ?? null,
       remetente:         nf.remetente ?? null,
+      alertaSac:         temAlertaSac(nf),
       selecionada:       !nfsDesmarcadas.has(nf.numnfs),
       mesmoDestAnterior: i > 0 && arr[i - 1].destinatario === nf.destinatario,
     })),
@@ -195,5 +239,7 @@ export function useNotasFiscais(defaultPageSize: PageSize = 25): UseNotasFiscais
     desmarcarFiltradas,
     notasFiltradas: sorted,
     desmarcadas: nfsDesmarcadas,
+    incluirParciais,
+    setIncluirParciais,
   }
 }

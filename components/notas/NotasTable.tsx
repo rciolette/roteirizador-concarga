@@ -69,7 +69,7 @@ export function NotasTable() {
     rows, total, totalDesmarcadas, page, pageSize, setPage, setPageSize, loading, error,
     filtros, setFiltro, limparFiltros, opcoesFiltro, toggleSelecionada, limparDesmarcacoes,
     totalFiltradasSelecionadas, marcarFiltradas, desmarcarFiltradas,
-    notasFiltradas, desmarcadas,
+    notasFiltradas, desmarcadas, incluirParciais, setIncluirParciais,
   } = useNotasFiscais(25)
   const [mapaAberto, setMapaAberto] = useState(false)
 
@@ -118,6 +118,18 @@ export function NotasTable() {
             Limpar filtros
           </button>
         )}
+        <button
+          onClick={() => setIncluirParciais(!incluirParciais)}
+          className={cn(
+            'text-[11px] px-2 py-1 rounded-md border cursor-pointer',
+            incluirParciais
+              ? 'border-primary text-primary bg-primary/5'
+              : 'border-[var(--border-input)] bg-surface text-muted hover:text-base',
+          )}
+          title="Rotas parciais 996/999 ficam ocultas por padrão"
+        >
+          {incluirParciais ? '✓ 996/999 incluídas' : 'Incluir 996/999'}
+        </button>
         {total > 0 && (
           <button
             onClick={() => setMapaAberto(true)}
@@ -197,6 +209,14 @@ export function NotasTable() {
                     />
                   </td>
                   <td className="px-3 py-2 font-mono text-[11px] text-base whitespace-nowrap">
+                    {row.alertaSac && (
+                      <span
+                        className="text-warn mr-1 cursor-help"
+                        title={`Solução SAC: ${row.solucao_sac ?? ''} — analisar antes de incluir em uma rota/entrega`}
+                      >
+                        ⚠
+                      </span>
+                    )}
                     {row.n_nfs ?? '—'}
                   </td>
                   <td className={cn('px-3 py-2 max-w-[200px] truncate', row.mesmoDestAnterior ? 'text-success-dark font-medium' : 'text-base')} title={row.destinatario ?? undefined}>
