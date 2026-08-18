@@ -76,7 +76,8 @@ export function NotasTable() {
     notasFiltradas, desmarcadas, incluirParciais, setIncluirParciais,
   } = useNotasFiscais(25)
   const { refresh, setNfsDesmarcadasBulk } = useAppData()
-  const [mapaAberto, setMapaAberto] = useState(false)
+  // Mapa visível por padrão (Raphael, 18/08) — o operador pode ocultar se quiser.
+  const [mapaAberto, setMapaAberto] = useState(true)
   const [gerandoRota, setGerandoRota] = useState(false)
   const [msgRota, setMsgRota] = useState('')
 
@@ -178,14 +179,14 @@ export function NotasTable() {
               <button
                 onClick={() => setIncluirParciais(!incluirParciais)}
                 className={cn(
-                  'text-[11px] px-2 py-1 rounded-md border cursor-pointer',
+                  'text-[11px] px-2.5 py-1 rounded-md font-medium cursor-pointer border border-transparent',
                   incluirParciais
-                    ? 'border-primary text-primary bg-primary/5'
-                    : 'border-[var(--border-input)] bg-surface text-muted hover:text-base',
+                    ? 'bg-warn-mid text-white'
+                    : 'bg-warn-bg text-warn-mid hover:brightness-95',
                 )}
-                title="Rotas parciais 996/999 ficam ocultas por padrão"
+                title="Rotas parciais (996/999) ficam ocultas por padrão — clique para incluir"
               >
-                {incluirParciais ? '✓ 996/999 incluídas' : 'Incluir 996/999'}
+                {incluirParciais ? '✓ PARCIAL incluídas' : 'Incluir PARCIAL'}
               </button>
               <button
                 onClick={() => setMapaAberto(v => !v)}
