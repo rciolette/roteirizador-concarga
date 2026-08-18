@@ -6,10 +6,10 @@ import { cn, formatPeso } from '@/lib/utils'
 // ── Topbar ───────────────────────────────────────────────────────────────────
 export function Topbar({ title, sub, children }: { title: string; sub?: string; children?: ReactNode }) {
   return (
-    <div className="h-[46px] bg-surface border-b border-[0.5px] border-[var(--border-subtle)] flex items-center justify-between px-5 shrink-0 gap-3">
-      <div className="min-w-0">
-        <div className="text-[13px] font-medium tracking-[-0.01em] text-base">{title}</div>
-        {sub && <div className="text-[10px] text-muted mt-px">{sub}</div>}
+    <div className="h-[36px] bg-surface border-b border-[0.5px] border-[var(--border-subtle)] flex items-center justify-between px-4 shrink-0 gap-3">
+      <div className="min-w-0 flex items-baseline gap-2">
+        <div className="text-[12px] font-medium tracking-[-0.01em] text-base whitespace-nowrap">{title}</div>
+        {sub && <div className="text-[10px] text-muted truncate">{sub}</div>}
       </div>
       <div className="flex items-center gap-2 shrink-0">{children}</div>
     </div>

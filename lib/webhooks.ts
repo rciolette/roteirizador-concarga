@@ -327,6 +327,58 @@ export async function salvarRotasSupabase(rotas: Rota[], data: string): Promise<
   return resultado
 }
 
+// ── Edição manual da rota na aprovação (Marcelo, 17/08) ──────────────────────
+
+/** Recalcula peso_total e qtd_notas de uma rota a partir das NFs vinculadas. */
+async function recalcularRota(rotaId: string): Promise<void> {
+  const { data: nfs } = await sb()
+    .from('notas_fiscais')
+    .select('peso_kg')
+    .eq('rota_id', rotaId)
+  const lista = (nfs ?? []) as { peso_kg: number | null }[]
+  await sb().from('rotas').update({
+    peso_total:    lista.reduce((acc, n) => acc + (n.peso_kg ?? 0), 0),
+    qtd_notas:     lista.length,
+    atualizado_em: new Date().toISOString(),
+  }).eq('id', rotaId)
+}
+
+/** Remove uma NF da rota (a nota volta a ficar sem rota — não é excluída do SIAT). */
+export async function removerNotaDaRota(rotaId: string, nfId: string): Promise<void> {
+  const { error } = await sb().from('notas_fiscais').delete().eq('id', nfId).eq('rota_id', rotaId)
+  if (error) throw new Error(error.message)
+  await recalcularRota(rotaId)
+}
+
+/** Move uma NF desta rota para outra rota do dia. */
+export async function moverNotaParaRota(origemId: string, destinoId: string, nfId: string): Promise<void> {
+  const { error } = await sb()
+    .from('notas_fiscais')
+    .update({ rota_id: destinoId })
+    .eq('id', nfId)
+    .eq('rota_id', origemId)
+  if (error) throw new Error(error.message)
+  await recalcularRota(origemId)
+  await recalcularRota(destinoId)
+}
+
+/** Define/troca o veículo e o motorista de uma rota (etapa de aprovação). */
+export async function definirVeiculoDaRota(rotaId: string, veiculo: {
+  veiculoId?:        string
+  placa:             string
+  motoristaNome?:    string
+  motoristaCelular?: string
+}): Promise<void> {
+  const { error } = await sb().from('rotas').update({
+    veiculo_id:        isUuid(veiculo.veiculoId) ? veiculo.veiculoId : null,
+    veiculo_placa:     veiculo.placa || null,
+    motorista_nome:    veiculo.motoristaNome    ?? null,
+    motorista_celular: veiculo.motoristaCelular ?? null,
+    atualizado_em:     new Date().toISOString(),
+  }).eq('id', rotaId)
+  if (error) throw new Error(error.message)
+}
+
 export async function salvarNfsNaoAlocadas(nfs: number[], data: string, motivo: string): Promise<void> {
   if (nfs.length === 0) return
   await sb().from('nfs_nao_alocadas').insert(

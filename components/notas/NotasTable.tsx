@@ -4,8 +4,12 @@ import dynamic from 'next/dynamic'
 import { cn } from '@/lib/utils'
 import { useNotasFiscais, type PageSize, type NotasFiltros } from '@/hooks/useNotasFiscais'
 
-const MapaNotasDialog = dynamic(
-  () => import('@/components/notas/MapaNotasDialog').then(m => m.MapaNotasDialog),
+import { useAppData } from '@/components/providers/AppDataProvider'
+import { salvarRotasSupabase } from '@/lib/webhooks'
+import type { Rota } from '@/types'
+
+const MapaNotasInline = dynamic(
+  () => import('@/components/notas/MapaNotasDialog').then(m => m.MapaNotasInline),
   { ssr: false },
 )
 
@@ -71,7 +75,56 @@ export function NotasTable() {
     totalFiltradasSelecionadas, marcarFiltradas, desmarcarFiltradas,
     notasFiltradas, desmarcadas, incluirParciais, setIncluirParciais,
   } = useNotasFiscais(25)
+  const { refresh, setNfsDesmarcadasBulk } = useAppData()
   const [mapaAberto, setMapaAberto] = useState(false)
+  const [gerandoRota, setGerandoRota] = useState(false)
+  const [msgRota, setMsgRota] = useState('')
+
+  // Fluxo MANUAL (Marcelo 17/08): filtrar → marcar → Gerar rota. Sem IA.
+  // A rota nasce "aguardando" e vai para a aprovação, onde o operador define
+  // veículo/motorista e pode remover ou mover NFs.
+  async function handleGerarRota() {
+    const selecionadas = notasFiltradas.filter(n => !desmarcadas.has(n.numnfs))
+    if (!selecionadas.length || gerandoRota) return
+
+    const comAlerta = selecionadas.filter(n =>
+      n.solucaoSac && !n.indRee && n.solucaoSac.trim().toUpperCase() !== 'REENTREGA')
+    if (comAlerta.length > 0 && !window.confirm(
+      `${comAlerta.length} nota(s) selecionada(s) têm Solução SAC pendente (⚠). Incluir mesmo assim na rota?`)) {
+      return
+    }
+
+    setGerandoRota(true)
+    setMsgRota('')
+    try {
+      const agora  = new Date()
+      const codigo = filtros.rota
+        || `MONTADA ${agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
+      const regiao = filtros.regiao || selecionadas.find(n => n.regiao)?.regiao || ''
+      const hoje   = agora.toISOString().slice(0, 10)
+      const rota: Rota = {
+        id:              `manual-${agora.getTime()}`,
+        data:            hoje,
+        codigoRota:      codigo,
+        regiao,
+        status:          'aguardando',
+        pesoTotal:       selecionadas.reduce((acc, n) => acc + n.peso, 0),
+        qtdNotas:        selecionadas.length,
+        notasFiscais:    selecionadas,
+        nfsConcatenadas: selecionadas.map(n => n.numnfs).join(';'),
+        createdAt:       hoje,
+      }
+      await salvarRotasSupabase([rota], hoje)
+      // As NFs usadas saem da seleção para não entrarem duas vezes em rotas.
+      setNfsDesmarcadasBulk(selecionadas.map(n => n.numnfs), true)
+      await refresh()
+      setMsgRota(`✓ Rota "${codigo}" montada (${selecionadas.length} NFs) — aguardando aprovação`)
+    } catch {
+      setMsgRota('Erro ao montar a rota — tente novamente')
+    } finally {
+      setGerandoRota(false)
+    }
+  }
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
   const from = page * pageSize + 1
@@ -95,60 +148,89 @@ export function NotasTable() {
         </div>
       )}
 
-      {/* Filtros (item 7) */}
-      <div className="flex flex-wrap items-center gap-1.5 mb-2">
-        {(Object.keys(FILTRO_LABELS) as (keyof NotasFiltros)[]).map(campo => (
-          <select
-            key={campo}
-            value={filtros[campo]}
-            onChange={e => setFiltro(campo, e.target.value)}
-            className="text-[11px] px-1.5 py-1 rounded-md border border-[var(--border-input)] bg-surface text-mid max-w-[150px]"
-          >
-            <option value="">{FILTRO_LABELS[campo]}</option>
-            {opcoesFiltro[campo].map(op => (
-              <option key={op} value={op}>{op}</option>
-            ))}
-          </select>
-        ))}
-        {filtrosAtivos && (
-          <button
-            onClick={limparFiltros}
-            className="text-[11px] px-2 py-1 rounded-md text-primary hover:underline"
-          >
-            Limpar filtros
-          </button>
-        )}
-        <button
-          onClick={() => setIncluirParciais(!incluirParciais)}
-          className={cn(
-            'text-[11px] px-2 py-1 rounded-md border cursor-pointer',
-            incluirParciais
-              ? 'border-primary text-primary bg-primary/5'
-              : 'border-[var(--border-input)] bg-surface text-muted hover:text-base',
+      {/* Barra de trabalho STICKY (Marcelo 17/08): filtros congelados no topo,
+          mapa compacto ao lado, notas abaixo. */}
+      <div className="sticky top-[36px] z-20 bg-[var(--color-page)] pb-2 pt-1">
+        <div className="flex gap-3 items-start">
+          <div className="flex-1 min-w-0">
+            <div className="flex flex-wrap items-center gap-1.5">
+              {(Object.keys(FILTRO_LABELS) as (keyof NotasFiltros)[]).map(campo => (
+                <select
+                  key={campo}
+                  value={filtros[campo]}
+                  onChange={e => setFiltro(campo, e.target.value)}
+                  className="text-[11px] px-1.5 py-1 rounded-md border border-[var(--border-input)] bg-surface text-mid max-w-[150px]"
+                >
+                  <option value="">{FILTRO_LABELS[campo]}</option>
+                  {opcoesFiltro[campo].map(op => (
+                    <option key={op} value={op}>{op}</option>
+                  ))}
+                </select>
+              ))}
+              {filtrosAtivos && (
+                <button
+                  onClick={limparFiltros}
+                  className="text-[11px] px-2 py-1 rounded-md text-primary hover:underline"
+                >
+                  Limpar filtros
+                </button>
+              )}
+              <button
+                onClick={() => setIncluirParciais(!incluirParciais)}
+                className={cn(
+                  'text-[11px] px-2 py-1 rounded-md border cursor-pointer',
+                  incluirParciais
+                    ? 'border-primary text-primary bg-primary/5'
+                    : 'border-[var(--border-input)] bg-surface text-muted hover:text-base',
+                )}
+                title="Rotas parciais 996/999 ficam ocultas por padrão"
+              >
+                {incluirParciais ? '✓ 996/999 incluídas' : 'Incluir 996/999'}
+              </button>
+              <button
+                onClick={() => setMapaAberto(v => !v)}
+                className="text-[11px] px-2 py-1 rounded-md border border-[var(--border-input)] bg-surface text-mid hover:text-base cursor-pointer"
+                title="Prévia no mapa das notas filtradas (cores por região)"
+              >
+                {mapaAberto ? 'Ocultar mapa' : '🗺 Ver no mapa'}
+              </button>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 mt-1.5">
+              {total > 0 && (
+                <button
+                  onClick={handleGerarRota}
+                  disabled={gerandoRota || totalFiltradasSelecionadas === 0}
+                  className="text-[11px] px-3 py-1.5 rounded-md bg-primary text-white font-medium disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                  title="Monta uma rota com as NFs selecionadas no filtro atual e envia para aprovação"
+                >
+                  {gerandoRota ? 'Montando rota…' : `➕ Gerar rota (${totalFiltradasSelecionadas} NFs)`}
+                </button>
+              )}
+              <span className="text-[11px] text-muted flex items-center gap-2">
+                {total > 0 && (
+                  <span className={cn(totalFiltradasSelecionadas < total && 'text-warn font-medium')}>
+                    {totalFiltradasSelecionadas}/{total} selecionada{totalFiltradasSelecionadas !== 1 ? 's' : ''}
+                  </span>
+                )}
+                {totalDesmarcadas > 0 && (
+                  <button onClick={limparDesmarcacoes} className="text-primary hover:underline">restaurar todas</button>
+                )}
+                {msgRota && (
+                  <span className={cn('font-medium', msgRota.startsWith('Erro') ? 'text-danger' : 'text-success-dark')}>
+                    {msgRota}
+                  </span>
+                )}
+              </span>
+            </div>
+          </div>
+
+          {mapaAberto && (
+            <div className="w-[400px] shrink-0 hidden lg:block">
+              <MapaNotasInline notas={notasFiltradas} desmarcadas={desmarcadas} height={190} />
+            </div>
           )}
-          title="Rotas parciais 996/999 ficam ocultas por padrão"
-        >
-          {incluirParciais ? '✓ 996/999 incluídas' : 'Incluir 996/999'}
-        </button>
-        {total > 0 && (
-          <button
-            onClick={() => setMapaAberto(true)}
-            className="text-[11px] px-2 py-1 rounded-md border border-[var(--border-input)] bg-surface text-mid hover:text-base cursor-pointer"
-            title="Prévia no mapa das notas filtradas (cores por região)"
-          >
-            🗺 Ver no mapa
-          </button>
-        )}
-        <span className="text-[11px] text-muted ml-auto flex items-center gap-2">
-          {total > 0 && (
-            <span className={cn(totalFiltradasSelecionadas < total && 'text-warn font-medium')}>
-              {totalFiltradasSelecionadas}/{total} selecionada{totalFiltradasSelecionadas !== 1 ? 's' : ''} p/ roteirizar
-            </span>
-          )}
-          {totalDesmarcadas > 0 && (
-            <button onClick={limparDesmarcacoes} className="text-primary hover:underline">restaurar todas</button>
-          )}
-        </span>
+        </div>
       </div>
 
       {/* Tabela com scroll */}
@@ -303,13 +385,6 @@ export function NotasTable() {
         </div>
       </div>
 
-      {mapaAberto && (
-        <MapaNotasDialog
-          notas={notasFiltradas}
-          desmarcadas={desmarcadas}
-          onClose={() => setMapaAberto(false)}
-        />
-      )}
     </div>
   )
 }

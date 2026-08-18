@@ -20,6 +20,9 @@ import { DEFAULT_CONFIG } from '@/lib/data'
 import { carregarConfig } from '@/lib/config-store'
 import { useAuth } from '@/components/providers/AuthProvider'
 
+/** Cache local da última importação de NFs (Marcelo, 17/08). */
+const NF_CACHE_KEY = 'concarga_nf_cache_v1'
+
 // Atividade recente dos motoristas, direto do SIAT. Falha em silêncio: é um
 // recurso de ordenação, não pode impedir a tela de carregar.
 async function carregarAtividadeMotoristas(): Promise<MotoristaAtividade[]> {
@@ -196,6 +199,12 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         progress: 100,
         summary,
       })
+
+      // Cache local da importação (Marcelo, 17/08): ao logar/recarregar, as
+      // notas da última importação reaparecem sem consultar o SIAT.
+      try {
+        localStorage.setItem(NF_CACHE_KEY, JSON.stringify({ rows, em: new Date().toISOString() }))
+      } catch { /* storage cheio — cache é conveniência, não crítico */ }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'erro desconhecido'
       setNfImportState({ running: false, step: `Falha: ${message}`, progress: 0 })
@@ -209,6 +218,30 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!usuario || bootstrapped.current) return
     bootstrapped.current = true
+
+    // Restaura a última importação de NFs do cache local (sem tocar o SIAT).
+    // A atualização continua sendo SEMPRE manual via "Importar NFs".
+    try {
+      const raw = localStorage.getItem(NF_CACHE_KEY)
+      if (raw) {
+        const { rows, em } = JSON.parse(raw) as { rows: SiatRow[]; em: string }
+        if (Array.isArray(rows) && rows.length) {
+          const pendentes = siatRowsToNotasPendentes(rows)
+          setNfRows(rows)
+          setNfsPendentes(pendentes)
+          setNfsDesmarcadas(new Set(
+            pendentes.filter(n => Boolean(n.solucaoSac) && !n.indRee).map(n => n.numnfs),
+          ))
+          const quando = new Date(em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+          setNfImportState({
+            running: false,
+            step:    `${pendentes.length} NFs do cache (importadas em ${quando}) — use Importar NFs para atualizar`,
+            progress: 100,
+            summary: summarizeSiat(rows),
+          })
+        }
+      }
+    } catch { /* cache corrompido — segue sem notas */ }
 
     async function bootstrap() {
       const [mots, veics, cfg, atividade] = await Promise.all([

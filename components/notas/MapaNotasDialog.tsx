@@ -69,7 +69,27 @@ export function MapaNotasDialog({ notas, desmarcadas, onClose }: MapaNotasDialog
   )
 }
 
-function MapaNotasInner({ notas, desmarcadas }: { notas: NotaFiscal[]; desmarcadas: Set<string> }) {
+/** Versão embutida (sem dialog) — mapa compacto ao lado dos filtros (Marcelo, 17/08). */
+export function MapaNotasInline({ notas, desmarcadas, height = 220 }: {
+  notas:       NotaFiscal[]
+  desmarcadas: Set<string>
+  height?:     number
+}) {
+  if (!API_KEY) {
+    return (
+      <div className="rounded-lg border border-[0.5px] border-[var(--border-subtle)] bg-cream flex items-center justify-center text-[11px] text-muted px-4 text-center" style={{ height }}>
+        Mapa indisponível — configure NEXT_PUBLIC_GOOGLE_MAPS_API_KEY.
+      </div>
+    )
+  }
+  return (
+    <div className="rounded-lg border border-[0.5px] border-[var(--border-subtle)] overflow-hidden bg-surface">
+      <MapaNotasInner notas={notas} desmarcadas={desmarcadas} height={height} />
+    </div>
+  )
+}
+
+function MapaNotasInner({ notas, desmarcadas, height = 420 }: { notas: NotaFiscal[]; desmarcadas: Set<string>; height?: number }) {
   const { isLoaded, loadError } = useJsApiLoader({
     id:               'google-map-script',
     googleMapsApiKey: API_KEY,
@@ -128,14 +148,14 @@ function MapaNotasInner({ notas, desmarcadas }: { notas: NotaFiscal[]; desmarcad
 
   if (loadError) {
     return (
-      <div className="h-[420px] flex items-center justify-center text-[11px] text-danger">
+      <div style={{ height }} className="flex items-center justify-center text-[11px] text-danger">
         Erro ao carregar o Google Maps.
       </div>
     )
   }
 
   if (!isLoaded || geocoding) {
-    return <div className="h-[420px] bg-cream-hover animate-pulse" />
+    return <div style={{ height }} className="bg-cream-hover animate-pulse" />
   }
 
   function markerFor(pin: PinNota, clusterer?: import('@react-google-maps/marker-clusterer').Clusterer) {
@@ -166,7 +186,7 @@ function MapaNotasInner({ notas, desmarcadas }: { notas: NotaFiscal[]; desmarcad
 
   return (
     <div className="flex flex-col">
-      <div style={{ height: '420px' }}>
+      <div style={{ height }}>
         <GoogleMap
           mapContainerStyle={{ width: '100%', height: '100%' }}
           center={BH_CENTER}

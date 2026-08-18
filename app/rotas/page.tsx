@@ -11,7 +11,7 @@ import { AgendadosHojeTable } from '@/components/ui/AgendadosHojeTable'
 import { MapaRota } from '@/components/ui/MapaRota'
 import { ImportarSIATButton } from '@/components/ui/ImportarSIATButton'
 import { SiatImportDialog } from '@/components/ui/SiatImportDialog'
-import { webhookGerarRotas, mapRetornoGerarRotas, salvarRotasSupabase, salvarNfsNaoAlocadas, atualizarStatusRota, carregarRotasSupabase, aguardarRotasGeradas, Prioridade, MotoristaPayload, VeiculoDisponivel } from '@/lib/webhooks'
+import { webhookGerarRotas, mapRetornoGerarRotas, salvarRotasSupabase, salvarNfsNaoAlocadas, atualizarStatusRota, carregarRotasSupabase, aguardarRotasGeradas, Prioridade, MotoristaPayload, VeiculoDisponivel, removerNotaDaRota, moverNotaParaRota, definirVeiculoDaRota } from '@/lib/webhooks'
 import { gerarLinkMapsUrl } from '@/lib/maps'
 import { derivarCond } from '@/lib/siat'
 import { listarCapacidades, type CapacidadeVeiculo } from '@/lib/frota'
@@ -543,6 +543,8 @@ function RouteCard({ rota, onUpdateStatus, onAskConfirm, enderecoOrigem }: {
             </p>
           )}
 
+          {isActionable && <GerenciarRota rota={rota} />}
+
           {rota.notasFiscais.length > 0 && (
             <div className="mt-3">
               <MapaRota nfs={rota.notasFiscais} height="260px" originAddress={enderecoOrigem ?? undefined} />
@@ -566,6 +568,128 @@ function RouteCard({ rota, onUpdateStatus, onAskConfirm, enderecoOrigem }: {
             )}
           </div>
         </div>
+      )}
+    </div>
+  )
+}
+
+// ── Gerenciar rota (aprovação manual — Marcelo, 17/08) ────────────────────────
+// Etapa de aprovação do fluxo manual: definir veículo/motorista da rota e
+// editar as NFs (remover da rota ou mover para outra rota do dia). Sem
+// substituição/troca — apenas remover ou mover, conforme combinado.
+function GerenciarRota({ rota }: { rota: Rota }) {
+  const { veiculos, rotas, refresh } = useAppData()
+  const [nfSel, setNfSel]           = useState('')
+  const [destinoSel, setDestinoSel] = useState('')
+  const [veiculoSel, setVeiculoSel] = useState('')
+  const [salvando, setSalvando]     = useState(false)
+  const [msg, setMsg]               = useState('')
+
+  const outrasRotas = rotas.filter(r =>
+    r.id !== rota.id && (r.status === 'rascunho' || r.status === 'aguardando'))
+  const frota = veiculos.filter(v => v.status === 'disponivel' || v.disponivel_hoje)
+
+  async function executar(acao: () => Promise<void>, ok: string) {
+    setSalvando(true); setMsg('')
+    try {
+      await acao()
+      await refresh()
+      setMsg(`✓ ${ok}`)
+      setNfSel(''); setDestinoSel('')
+    } catch (err) {
+      setMsg(`Erro: ${err instanceof Error ? err.message : 'falha na operação'}`)
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  const selCls = 'text-[11px] px-1.5 py-1 rounded-md border border-[var(--border-input)] bg-surface text-mid max-w-[220px]'
+  const btnCls = 'text-[11px] px-2 py-1 rounded-md border border-[var(--border-input)] bg-surface text-mid hover:text-base disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer'
+
+  return (
+    <div className="mt-3 pt-2.5 border-t border-[0.5px] border-[var(--border-subtle)] flex flex-col gap-2">
+      <span className="text-[10px] uppercase tracking-[0.06em] text-muted font-medium">Editar rota</span>
+
+      {/* Veículo / motorista */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        <select className={selCls} value={veiculoSel} onChange={e => setVeiculoSel(e.target.value)}>
+          <option value="">Definir veículo/motorista…</option>
+          {frota.map(v => (
+            <option key={v.id} value={v.id}>
+              {v.placa} · {v.tipo} · {v.motoristaNome ?? 'sem motorista'}
+            </option>
+          ))}
+        </select>
+        <button
+          className={btnCls}
+          disabled={!veiculoSel || salvando}
+          onClick={() => {
+            const v = frota.find(f => f.id === veiculoSel)
+            if (!v) return
+            executar(
+              () => definirVeiculoDaRota(rota.id, {
+                veiculoId:        v.id,
+                placa:            v.placa,
+                motoristaNome:    v.motoristaNome,
+                motoristaCelular: v.motoristaCelular,
+              }),
+              `Veículo ${v.placa} definido`,
+            )
+          }}
+        >
+          Aplicar
+        </button>
+      </div>
+
+      {/* Remover / mover NF */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        <select className={selCls} value={nfSel} onChange={e => setNfSel(e.target.value)}>
+          <option value="">NF desta rota…</option>
+          {rota.notasFiscais.map(nf => (
+            <option key={nf.id} value={nf.id}>
+              {nf.numnfs} · {nf.destinatario.slice(0, 28)}
+            </option>
+          ))}
+        </select>
+        <button
+          className={btnCls}
+          disabled={!nfSel || salvando}
+          onClick={() => {
+            const nf = rota.notasFiscais.find(n => n.id === nfSel)
+            executar(
+              () => removerNotaDaRota(rota.id, nfSel),
+              `NF ${nf?.numnfs ?? ''} removida da rota`,
+            )
+          }}
+        >
+          Remover da rota
+        </button>
+        <select className={selCls} value={destinoSel} onChange={e => setDestinoSel(e.target.value)}>
+          <option value="">Mover para…</option>
+          {outrasRotas.map(r => (
+            <option key={r.id} value={r.id}>{r.codigoRota} ({r.qtdNotas} NFs)</option>
+          ))}
+        </select>
+        <button
+          className={btnCls}
+          disabled={!nfSel || !destinoSel || salvando}
+          onClick={() => {
+            const nf = rota.notasFiscais.find(n => n.id === nfSel)
+            const destino = outrasRotas.find(r => r.id === destinoSel)
+            executar(
+              () => moverNotaParaRota(rota.id, destinoSel, nfSel),
+              `NF ${nf?.numnfs ?? ''} movida para ${destino?.codigoRota ?? 'outra rota'}`,
+            )
+          }}
+        >
+          Mover
+        </button>
+      </div>
+
+      {msg && (
+        <span className={cn('text-[11px]', msg.startsWith('Erro') ? 'text-danger' : 'text-success-dark')}>
+          {msg}
+        </span>
       )}
     </div>
   )
