@@ -151,6 +151,97 @@ function MultiFiltro({ label, opcoes, selecionadas, onToggle, onLimpar }: {
   )
 }
 
+// Tags dos filtros APLICADOS (Raphael, 24/08): deixa visual o recorte ativo —
+// cada valor selecionado vira uma tag removível no espaço abaixo da barra.
+function FiltrosAplicados({ filtros, incluirParciais, onRemover, onRemoverParciais }: {
+  filtros:           NotasFiltros
+  incluirParciais:   boolean
+  onRemover:         (campo: (typeof CAMPOS_UI)[number], valor: string) => void
+  onRemoverParciais: () => void
+}) {
+  const tags = CAMPOS_UI.flatMap(campo =>
+    filtros[campo].map(valor => ({ campo, valor })))
+  if (tags.length === 0 && !incluirParciais) return null
+
+  return (
+    <div className="flex flex-wrap items-center gap-1 mt-2">
+      <span className="text-[10px] text-muted uppercase tracking-[0.06em] font-medium mr-0.5">
+        Filtros aplicados
+      </span>
+      {tags.map(({ campo, valor }) => (
+        <span
+          key={`${campo}|${valor}`}
+          className="inline-flex items-center gap-1 text-[10px] pl-2 pr-1 py-0.5 rounded-full bg-primary/8 border border-primary/25 text-primary whitespace-nowrap max-w-[220px]"
+        >
+          <span className="opacity-70">{FILTRO_LABELS[campo]}:</span>
+          <span className="font-medium truncate" title={valor}>{valor}</span>
+          <button
+            onClick={() => onRemover(campo, valor)}
+            className="cursor-pointer rounded-full hover:bg-primary/15 w-3.5 h-3.5 leading-none inline-flex items-center justify-center"
+            title="Remover este filtro"
+          >
+            ×
+          </button>
+        </span>
+      ))}
+      {incluirParciais && (
+        <span className="inline-flex items-center gap-1 text-[10px] pl-2 pr-1 py-0.5 rounded-full bg-warn-bg border border-warn-mid/40 text-warn-mid whitespace-nowrap">
+          <span className="font-medium">Rotas PARCIAIS incluídas</span>
+          <button
+            onClick={onRemoverParciais}
+            className="cursor-pointer rounded-full hover:bg-warn-mid/15 w-3.5 h-3.5 leading-none inline-flex items-center justify-center"
+            title="Voltar a ocultar 996/999"
+          >
+            ×
+          </button>
+        </span>
+      )}
+    </div>
+  )
+}
+
+// Resumo do RECORTE (Raphael, 24/08): mini-cards que preenchem o espaço em
+// branco sob a barra — visão do conjunto filtrado (inclui as desmarcadas).
+function ResumoRecorte({ notas }: { notas: NotaFiscal[] }) {
+  if (notas.length === 0) return null
+  const pesoKg    = notas.reduce((acc, n) => acc + n.peso, 0)
+  const municipios = new Set(notas.map(n => n.municipio).filter(m => m && m !== '—')).size
+  const destinos   = new Set(notas.map(n => n.destinatario)).size
+  const comAgenda  = notas.filter(n => n.dataAgendamento).length
+  const alertasSac = notas.filter(n =>
+    n.solucaoSac && !n.indRee && n.solucaoSac.trim().toUpperCase() !== 'REENTREGA').length
+
+  const cards: [string, string, boolean?][] = [
+    ['Peso do recorte', `${pesoKg.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} kg`],
+    ['NFs no recorte',  String(notas.length)],
+    ['Municípios',      String(municipios)],
+    ['Destinatários',   String(destinos)],
+    ['Com agenda',      String(comAgenda)],
+    ['⚠ SAC pendente',  String(alertasSac), alertasSac > 0],
+  ]
+
+  return (
+    <div className="flex flex-wrap gap-1.5 mt-2">
+      {cards.map(([label, valor, destaque]) => (
+        <div
+          key={label}
+          className={cn(
+            'px-2.5 py-1 rounded-md border border-[0.5px] bg-surface min-w-[86px]',
+            destaque ? 'border-warn-mid/50 bg-warn-bg' : 'border-[var(--border-subtle)]',
+          )}
+        >
+          <div className={cn('text-[9px] uppercase tracking-[0.05em] font-medium', destaque ? 'text-warn-mid' : 'text-muted')}>
+            {label}
+          </div>
+          <div className={cn('text-[13px] font-semibold tabular-nums leading-tight', destaque ? 'text-warn-mid' : 'text-base')}>
+            {valor}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 // Resumo da SELEÇÃO ao lado do mapa (Marcelo, 21/08) — espelha o quadro da
 // planilha (PESO / ENTREGA / REDES / CD / RESTRIÇÕES / REENTREGA), mais completo.
 function ResumoSelecao({ notas, desmarcadas }: { notas: NotaFiscal[]; desmarcadas: Set<string> }) {
@@ -353,6 +444,15 @@ export function NotasTable() {
                 )}
               </span>
             </div>
+
+            {/* Espaço sob a barra: filtros aplicados visíveis + resumo do recorte */}
+            <FiltrosAplicados
+              filtros={filtros}
+              incluirParciais={incluirParciais}
+              onRemover={(campo, valor) => toggleFiltro(campo, valor)}
+              onRemoverParciais={() => setIncluirParciais(false)}
+            />
+            {!loading && <ResumoRecorte notas={notasFiltradas} />}
           </div>
 
           {mapaAberto && (
@@ -463,7 +563,7 @@ export function NotasTable() {
                   </td>
                   <td className="px-3 py-2 text-right text-mid tabular-nums whitespace-nowrap">
                     {row.peso_kg != null
-                      ? `${(row.peso_kg / 1000).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} t`
+                      ? `${row.peso_kg.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} kg`
                       : '—'}
                   </td>
                   <td className="px-3 py-2 text-mid whitespace-nowrap">

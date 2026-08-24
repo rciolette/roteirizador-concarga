@@ -110,10 +110,12 @@ export default function Sidebar() {
       'shrink-0 bg-surface border-r border-[0.5px] border-[var(--border-subtle)] flex flex-col h-full transition-[width] duration-200 ease-in-out overflow-hidden',
       collapsed ? 'w-[52px]' : 'w-[172px]',
     )}>
-      {/* Logo */}
+      {/* Logo + botão de recolher (ícone de painel, no topo — Raphael 24/08) */}
       <div className={cn(
-        'border-b border-[0.5px] border-[var(--border-subtle)] flex items-center shrink-0',
-        collapsed ? 'px-0 pt-4 pb-3.5 justify-center' : 'px-[18px] pt-4 pb-3.5',
+        'border-b border-[0.5px] border-[var(--border-subtle)] shrink-0',
+        collapsed
+          ? 'px-0 pt-4 pb-3 flex flex-col items-center gap-2'
+          : 'px-[14px] pt-4 pb-3.5 flex items-center justify-between',
       )}>
         <div className="flex items-center gap-2">
           <div className="w-[26px] h-[26px] rounded-[7px] bg-primary flex items-center justify-center shrink-0">
@@ -127,6 +129,17 @@ export default function Sidebar() {
             <div className="text-[13px] font-medium text-base tracking-[-0.01em] whitespace-nowrap">Concarga</div>
           )}
         </div>
+        <button
+          type="button"
+          onClick={toggle}
+          title={collapsed ? 'Expandir menu' : 'Recolher menu'}
+          className="w-[26px] h-[26px] rounded-md flex items-center justify-center text-muted hover:bg-cream dark:hover:bg-white/5 hover:text-base transition-colors duration-100 bg-transparent border-none cursor-pointer shrink-0"
+        >
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3">
+            <rect x="1.5" y="2.5" width="13" height="11" rx="2.5"/>
+            <path d="M6 2.5v11"/>
+          </svg>
+        </button>
       </div>
 
       {/* Nav */}
@@ -269,21 +282,6 @@ export default function Sidebar() {
             {!collapsed && <span>Ajuda / Rever tutorial</span>}
           </button>
         )}
-
-        {/* Botão de colapsar */}
-        <button
-          type="button"
-          onClick={toggle}
-          title={collapsed ? 'Expandir menu' : 'Minimizar menu'}
-          className="flex items-center justify-center w-full py-1.5 rounded-lg text-muted hover:bg-cream dark:hover:bg-white/5 hover:text-base transition-colors duration-100 bg-transparent border-none cursor-pointer"
-        >
-          <svg
-            width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"
-            className={cn('transition-transform duration-200', collapsed ? 'rotate-180' : '')}
-          >
-            <path d="M10 3L5 8l5 5"/>
-          </svg>
-        </button>
       </div>
     </aside>
   )

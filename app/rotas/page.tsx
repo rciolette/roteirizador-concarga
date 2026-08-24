@@ -723,7 +723,7 @@ function SRotaTable({ rows }: { rows: SiatRow[] }) {
           {rows.length > 0 && (
             <>
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-warn-bg text-warn font-medium">{rows.length} NFs</span>
-              <span className="text-[10px] text-muted">{(pesoTotal / 1000).toFixed(2)} t</span>
+              <span className="text-[10px] text-muted">{formatPeso(pesoTotal)}</span>
             </>
           )}
         </div>

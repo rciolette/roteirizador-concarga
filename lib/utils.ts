@@ -2,9 +2,9 @@ export function cn(...classes: (string | undefined | null | false)[]): string {
   return classes.filter(Boolean).join(' ')
 }
 
+// Peso sempre em KG exato (Raphael, 24/08) — nada de arredondar para toneladas.
 export function formatPeso(kg: number): string {
-  if (kg >= 1000) return `${(kg / 1000).toFixed(1)}t`
-  return `${kg}kg`
+  return `${kg.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} kg`
 }
 
 export function formatDateTime(iso: string): string {

@@ -205,9 +205,9 @@ export default function Page() {
           />
           <MetricCard
             label="Peso total"
-            value={summary ? `${summary.pesoTotalToneladas}t` : formatPeso(metrics.pesoTotal)}
+            value={summary ? `${summary.pesoTotalKg.toLocaleString('pt-BR')} kg` : formatPeso(metrics.pesoTotal)}
             sub={summary
-              ? `${summary.pesoTotalKg.toLocaleString('pt-BR')} kg`
+              ? `${summary.totalNFs} NFs importadas`
               : metrics.pesoTotal > 0 ? `${metrics.pesoTotal.toLocaleString('pt-BR')} kg` : undefined}
             gradientBar={summary ? summary.pesoTotalKg > 0 : metrics.pesoTotal > 0}
           />

@@ -428,7 +428,7 @@ export function NfsPendentesTable() {
         <div className="px-4 py-2 flex items-center gap-4 border-b border-[0.5px] border-[var(--border-faint)] bg-cream/50 flex-wrap">
           <span className="text-[11px] text-mid font-medium">{filtered.length} NFs</span>
           <span className="text-[10px] text-muted">
-            Peso: <span className="font-medium text-mid">{(kpi.peso / 1000).toFixed(2)} t</span>
+            Peso: <span className="font-medium text-mid">{kpi.peso.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} kg</span>
           </span>
           {kpi.vermelho > 0 && (
             <span className="text-[10px] text-danger font-medium">
