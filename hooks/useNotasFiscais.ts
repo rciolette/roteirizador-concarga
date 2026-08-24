@@ -28,21 +28,30 @@ export interface NfPendenteRow {
   mesmoDestAnterior: boolean
 }
 
-// Pedido do Marcelo (11/08/26, item 7): filtros sobre as notas pendentes antes
-// de gerar as rotas.
+// Filtros MULTI-SELEÇÃO (Marcelo, 21/08): cada campo aceita várias opções ao
+// mesmo tempo, como os slicers da planilha. Array vazio = sem filtro.
 export interface NotasFiltros {
-  regiao:       string
-  solucaoSac:   string
-  tipoCarga:    string
-  rota:         string
-  municipio:    string
-  bairro:       string
-  tipoCliente:  string
-  remetente:    string
+  solucaoSac:   string[]
+  tipoCarga:    string[]
+  rota:         string[]
+  municipio:    string[]
+  bairro:       string[]
+  tipoCliente:  string[]
+  remetente:    string[]
+  /** Região continua no código (mapa/futuro), mas SEM UI — Marcelo 21/08. */
+  regiao:       string[]
 }
 
-const FILTROS_VAZIOS: NotasFiltros = {
-  regiao: '', solucaoSac: '', tipoCarga: '', rota: '', municipio: '', bairro: '', tipoCliente: '', remetente: '',
+/** Opção especial do filtro Solução SAC: notas SEM solução preenchida. */
+export const SAC_VAZIO = '(Vazio)'
+
+// Segmentação PADRÃO da rotina (Marcelo, 21/08): SAC Vazio + Reentrega.
+// "Limpar filtros" volta para ESTE padrão — nunca limpa a segmentação do SAC.
+export function filtrosPadrao(): NotasFiltros {
+  return {
+    solucaoSac: [SAC_VAZIO, 'REENTREGA'],
+    tipoCarga: [], rota: [], municipio: [], bairro: [], tipoCliente: [], remetente: [], regiao: [],
+  }
 }
 
 interface UseNotasFiscaisResult {
@@ -56,7 +65,11 @@ interface UseNotasFiscaisResult {
   loading: boolean
   error: string | null
   filtros: NotasFiltros
-  setFiltro: (campo: keyof NotasFiltros, valor: string) => void
+  /** Liga/desliga uma opção de um filtro multi-seleção. */
+  toggleFiltro: (campo: keyof NotasFiltros, valor: string) => void
+  /** Limpa um campo específico do filtro. */
+  limparFiltro: (campo: keyof NotasFiltros) => void
+  /** Volta TODOS os filtros ao padrão (SAC Vazio+Reentrega preservado). */
   limparFiltros: () => void
   opcoesFiltro: Record<keyof NotasFiltros, string[]>
   toggleSelecionada: (numnfs: string) => void
@@ -93,11 +106,13 @@ function temAlertaSac(n: { solucaoSac?: string; indRee: boolean }): boolean {
   return n.solucaoSac.trim().toUpperCase() !== 'REENTREGA'
 }
 
+const norm = (s: string | undefined) => (s ?? '').trim().toUpperCase()
+
 export function useNotasFiscais(defaultPageSize: PageSize = 25): UseNotasFiscaisResult {
   const { nfsPendentes, nfImportState, nfsDesmarcadas, toggleNfDesmarcada, limparNfsDesmarcadas, setNfsDesmarcadasBulk } = useAppData()
   const [page, setPage] = useState(0)
   const [pageSize, setPageSizeState] = useState<PageSize>(defaultPageSize)
-  const [filtros, setFiltros] = useState<NotasFiltros>(FILTROS_VAZIOS)
+  const [filtros, setFiltros] = useState<NotasFiltros>(filtrosPadrao)
   // Rotas 996/999 (parciais) só entram quando o operador pedir (Marcelo, 17/08).
   const [incluirParciais, setIncluirParciais] = useState(false)
 
@@ -107,25 +122,32 @@ export function useNotasFiscais(defaultPageSize: PageSize = 25): UseNotasFiscais
     [nfsPendentes, incluirParciais],
   )
 
-  // Predicado de um filtro individual
-  const passa = useMemo(() => ({
-    regiao:      (n: typeof base[number]) => !filtros.regiao      || n.regiao      === filtros.regiao,
-    solucaoSac:  (n: typeof base[number]) => !filtros.solucaoSac  || n.solucaoSac  === filtros.solucaoSac,
-    tipoCarga:   (n: typeof base[number]) => !filtros.tipoCarga   || n.grade       === filtros.tipoCarga,
-    rota:        (n: typeof base[number]) => !filtros.rota        || n.rota        === filtros.rota,
-    municipio:   (n: typeof base[number]) => !filtros.municipio   || n.municipio   === filtros.municipio,
-    bairro:      (n: typeof base[number]) => !filtros.bairro      || n.bairro      === filtros.bairro,
-    tipoCliente: (n: typeof base[number]) => !filtros.tipoCliente || n.tipoCliente === filtros.tipoCliente,
-    remetente:   (n: typeof base[number]) => !filtros.remetente   || n.remetente   === filtros.remetente,
-  }), [filtros])
+  // Predicado de um filtro individual (multi-seleção; array vazio = passa tudo).
+  // Solução SAC tem a opção especial "(Vazio)" = notas sem solução preenchida.
+  const passa = useMemo(() => {
+    const multi = (sel: string[], valor: string | undefined) =>
+      sel.length === 0 || sel.some(s => norm(s) === norm(valor))
+    return {
+      solucaoSac: (n: typeof base[number]) => {
+        if (filtros.solucaoSac.length === 0) return true
+        if (!n.solucaoSac) return filtros.solucaoSac.includes(SAC_VAZIO)
+        return filtros.solucaoSac.some(s => s !== SAC_VAZIO && norm(s) === norm(n.solucaoSac))
+      },
+      tipoCarga:   (n: typeof base[number]) => multi(filtros.tipoCarga,   n.grade),
+      rota:        (n: typeof base[number]) => multi(filtros.rota,        n.rota),
+      municipio:   (n: typeof base[number]) => multi(filtros.municipio,   n.municipio),
+      bairro:      (n: typeof base[number]) => multi(filtros.bairro,      n.bairro),
+      tipoCliente: (n: typeof base[number]) => multi(filtros.tipoCliente, n.tipoCliente),
+      remetente:   (n: typeof base[number]) => multi(filtros.remetente,   n.remetente),
+      regiao:      (n: typeof base[number]) => multi(filtros.regiao,      n.regiao),
+    }
+  }, [filtros])
 
   // Filtros em CASCATA (Marcelo, 17/08): as opções de cada seletor são
-  // calculadas sobre as notas que passam em todos os OUTROS filtros — escolher
-  // Tipo Carga reduz os municípios; escolher município reduz os bairros; etc.
+  // calculadas sobre as notas que passam em todos os OUTROS filtros.
   const opcoesFiltro = useMemo(() => {
     const campos = Object.keys(passa) as (keyof NotasFiltros)[]
     const valor: Record<keyof NotasFiltros, (n: typeof base[number]) => string | undefined> = {
-      regiao:      n => n.regiao,
       solucaoSac:  n => n.solucaoSac,
       tipoCarga:   n => n.grade,
       rota:        n => n.rota,
@@ -133,6 +155,7 @@ export function useNotasFiscais(defaultPageSize: PageSize = 25): UseNotasFiscais
       bairro:      n => n.bairro,
       tipoCliente: n => n.tipoCliente,
       remetente:   n => n.remetente,
+      regiao:      n => n.regiao,
     }
     const out = {} as Record<keyof NotasFiltros, string[]>
     for (const campo of campos) {
@@ -140,6 +163,8 @@ export function useNotasFiscais(defaultPageSize: PageSize = 25): UseNotasFiscais
       const subset = base.filter(n => outros.every(c => passa[c](n)))
       out[campo] = opcoesUnicas(subset.map(valor[campo]))
     }
+    // Opção "(Vazio)" sempre disponível no topo do filtro de Solução SAC.
+    out.solucaoSac = [SAC_VAZIO, ...out.solucaoSac]
     return out
   }, [base, passa])
 
@@ -193,13 +218,24 @@ export function useNotasFiscais(defaultPageSize: PageSize = 25): UseNotasFiscais
     setPage(0)
   }
 
-  function setFiltro(campo: keyof NotasFiltros, valor: string) {
-    setFiltros(prev => ({ ...prev, [campo]: valor }))
+  function toggleFiltro(campo: keyof NotasFiltros, valor: string) {
+    setFiltros(prev => {
+      const atual = prev[campo]
+      const next = atual.includes(valor) ? atual.filter(v => v !== valor) : [...atual, valor]
+      return { ...prev, [campo]: next }
+    })
     setPage(0)
   }
 
+  function limparFiltro(campo: keyof NotasFiltros) {
+    setFiltros(prev => ({ ...prev, [campo]: campo === 'solucaoSac' ? filtrosPadrao().solucaoSac : [] }))
+    setPage(0)
+  }
+
+  // "Limpar filtros" volta ao PADRÃO — a segmentação do SAC (Vazio+Reentrega)
+  // é da rotina e NUNCA é limpa (Marcelo, 21/08).
   function limparFiltros() {
-    setFiltros(FILTROS_VAZIOS)
+    setFiltros(filtrosPadrao())
     setPage(0)
   }
 
@@ -229,7 +265,8 @@ export function useNotasFiscais(defaultPageSize: PageSize = 25): UseNotasFiscais
     loading: nfImportState.running && nfsPendentes.length === 0,
     error: null,
     filtros,
-    setFiltro,
+    toggleFiltro,
+    limparFiltro,
     limparFiltros,
     opcoesFiltro,
     toggleSelecionada: toggleNfDesmarcada,

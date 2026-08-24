@@ -1,8 +1,8 @@
 'use client'
 
 // Prévia no mapa da SEGMENTAÇÃO de notas (Marcelo, 17/08): mostra no mapa as
-// notas filtradas na tabela, coloridas por região, para o roteirizador ver o
-// recorte antes de gerar as rotas. Notas desmarcadas aparecem esmaecidas.
+// notas filtradas na tabela, coloridas por TIPO DE CARGA (21/08), para o
+// roteirizador ver o recorte antes de gerar as rotas. Desmarcadas esmaecidas.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { GoogleMap, useJsApiLoader, Marker, MarkerClustererF, InfoWindow } from '@react-google-maps/api'
 import type { NotaFiscal } from '@/types'
@@ -13,12 +13,12 @@ const LIBRARIES: ('places' | 'geometry')[] = []
 const BH_CENTER = { lat: -19.9167, lng: -43.9345 }
 const CLUSTER_THRESHOLD = 40
 
-// Paleta por região (ordem estável por ordem alfabética das regiões presentes)
-const REGIAO_COLORS = [
+// Paleta por TIPO DE CARGA (Marcelo, 21/08 — região não se usa na roteirização)
+const TIPO_COLORS = [
   '#1B4F8A', '#E55934', '#2E8B57', '#9333EA',
   '#B8860B', '#0891B2', '#E11D48', '#059669',
 ]
-const SEM_REGIAO_COLOR = '#6B7280'
+const SEM_TIPO_COLOR = '#6B7280'
 
 interface PinNota {
   nf:          NotaFiscal
@@ -46,7 +46,7 @@ export function MapaNotasDialog({ notas, desmarcadas, onClose }: MapaNotasDialog
           <div>
             <span className="text-xs font-medium">Prévia no mapa — notas filtradas</span>
             <span className="text-[11px] text-muted ml-2">
-              {notas.length} nota{notas.length !== 1 ? 's' : ''} · cores por região · desmarcadas esmaecidas
+              {notas.length} nota{notas.length !== 1 ? 's' : ''} · cores por tipo de carga · desmarcadas esmaecidas
             </span>
           </div>
           <button
@@ -105,11 +105,11 @@ function MapaNotasInner({ notas, desmarcadas, height = 420 }: { notas: NotaFisca
   const onLoad    = useCallback((map: google.maps.Map) => { mapRef.current = map }, [])
   const onUnmount = useCallback(() => { mapRef.current = null }, [])
 
-  // Cor estável por região presente no recorte
-  const corPorRegiao = useMemo(() => {
-    const regioes = [...new Set(notas.map(n => n.regiao).filter((r): r is string => Boolean(r)))].sort()
+  // Cor estável por tipo de carga presente no recorte
+  const corPorTipo = useMemo(() => {
+    const tipos = [...new Set(notas.map(n => n.grade).filter(t => Boolean(t) && t !== '—'))].sort()
     const map = new Map<string, string>()
-    regioes.forEach((r, i) => map.set(r, REGIAO_COLORS[i % REGIAO_COLORS.length]))
+    tipos.forEach((t, i) => map.set(t, TIPO_COLORS[i % TIPO_COLORS.length]))
     return map
   }, [notas])
 
@@ -159,9 +159,7 @@ function MapaNotasInner({ notas, desmarcadas, height = 420 }: { notas: NotaFisca
   }
 
   function markerFor(pin: PinNota, clusterer?: import('@react-google-maps/marker-clusterer').Clusterer) {
-    const color = pin.nf.regiao
-      ? (corPorRegiao.get(pin.nf.regiao) ?? SEM_REGIAO_COLOR)
-      : SEM_REGIAO_COLOR
+    const color = corPorTipo.get(pin.nf.grade) ?? SEM_TIPO_COLOR
     return (
       <Marker
         key={pin.nf.id}
@@ -219,18 +217,18 @@ function MapaNotasInner({ notas, desmarcadas, height = 420 }: { notas: NotaFisca
         </GoogleMap>
       </div>
 
-      {/* Legenda por região + contadores */}
+      {/* Legenda por tipo de carga + contadores (Marcelo, 21/08) */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2 border-t border-[0.5px] border-[var(--border-subtle)]">
-        {[...corPorRegiao.entries()].map(([regiao, cor]) => (
-          <span key={regiao} className="inline-flex items-center gap-1 text-[10px] text-mid">
+        {[...corPorTipo.entries()].map(([tipo, cor]) => (
+          <span key={tipo} className="inline-flex items-center gap-1 text-[10px] text-mid">
             <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ backgroundColor: cor }} />
-            {regiao} ({notas.filter(n => n.regiao === regiao).length})
+            {tipo} ({notas.filter(n => n.grade === tipo).length})
           </span>
         ))}
-        {notas.some(n => !n.regiao) && (
+        {notas.some(n => !n.grade || n.grade === '—') && (
           <span className="inline-flex items-center gap-1 text-[10px] text-mid">
-            <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ backgroundColor: SEM_REGIAO_COLOR }} />
-            Sem região ({notas.filter(n => !n.regiao).length})
+            <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ backgroundColor: SEM_TIPO_COLOR }} />
+            Sem tipo ({notas.filter(n => !n.grade || n.grade === '—').length})
           </span>
         )}
         <span className="text-[10px] text-muted ml-auto">

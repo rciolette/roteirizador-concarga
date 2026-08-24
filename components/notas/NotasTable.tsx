@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { cn } from '@/lib/utils'
-import { useNotasFiscais, type PageSize, type NotasFiltros } from '@/hooks/useNotasFiscais'
+import { useNotasFiscais, filtrosPadrao, type PageSize, type NotasFiltros } from '@/hooks/useNotasFiscais'
 
 import { useAppData } from '@/components/providers/AppDataProvider'
 import { salvarRotasSupabase } from '@/lib/webhooks'
@@ -56,9 +56,11 @@ function Skeleton({ rows }: { rows: number }) {
 
 const PAGE_SIZES: PageSize[] = [25, 50, 100]
 
-// Pedido do Marcelo (11/08/26, item 7): filtros de seleção de notas.
-const FILTRO_LABELS: Record<keyof NotasFiltros, string> = {
-  regiao:      'Região',
+// Filtros na barra (Marcelo, 21/08): Solução SAC em PRIMEIRO; Região fora da
+// UI (o campo continua no código). Multi-seleção em todos.
+const CAMPOS_UI = ['solucaoSac', 'tipoCarga', 'rota', 'municipio', 'bairro', 'tipoCliente', 'remetente'] as const
+
+const FILTRO_LABELS: Record<(typeof CAMPOS_UI)[number], string> = {
   solucaoSac:  'Solução SAC',
   tipoCarga:   'Tipo Carga',
   rota:        'Rota de Entrega',
@@ -68,10 +70,84 @@ const FILTRO_LABELS: Record<keyof NotasFiltros, string> = {
   remetente:   'Remetente',
 }
 
+// Chip de filtro multi-seleção (estilo slicer da planilha): botão com contador
+// e dropdown de checkboxes; fecha ao clicar fora.
+function MultiFiltro({ label, opcoes, selecionadas, onToggle, onLimpar }: {
+  label:        string
+  opcoes:       string[]
+  selecionadas: string[]
+  onToggle:     (valor: string) => void
+  onLimpar:     () => void
+}) {
+  const [aberto, setAberto] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!aberto) return
+    function fecha(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setAberto(false)
+    }
+    document.addEventListener('mousedown', fecha)
+    return () => document.removeEventListener('mousedown', fecha)
+  }, [aberto])
+
+  const ativo = selecionadas.length > 0
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setAberto(v => !v)}
+        className={cn(
+          'text-[11px] px-2 py-1 rounded-md border cursor-pointer inline-flex items-center gap-1 whitespace-nowrap',
+          ativo
+            ? 'border-primary text-primary bg-primary/5 font-medium'
+            : 'border-[var(--border-input)] bg-surface text-mid hover:text-base',
+        )}
+      >
+        {label}
+        {ativo && (
+          <span className="bg-primary text-white rounded-full px-1.5 leading-[14px] text-[10px]">
+            {selecionadas.length}
+          </span>
+        )}
+        <svg className={cn('w-2.5 h-2.5 transition-transform', aberto && 'rotate-180')} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M4 6l4 4 4-4"/>
+        </svg>
+      </button>
+
+      {aberto && (
+        <div className="absolute left-0 top-full mt-1 z-30 bg-surface border border-[var(--border-card)] rounded-lg shadow-lg min-w-[210px] max-w-[300px] max-h-[280px] overflow-auto py-1">
+          {ativo && (
+            <button
+              onClick={onLimpar}
+              className="w-full text-left px-2.5 py-1 text-[11px] text-primary hover:underline cursor-pointer"
+            >
+              Limpar seleção
+            </button>
+          )}
+          {opcoes.map(op => (
+            <label key={op} className="flex items-center gap-2 px-2.5 py-1 text-[11px] text-base hover:bg-cream dark:hover:bg-hover cursor-pointer">
+              <input
+                type="checkbox"
+                checked={selecionadas.includes(op)}
+                onChange={() => onToggle(op)}
+              />
+              <span className="truncate" title={op}>{op}</span>
+            </label>
+          ))}
+          {opcoes.length === 0 && (
+            <div className="px-2.5 py-1.5 text-[11px] text-muted">Sem opções no recorte atual</div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function NotasTable() {
   const {
     rows, total, totalDesmarcadas, page, pageSize, setPage, setPageSize, loading, error,
-    filtros, setFiltro, limparFiltros, opcoesFiltro, toggleSelecionada, limparDesmarcacoes,
+    filtros, toggleFiltro, limparFiltro, limparFiltros, opcoesFiltro, toggleSelecionada, limparDesmarcacoes,
     totalFiltradasSelecionadas, marcarFiltradas, desmarcarFiltradas,
     notasFiltradas, desmarcadas, incluirParciais, setIncluirParciais,
   } = useNotasFiscais(25)
@@ -99,9 +175,10 @@ export function NotasTable() {
     setMsgRota('')
     try {
       const agora  = new Date()
-      const codigo = filtros.rota
-        || `MONTADA ${agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
-      const regiao = filtros.regiao || selecionadas.find(n => n.regiao)?.regiao || ''
+      const codigo = filtros.rota.length === 1
+        ? filtros.rota[0]
+        : `MONTADA ${agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
+      const regiao = filtros.regiao[0] || selecionadas.find(n => n.regiao)?.regiao || ''
       const hoje   = agora.toISOString().slice(0, 10)
       const rota: Rota = {
         id:              `manual-${agora.getTime()}`,
@@ -130,7 +207,10 @@ export function NotasTable() {
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
   const from = page * pageSize + 1
   const to = Math.min((page + 1) * pageSize, total)
-  const filtrosAtivos = Object.values(filtros).some(Boolean)
+  // "Ativo" = qualquer coisa diferente do PADRÃO (SAC Vazio+Reentrega é o padrão).
+  const padrao = filtrosPadrao()
+  const filtrosAtivos = (Object.keys(filtros) as (keyof NotasFiltros)[]).some(campo =>
+    [...filtros[campo]].sort().join('|') !== [...padrao[campo]].sort().join('|'))
 
   // Checkbox-mestre do cabeçalho: marcado quando todas as NFs filtradas estão
   // selecionadas, indeterminado quando só parte delas está.
@@ -155,23 +235,21 @@ export function NotasTable() {
         <div className="flex gap-3 items-start">
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-1.5">
-              {(Object.keys(FILTRO_LABELS) as (keyof NotasFiltros)[]).map(campo => (
-                <select
+              {CAMPOS_UI.map(campo => (
+                <MultiFiltro
                   key={campo}
-                  value={filtros[campo]}
-                  onChange={e => setFiltro(campo, e.target.value)}
-                  className="text-[11px] px-1.5 py-1 rounded-md border border-[var(--border-input)] bg-surface text-mid max-w-[150px]"
-                >
-                  <option value="">{FILTRO_LABELS[campo]}</option>
-                  {opcoesFiltro[campo].map(op => (
-                    <option key={op} value={op}>{op}</option>
-                  ))}
-                </select>
+                  label={FILTRO_LABELS[campo]}
+                  opcoes={opcoesFiltro[campo]}
+                  selecionadas={filtros[campo]}
+                  onToggle={valor => toggleFiltro(campo, valor)}
+                  onLimpar={() => limparFiltro(campo)}
+                />
               ))}
               {filtrosAtivos && (
                 <button
                   onClick={limparFiltros}
                   className="text-[11px] px-2 py-1 rounded-md text-primary hover:underline"
+                  title="Volta ao padrão da rotina — a segmentação do SAC (Vazio + Reentrega) é preservada"
                 >
                   Limpar filtros
                 </button>
