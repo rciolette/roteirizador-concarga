@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   GoogleMap,
   useJsApiLoader,
@@ -9,7 +9,7 @@ import {
   InfoWindow,
 } from '@react-google-maps/api'
 import { useAppData } from '@/components/providers/AppDataProvider'
-import type { Rota, NotaFiscal, CondStatus } from '@/types'
+import type { Rota, NotaFiscal } from '@/types'
 import { Card, CardHeader } from '@/components/ui'
 import { cn } from '@/lib/utils'
 import { geocodeMany, addrKeyNota, type LatLng } from '@/lib/geocode'
@@ -29,11 +29,9 @@ const ROTA_COLORS = [
   '#059669',
 ]
 
-const COND_COLORS: Record<CondStatus, string> = {
-  vermelho: '#DC2626',
-  laranja:  '#F97316',
-  ok:       '#4B83C0',
-}
+// NFs pendentes coloridas por TIPO DE CARGA (Marcelo 21/08 — mesma paleta da
+// prévia da segmentação; COND saiu de cena junto com a coluna Cond.).
+const SEM_TIPO_COLOR = '#6B7280'
 
 // Limite de pins abaixo do qual o clustering não é necessário
 const CLUSTER_THRESHOLD = 20
@@ -122,6 +120,14 @@ function MapaDashboardInner({ rotas }: { rotas: Rota[] }) {
 
   const onLoad    = useCallback((map: google.maps.Map) => { mapRef.current = map }, [])
   const onUnmount = useCallback(() => { mapRef.current = null }, [])
+
+  // Cor estável por tipo de carga presente nas NFs pendentes
+  const corPorTipo = useMemo(() => {
+    const tipos = [...new Set(nfsPendentes.map(n => n.grade).filter(t => Boolean(t) && t !== '—'))].sort()
+    const map = new Map<string, string>()
+    tipos.forEach((t, i) => map.set(t, ROTA_COLORS[i % ROTA_COLORS.length]))
+    return map
+  }, [nfsPendentes])
 
   useEffect(() => {
     if (!isLoaded) return
@@ -212,7 +218,9 @@ function MapaDashboardInner({ rotas }: { rotas: Rota[] }) {
 
   function pinMarkerProps(pin: PinInfo) {
     const key      = pin.kind === 'rota' ? `r-${pin.rotaId}-${pin.nfIdx}` : `p-${pin.nf.id}`
-    const color    = pin.kind === 'rota' ? ROTA_COLORS[pin.rotaIdx % ROTA_COLORS.length] : COND_COLORS[pin.nf.cond]
+    const color    = pin.kind === 'rota'
+      ? ROTA_COLORS[pin.rotaIdx % ROTA_COLORS.length]
+      : corPorTipo.get(pin.nf.grade) ?? SEM_TIPO_COLOR
     const label    = pin.kind === 'rota' ? String(pin.nfIdx + 1) : '·'
     const isDimmed = pin.kind === 'rota' && selectedRotaId !== null && pin.rotaId !== selectedRotaId
     return { key, color, label, isDimmed }
@@ -360,15 +368,21 @@ function MapaDashboardInner({ rotas }: { rotas: Rota[] }) {
           )}
         </GoogleMap>
 
-        {/* Legenda COND (só quando exibindo NFs pendentes) */}
+        {/* Legenda por tipo de carga (só quando exibindo NFs pendentes) */}
         {rotas.length === 0 && nfsPendentes.length > 0 && (
-          <div className="absolute bottom-3 left-3 flex items-center gap-2 bg-surface/90 rounded-lg px-2.5 py-1.5 text-[10px] shadow-sm">
-            {(['vermelho', 'laranja', 'ok'] as CondStatus[]).map(c => (
-              <span key={c} className="flex items-center gap-1">
-                <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ backgroundColor: COND_COLORS[c] }} />
-                {c === 'vermelho' ? 'Verm.' : c === 'laranja' ? 'Lar.' : 'OK'}
+          <div className="absolute bottom-3 left-3 flex flex-wrap items-center gap-2 bg-surface/90 rounded-lg px-2.5 py-1.5 text-[10px] shadow-sm max-w-[70%]">
+            {[...corPorTipo.entries()].map(([tipo, cor]) => (
+              <span key={tipo} className="flex items-center gap-1">
+                <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ backgroundColor: cor }} />
+                {tipo}
               </span>
             ))}
+            {nfsPendentes.some(n => !n.grade || n.grade === '—') && (
+              <span className="flex items-center gap-1">
+                <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ backgroundColor: SEM_TIPO_COLOR }} />
+                Sem tipo
+              </span>
+            )}
           </div>
         )}
       </div>

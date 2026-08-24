@@ -4,7 +4,6 @@ import Link from 'next/link'
 import { Topbar, MetricCard, Card, CardHeader, Btn, ImportBar } from '@/components/ui'
 import { ImportarSIATButton } from '@/components/ui/ImportarSIATButton'
 import { SiatImportDialog } from '@/components/ui/SiatImportDialog'
-import { NotasTable } from '@/components/notas/NotasTable'
 import dynamic from 'next/dynamic'
 
 const MapaDashboard = dynamic(
@@ -91,13 +90,18 @@ export default function Page() {
   const alertas = useMemo(() => {
     const list: { color: string; text: string; meta: string }[] = []
 
-    // NFs pendentes (ainda não roteirizadas) com cond derivado do SIAT
+    // NFs pendentes (ainda não roteirizadas) — conceitos do fluxo manual (21/08):
+    // ⚠ Solução SAC pendente (analisar antes de rotear) e reentregas.
     const pendentesVermelho = nfsPendentes.filter(n => n.cond === 'vermelho').length
-    const pendentesLaranja  = nfsPendentes.filter(n => n.cond === 'laranja').length
+    const sacPendente = nfsPendentes.filter(n =>
+      n.solucaoSac && !n.indRee && n.solucaoSac.trim().toUpperCase() !== 'REENTREGA').length
+    const reentregas = nfsPendentes.filter(n => n.indRee || n.tipoCliente === 'Reentrega').length
     if (pendentesVermelho > 0)
       list.push({ color: 'bg-cond-err', text: `${pendentesVermelho} NFs pendentes com agendamento vencido ou hoje`, meta: 'urgente' })
-    if (pendentesLaranja > 0)
-      list.push({ color: 'bg-cond-warn', text: `${pendentesLaranja} NFs pendentes com SAC aberto ou reentrega`, meta: 'atenção' })
+    if (sacPendente > 0)
+      list.push({ color: 'bg-cond-warn', text: `${sacPendente} NFs com ⚠ Solução SAC pendente — analisar antes de rotear`, meta: 'SAC' })
+    if (reentregas > 0)
+      list.push({ color: 'bg-cond-warn', text: `${reentregas} reentregas entre as NFs pendentes`, meta: 'reentrega' })
 
     // Alertas de rotas já geradas
     if (metrics.nfsVermelho > 0)
@@ -121,7 +125,7 @@ export default function Page() {
         >
           <ImportarSIATButton onClick={() => setImportDialog(true)} running={nfImportState.running} />
           <Link href="/rotas">
-            <Btn variant="primary" size="sm">+ Gerar Rotas</Btn>
+            <Btn variant="primary" size="sm">Montar rotas →</Btn>
           </Link>
         </Topbar>
       </div>
@@ -307,34 +311,45 @@ export default function Page() {
           </div>
         </Card>
 
-        {/* NFs por situação SIAT */}
-        {nfsPendentes.length > 0 && (
-          <Card>
-            <CardHeader>
-              <span className="text-xs font-medium">NFs pendentes por condição SIAT</span>
-              <span className="text-[11px] text-muted">{nfsPendentes.length} NFs</span>
-            </CardHeader>
-            <div className="grid grid-cols-3">
-              {[
-                { cond: 'vermelho', label: 'Vermelho', dot: 'bg-cond-err',  val: nfsPendentes.filter(n => n.cond === 'vermelho').length, color: 'text-danger' },
-                { cond: 'laranja',  label: 'Laranja',  dot: 'bg-cond-warn', val: nfsPendentes.filter(n => n.cond === 'laranja').length,  color: 'text-warn-mid' },
-                { cond: 'ok',       label: 'OK',       dot: 'bg-cond-ok',   val: nfsPendentes.filter(n => n.cond === 'ok').length,       color: 'text-success' },
-              ].map((s, i, arr) => (
-                <div key={s.cond} className={`px-3.5 py-2.5 ${i < arr.length - 1 ? 'border-r border-[0.5px] border-[var(--border-faint)]' : ''}`}>
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${s.dot}`} />
-                    <span className="text-[11px] text-muted">{s.label}</span>
-                  </div>
-                  <div className={`text-[18px] font-medium ${s.val > 0 ? s.color : 'text-base'}`}>{s.val}</div>
-                  <div className="text-[11px] text-muted">NFs</div>
-                </div>
-              ))}
+        {/* Resumo das NFs pendentes (24/08): o trabalho de filtrar/marcar/gerar
+            rota acontece em /rotas — aqui só a visão geral, sem duplicar a
+            tabela nem carregar um segundo mapa. */}
+        <Card>
+          <CardHeader>
+            <span className="text-xs font-medium">Notas fiscais pendentes</span>
+            <Link href="/rotas" className="text-[11px] text-primary hover:underline font-medium">
+              Trabalhar as notas →
+            </Link>
+          </CardHeader>
+          {nfsPendentes.length === 0 ? (
+            <div className="px-3.5 py-4 text-xs text-muted">
+              Nenhuma NF carregada — use &ldquo;Importar NFs&rdquo; para buscar no SIAT.
             </div>
-          </Card>
-        )}
-
-        {/* Notas fiscais pendentes */}
-        <NotasTable />
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-5">
+              {(() => {
+                const sacPend = nfsPendentes.filter(n =>
+                  n.solucaoSac && !n.indRee && n.solucaoSac.trim().toUpperCase() !== 'REENTREGA').length
+                const reent = nfsPendentes.filter(n => n.indRee || n.tipoCliente === 'Reentrega').length
+                const agenda = nfsPendentes.filter(n => n.dataAgendamento).length
+                const peso = nfsPendentes.reduce((s, n) => s + n.peso, 0)
+                const cells: { label: string; val: string; cls?: string }[] = [
+                  { label: 'NFs pendentes',  val: String(nfsPendentes.length) },
+                  { label: 'Peso',           val: `${peso.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} kg` },
+                  { label: '⚠ SAC pendente', val: String(sacPend), cls: sacPend > 0 ? 'text-warn-mid' : undefined },
+                  { label: 'Reentregas',     val: String(reent),   cls: reent > 0 ? 'text-danger' : undefined },
+                  { label: 'Com agenda',     val: String(agenda) },
+                ]
+                return cells.map((c, i, arr) => (
+                  <div key={c.label} className={`px-3.5 py-2.5 ${i < arr.length - 1 ? 'sm:border-r border-[0.5px] border-[var(--border-faint)]' : ''}`}>
+                    <div className="text-[11px] text-muted mb-1">{c.label}</div>
+                    <div className={`text-[18px] font-medium ${c.cls ?? 'text-base'}`}>{c.val}</div>
+                  </div>
+                ))
+              })()}
+            </div>
+          )}
+        </Card>
 
         {/* Mapa de rotas */}
         <MapaDashboard />
