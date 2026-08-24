@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { GoogleMap, useJsApiLoader, Marker, MarkerClustererF, InfoWindow } from '@react-google-maps/api'
 import type { NotaFiscal } from '@/types'
-import { geocodeMany, addrKey, type LatLng } from '@/lib/geocode'
+import { geocodeMany, addrKeyNota, type LatLng } from '@/lib/geocode'
 
 const API_KEY   = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? ''
 const LIBRARIES: ('places' | 'geometry')[] = []
@@ -118,7 +118,7 @@ function MapaNotasInner({ notas, desmarcadas, height = 420 }: { notas: NotaFisca
     setGeocoding(true)
     setActivePin(null)
 
-    const items = notas.map(nf => ({ nf, addr: addrKey([nf.municipio, nf.bairro, nf.cep]) }))
+    const items = notas.map(nf => ({ nf, addr: addrKeyNota(nf) }))
     const addresses = [...new Set(items.map(i => i.addr).filter(Boolean))]
 
     if (!addresses.length) {

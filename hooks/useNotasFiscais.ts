@@ -20,6 +20,16 @@ export interface NfPendenteRow {
   ind_ree: boolean
   solucao_sac: string | null
   remetente: string | null
+  /** Data de emissão (YYYY-MM-DD) — coluna Emissão (Marcelo, 21/08). */
+  emissao: string | null
+  /** Data de agendamento (YYYY-MM-DD) — importante p/ prioridade (Marcelo, 21/08). */
+  agenda: string | null
+  /** Endereço de ENTREGA (já considera o alternativo p/ Cozinha). */
+  endereco: string
+  /** Nº de vezes que a NF retornou; 0 = nunca (coluna Reent., Marcelo 21/08). */
+  indice_reentrega: number
+  /** Placa (ou código) da rota já montada que contém esta NF — null se em nenhuma. */
+  em_rota: string | null
   /** true quando a NF tem Solução SAC preenchida ≠ reentrega — analisar antes de incluir em rota (Marcelo, 17/08). */
   alertaSac: boolean
   /** false quando o operador desmarcou a nota da roteirização (item 8). */
@@ -109,7 +119,21 @@ function temAlertaSac(n: { solucaoSac?: string; indRee: boolean }): boolean {
 const norm = (s: string | undefined) => (s ?? '').trim().toUpperCase()
 
 export function useNotasFiscais(defaultPageSize: PageSize = 25): UseNotasFiscaisResult {
-  const { nfsPendentes, nfImportState, nfsDesmarcadas, toggleNfDesmarcada, limparNfsDesmarcadas, setNfsDesmarcadasBulk } = useAppData()
+  const { nfsPendentes, nfImportState, nfsDesmarcadas, toggleNfDesmarcada, limparNfsDesmarcadas, setNfsDesmarcadasBulk, rotas } = useAppData()
+
+  // Coluna Placa (Marcelo, 21/08): em qual rota já montada a NF está — para o
+  // operador ver e poder tirar/mover na aprovação.
+  const rotaPorNf = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const r of rotas) {
+      if (r.status === 'rejeitada') continue
+      const marcador = r.veiculo?.placa || r.codigoRota
+      for (const nf of r.notasFiscais) {
+        if (!m.has(nf.numnfs)) m.set(nf.numnfs, marcador)
+      }
+    }
+    return m
+  }, [rotas])
   const [page, setPage] = useState(0)
   const [pageSize, setPageSizeState] = useState<PageSize>(defaultPageSize)
   const [filtros, setFiltros] = useState<NotasFiltros>(filtrosPadrao)
@@ -202,11 +226,16 @@ export function useNotasFiscais(defaultPageSize: PageSize = 25): UseNotasFiscais
       ind_ree:           nf.indRee,
       solucao_sac:       nf.solucaoSac ?? null,
       remetente:         nf.remetente ?? null,
+      emissao:           nf.dataEmissao && nf.dataEmissao !== '—' ? nf.dataEmissao : null,
+      agenda:            nf.dataAgendamento ?? null,
+      endereco:          nf.endereco,
+      indice_reentrega:  nf.indiceReentrega ?? 0,
+      em_rota:           rotaPorNf.get(nf.numnfs) ?? null,
       alertaSac:         temAlertaSac(nf),
       selecionada:       !nfsDesmarcadas.has(nf.numnfs),
       mesmoDestAnterior: i > 0 && arr[i - 1].destinatario === nf.destinatario,
     })),
-    [sorted, from, pageSize, nfsDesmarcadas],
+    [sorted, from, pageSize, nfsDesmarcadas, rotaPorNf],
   )
 
   function handleSetPage(p: number) {

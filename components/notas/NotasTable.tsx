@@ -6,7 +6,7 @@ import { useNotasFiscais, filtrosPadrao, type PageSize, type NotasFiltros } from
 
 import { useAppData } from '@/components/providers/AppDataProvider'
 import { salvarRotasSupabase } from '@/lib/webhooks'
-import type { Rota } from '@/types'
+import type { Rota, NotaFiscal } from '@/types'
 
 const MapaNotasInline = dynamic(
   () => import('@/components/notas/MapaNotasDialog').then(m => m.MapaNotasInline),
@@ -43,7 +43,7 @@ function Skeleton({ rows }: { rows: number }) {
     <>
       {Array.from({ length: rows }).map((_, i) => (
         <tr key={i} className={i % 2 === 0 ? 'bg-page' : 'bg-cream/40 dark:bg-[#1A1918]/60'}>
-          {[24, 40, 120, 90, 70, 60, 55, 55, 70, 40].map((w, j) => (
+          {[24, 26, 55, 40, 40, 110, 110, 80, 55, 45, 70, 70, 45].map((w, j) => (
             <td key={j} className="px-3 py-2">
               <div className="h-3 rounded animate-pulse bg-cream dark:bg-hover" style={{ width: w }} />
             </td>
@@ -55,6 +55,13 @@ function Skeleton({ rows }: { rows: number }) {
 }
 
 const PAGE_SIZES: PageSize[] = [25, 50, 100]
+
+/** YYYY-MM-DD → DD/MM (colunas Emissão/Agenda). */
+function fmtData(iso: string | null): string {
+  if (!iso) return ''
+  const [, m, d] = iso.slice(0, 10).split('-')
+  return d && m ? `${d}/${m}` : iso
+}
 
 // Filtros na barra (Marcelo, 21/08): Solução SAC em PRIMEIRO; Região fora da
 // UI (o campo continua no código). Multi-seleção em todos.
@@ -140,6 +147,50 @@ function MultiFiltro({ label, opcoes, selecionadas, onToggle, onLimpar }: {
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+// Resumo da SELEÇÃO ao lado do mapa (Marcelo, 21/08) — espelha o quadro da
+// planilha (PESO / ENTREGA / REDES / CD / RESTRIÇÕES / REENTREGA), mais completo.
+function ResumoSelecao({ notas, desmarcadas }: { notas: NotaFiscal[]; desmarcadas: Set<string> }) {
+  const sel        = notas.filter(n => !desmarcadas.has(n.numnfs))
+  const pesoKg     = sel.reduce((acc, n) => acc + n.peso, 0)
+  const entregas   = new Set(sel.map(n => n.destinatario)).size
+  const porTipo    = (t: string) => sel.filter(n => n.tipoCliente === t).length
+  const reentregas = sel.filter(n => n.indRee || n.tipoCliente === 'Reentrega').length
+  const restricoes = sel.filter(n => n.observacao && n.observacao !== '—').length
+
+  const linhas: [string, number][] = [
+    ['Entregas',   entregas],
+    ['Redes',      porTipo('Rede')],
+    ['CD',         porTipo('CD')],
+    ['Varejo',     porTipo('Varejo')],
+    ['Cozinha',    porTipo('Cozinha')],
+    ['Restrições', restricoes],
+    ['Reentregas', reentregas],
+  ]
+
+  return (
+    <div className="w-[170px] shrink-0 rounded-lg border border-[0.5px] border-[var(--border-subtle)] bg-surface overflow-hidden">
+      <div className="px-2.5 py-1.5 bg-primary text-white">
+        <div className="text-[9px] uppercase tracking-[0.08em] font-medium opacity-80">Peso selecionado</div>
+        <div className="text-[15px] font-semibold tabular-nums leading-tight">
+          {pesoKg.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} kg
+        </div>
+        <div className="text-[9px] opacity-80">{sel.length} NFs selecionadas</div>
+      </div>
+      <div className="px-2.5 py-1">
+        {linhas.map(([label, valor]) => (
+          <div key={label} className={cn(
+            'flex items-center justify-between text-[10px] py-[3px] border-b border-[var(--border-faint)] last:border-0',
+            (label === 'Restrições' || label === 'Reentregas') && valor > 0 ? 'text-danger font-medium' : 'text-mid',
+          )}>
+            <span>{label}</span>
+            <span className="tabular-nums font-medium">{valor}</span>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
@@ -305,8 +356,11 @@ export function NotasTable() {
           </div>
 
           {mapaAberto && (
-            <div className="w-[400px] shrink-0 hidden lg:block">
-              <MapaNotasInline notas={notasFiltradas} desmarcadas={desmarcadas} height={190} />
+            <div className="hidden lg:flex gap-2 shrink-0 items-start">
+              <ResumoSelecao notas={notasFiltradas} desmarcadas={desmarcadas} />
+              <div className="w-[400px]">
+                <MapaNotasInline notas={notasFiltradas} desmarcadas={desmarcadas} height={190} />
+              </div>
             </div>
           )}
         </div>
@@ -326,15 +380,18 @@ export function NotasTable() {
                   title={todasSelecionadas ? 'Desmarcar todas as filtradas' : 'Marcar todas as filtradas'}
                 />
               </th>
+              <th className="px-2 py-2 text-center font-medium text-muted whitespace-nowrap" title="Índice de reentrega: vazio = nunca retornou; 1/2/3 = vezes que a NF voltou">Reent.</th>
               <th className="px-3 py-2 text-left font-medium text-muted whitespace-nowrap">NF</th>
+              <th className="px-2 py-2 text-left font-medium text-muted whitespace-nowrap">Emissão</th>
+              <th className="px-2 py-2 text-left font-medium text-muted whitespace-nowrap">Agenda</th>
               <th className="px-3 py-2 text-left font-medium text-muted whitespace-nowrap">Destinatário</th>
+              <th className="px-3 py-2 text-left font-medium text-muted whitespace-nowrap">Endereço</th>
               <th className="px-3 py-2 text-left font-medium text-muted whitespace-nowrap">Município</th>
               <th className="px-3 py-2 text-left font-medium text-muted whitespace-nowrap">Tipo</th>
               <th className="px-3 py-2 text-right font-medium text-muted whitespace-nowrap">Peso</th>
-              <th className="px-3 py-2 text-left font-medium text-muted whitespace-nowrap">Cond.</th>
-              <th className="px-3 py-2 text-left font-medium text-muted whitespace-nowrap">Grade</th>
+              <th className="px-3 py-2 text-left font-medium text-muted whitespace-nowrap">Rota de Entrega</th>
               <th className="px-3 py-2 text-left font-medium text-muted whitespace-nowrap">Observação</th>
-              <th className="px-3 py-2 text-center font-medium text-muted whitespace-nowrap">Reent.</th>
+              <th className="px-2 py-2 text-left font-medium text-muted whitespace-nowrap" title="Placa/rota já montada que contém esta NF">Placa</th>
             </tr>
           </thead>
           <tbody>
@@ -342,7 +399,7 @@ export function NotasTable() {
               <Skeleton rows={pageSize > 25 ? 25 : pageSize} />
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={10} className="px-4 py-8 text-center text-muted text-[12px]">
+                <td colSpan={13} className="px-4 py-8 text-center text-muted text-[12px]">
                   Nenhuma NF pendente
                 </td>
               </tr>
@@ -352,13 +409,16 @@ export function NotasTable() {
                   key={row.id}
                   className={cn(
                     'border-b border-[var(--border-faint)] last:border-0',
-                    // Pedido do Raphael (15/08/26): a linha mantém SEMPRE sua
-                    // cor normal (verde p/ destinatário repetido, zebra nas
-                    // demais) — desmarcar não escurece nem esmaece nada; o
-                    // estado é indicado apenas pelo checkbox.
-                    row.mesmoDestAnterior
-                      ? 'bg-success-bg'
-                      : (i % 2 === 0 ? 'bg-surface' : 'bg-cream/30 dark:bg-[#1A1918]/40'),
+                    // Cor na LINHA (Marcelo 21/08, coluna Cond. eliminada):
+                    // reentrega/COND vermelho → linha vermelha; COND laranja →
+                    // linha laranja; destinatário repetido → verde; senão zebra.
+                    row.ind_ree || row.cond === 'vermelho'
+                      ? 'bg-danger-bg'
+                      : row.cond === 'laranja'
+                        ? 'bg-warn-bg'
+                        : row.mesmoDestAnterior
+                          ? 'bg-success-bg'
+                          : (i % 2 === 0 ? 'bg-surface' : 'bg-cream/30 dark:bg-[#1A1918]/40'),
                   )}
                 >
                   <td className="px-2 py-2 text-center">
@@ -368,6 +428,9 @@ export function NotasTable() {
                       onChange={() => toggleSelecionada(row.n_nfs)}
                       title={row.selecionada ? 'Desmarcar da roteirização' : 'Marcar para roteirização'}
                     />
+                  </td>
+                  <td className="px-2 py-2 text-center font-mono text-[11px] tabular-nums" title="Vezes que a NF retornou (reentrega)">
+                    {row.indice_reentrega > 0 ? row.indice_reentrega : ''}
                   </td>
                   <td className="px-3 py-2 font-mono text-[11px] text-base whitespace-nowrap">
                     {row.alertaSac && (
@@ -380,8 +443,17 @@ export function NotasTable() {
                     )}
                     {row.n_nfs ?? '—'}
                   </td>
-                  <td className={cn('px-3 py-2 max-w-[200px] truncate', row.mesmoDestAnterior ? 'text-success-dark font-medium' : 'text-base')} title={row.destinatario ?? undefined}>
+                  <td className="px-2 py-2 text-mid whitespace-nowrap tabular-nums">
+                    {fmtData(row.emissao)}
+                  </td>
+                  <td className={cn('px-2 py-2 whitespace-nowrap tabular-nums', row.agenda ? 'text-base font-medium' : 'text-muted')}>
+                    {fmtData(row.agenda)}
+                  </td>
+                  <td className={cn('px-3 py-2 max-w-[180px] truncate', row.mesmoDestAnterior ? 'text-success-dark font-medium' : 'text-base')} title={row.destinatario ?? undefined}>
                     {row.destinatario ?? '—'}
+                  </td>
+                  <td className="px-3 py-2 text-mid max-w-[180px] truncate" title={row.endereco !== '—' ? row.endereco : undefined}>
+                    {row.endereco ?? '—'}
                   </td>
                   <td className="px-3 py-2 text-mid whitespace-nowrap">
                     {row.municipio_dest ?? row.municipio ?? '—'}
@@ -394,17 +466,14 @@ export function NotasTable() {
                       ? `${(row.peso_kg / 1000).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} t`
                       : '—'}
                   </td>
-                  <td className="px-3 py-2">
-                    <CondBadge cond={row.cond} />
-                  </td>
                   <td className="px-3 py-2 text-mid whitespace-nowrap">
-                    {row.grade ?? '—'}
+                    {row.rota ?? '—'}
                   </td>
-                  <td className="px-3 py-2 text-mid max-w-[160px] truncate" title={row.observacao ?? undefined}>
+                  <td className="px-3 py-2 text-mid max-w-[140px] truncate" title={row.observacao ?? undefined}>
                     {row.observacao ?? '—'}
                   </td>
-                  <td className="px-3 py-2 text-center">
-                    {row.ind_ree ? '↩' : '—'}
+                  <td className="px-2 py-2 font-mono text-[11px] whitespace-nowrap">
+                    {row.em_rota ?? ''}
                   </td>
                 </tr>
               ))
