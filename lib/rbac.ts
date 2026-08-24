@@ -18,7 +18,8 @@ export const API_PERMISSAO: Record<string, string> = {
   '/api/config':           'webhooks',
   '/api/config/webhooks':  'webhooks',
   '/api/gerar-rotas':      'gerar',
-  '/api/enviar-motorista': 'enviar',
+  // '/api/enviar-motorista' foi removido: o webhook não existe no n8n e o
+  // disparo automático ao motorista ainda não está definido (24/08).
   '/api/siat':             'importar',
   '/api/usuarios':         'usuarios',
   '/api/convites':         'usuarios',

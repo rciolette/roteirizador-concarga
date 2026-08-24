@@ -294,7 +294,7 @@ export default function AprovacoesPage() {
       const msgs: Partial<Record<RouteStatus, string>> = {
         aprovada:  `✓ Rota ${rota.codigoRota} aprovada`,
         rejeitada: `Rota ${rota.codigoRota} rejeitada`,
-        enviada:   `✓ Rota ${rota.codigoRota} enviada ao motorista`,
+        enviada:   `✓ Rota ${rota.codigoRota} marcada como enviada`,
       }
       showToast(msgs[status] || '')
       if (status === 'aprovada')
@@ -524,7 +524,7 @@ export default function AprovacoesPage() {
                 )}
               </span>
             </div>
-            <span className="text-[11px] text-muted">confirme antes de disparar ao motorista</span>
+            <span className="text-[11px] text-muted">marque como enviada após repassar ao motorista</span>
           </CardHeader>
 
           <BulkBar
@@ -532,7 +532,7 @@ export default function AprovacoesPage() {
             busy={bulking}
             onClear={() => setSelectedAp(new Set())}
             actions={[
-              { label: 'Enviar ao motorista', variant: 'primary', onClick: handleBulkEnviar },
+              { label: 'Marcar como enviadas', variant: 'primary', onClick: handleBulkEnviar },
             ]}
           />
 
@@ -573,7 +573,7 @@ export default function AprovacoesPage() {
                         <svg className="w-[11px] h-[11px]" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
                           <path d="M2 8l12-6-6 12V8H2z"/>
                         </svg>
-                        Enviar
+                        Marcar enviada
                       </Btn>
                     </div>
                   </div>

@@ -500,20 +500,22 @@ function RouteCard({ rota, onUpdateStatus, onAskConfirm, enderecoOrigem }: {
           )}
           {rota.status === 'aprovada' && (
             <Btn size="sm" variant="primary" onClick={() => onAskConfirm({
-              title: 'Enviar rota ao motorista',
-              description: `Uma mensagem será disparada para ${rota.motorista?.nome} com a sequência de entregas.`,
+              // Sem disparo automático (24/08): marcação manual do operador,
+              // que repassa a rota ao motorista pelo canal de sempre.
+              title: 'Marcar rota como enviada',
+              description: `Confirma que a rota foi repassada a ${rota.motorista?.nome ?? 'o motorista'}? O app apenas registra o status — nenhuma mensagem é disparada automaticamente.`,
               details: [
                 ...detalhes,
                 { label: 'Telefone', value: rota.motorista?.telefone ?? '—' },
                 { label: 'Link Maps', value: mapsLink ? `${rota.notasFiscais.length} paradas` : '—' },
               ],
-              confirmLabel: 'Confirmar envio',
+              confirmLabel: 'Marcar como enviada',
               confirmVariant: 'primary',
             }, () => onUpdateStatus(rota.id, 'enviada'))}>
               <svg className="w-[11px] h-[11px]" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
                 <path d="M2 8l12-6-6 12V8H2z"/>
               </svg>
-              Enviar ao motorista
+              Marcar como enviada
             </Btn>
           )}
         </div>
@@ -538,7 +540,7 @@ function RouteCard({ rota, onUpdateStatus, onAskConfirm, enderecoOrigem }: {
           ) : (
             <p className="text-[11px] text-muted py-1">
               {rota.status === 'enviada'
-                ? `Rota enviada ao motorista às ${rota.enviadoEm ? new Date(rota.enviadoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '—'}. Confirmação recebida.`
+                ? `Rota marcada como enviada às ${rota.enviadoEm ? new Date(rota.enviadoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '—'}.`
                 : 'Nenhuma NF carregada nesta rota.'}
             </p>
           )}
@@ -986,7 +988,7 @@ export default function RotasPage() {
       const msgs: Partial<Record<RouteStatus, string>> = {
         aprovada:  `✓ Rota ${rota.codigoRota} aprovada`,
         rejeitada: `Rota ${rota.codigoRota} rejeitada`,
-        enviada:   `✓ Rota ${rota.codigoRota} enviada ao motorista`,
+        enviada:   `✓ Rota ${rota.codigoRota} marcada como enviada`,
       }
       showToast(msgs[status] || '')
 
