@@ -1145,7 +1145,10 @@ export default function RotasPage() {
         </Topbar>
       </div>
 
-      {/* Filtros: pills de status + busca + ordenação */}
+      {/* Filtros: pills de status + busca + ordenação — atuam sobre as ROTAS
+          montadas de hoje; sem rotas não há o que filtrar, então a barra some
+          (Raphael 24/08: controles sem efeito pareciam quebrados). */}
+      {routes.length > 0 && (
       <div className="px-5 py-2.5 flex items-center gap-2 flex-wrap border-b border-[0.5px] border-[var(--border-faint)]">
         <div className="flex gap-1.5 flex-wrap flex-1 min-w-0">
           {STATUS_FILTERS.map(f => {
@@ -1199,6 +1202,7 @@ export default function RotasPage() {
           )}
         </div>
       </div>
+      )}
 
       <div className="px-5 py-4 flex flex-col gap-2.5 pb-20">
         <ImportBar running={nfImportState.running} step={nfImportState.step} progress={nfImportState.progress} result={importResult} onClose={dismissNFImport} />
@@ -1318,7 +1322,10 @@ export default function RotasPage() {
           )
         })()}
 
-        {routes.length === 0 && !nfImportState.running && (
+        {/* NFs pendentes SEMPRE visíveis (Raphael 24/08): no fluxo manual o
+            operador monta várias rotas em sequência — antes a tabela sumia
+            assim que a primeira rota do dia existia. */}
+        {!nfImportState.running && (
           <>
             <div className="flex gap-1.5">
               {(['pendentes', 'agendados', 'srota'] as const).map(tab => {
