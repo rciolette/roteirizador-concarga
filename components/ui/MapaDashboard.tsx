@@ -12,7 +12,7 @@ import { useAppData } from '@/components/providers/AppDataProvider'
 import type { Rota, NotaFiscal, CondStatus } from '@/types'
 import { Card, CardHeader } from '@/components/ui'
 import { cn } from '@/lib/utils'
-import { geocodeMany, addrKey, type LatLng } from '@/lib/geocode'
+import { geocodeMany, addrKeyNota, type LatLng } from '@/lib/geocode'
 
 const API_KEY   = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? ''
 const LIBRARIES: ('places' | 'geometry')[] = []
@@ -141,7 +141,7 @@ function MapaDashboardInner({ rotas }: { rotas: Rota[] }) {
         rota.notasFiscais.forEach((nf, nfIdx) => {
           items.push({
             kind: 'rota', rotaId: rota.id, rotaIdx, nfIdx, nf,
-            addr: addrKey([nf.municipio, nf.bairro, nf.cep]),
+            addr: addrKeyNota(nf),
           })
         })
       })
@@ -149,7 +149,7 @@ function MapaDashboardInner({ rotas }: { rotas: Rota[] }) {
       nfsPendentes.forEach(nf => {
         items.push({
           kind: 'pendente', nf,
-          addr: addrKey([nf.municipio, nf.bairro, nf.cep]),
+          addr: addrKeyNota(nf),
         })
       })
     }

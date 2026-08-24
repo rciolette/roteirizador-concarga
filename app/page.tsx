@@ -48,6 +48,7 @@ export default function Page() {
       { tipo: 'CD',        count: base.filter(n => n.tipoCliente === 'CD').length },
       { tipo: 'Rede',      count: base.filter(n => n.tipoCliente === 'Rede').length },
       { tipo: 'Varejo',    count: base.filter(n => n.tipoCliente === 'Varejo').length },
+      { tipo: 'Cozinha',   count: base.filter(n => n.tipoCliente === 'Cozinha').length },
       { tipo: 'Reentrega', count: base.filter(n => n.tipoCliente === 'Reentrega').length },
     ]
 

@@ -57,6 +57,12 @@ export async function queryNFsPendentes(): Promise<SiatRow[]> {
       b.DATAGE_NFS                                                      AS DataAgendamento,
       b.HORAGE_NFS                                                      AS HoraAgendamento,
       b.IND_REE                                                         AS Reentrega,
+      -- Índice de reentrega (Marcelo 21/08): nº de vezes que a NF retornou.
+      -- Cada retorno gera novo registro em [TAB NFS] encadeado por NFSDOC_REE;
+      -- logo, índice = total de registros da NF - 1 (0 = nunca saiu/voltou).
+      MAX((SELECT COUNT(*) - 1 FROM [TAB NFS] bb
+           WHERE bb.NUMNFS = b.NUMNFS AND bb.EMPRESA = b.EMPRESA
+             AND bb.FILIAL = b.FILIAL AND bb.CODCLI_CLI = b.CODCLI_CLI))    AS IndiceReentrega,
       b.COD_SAC                                                         AS CodigoSAC,
       b.OBS                                                             AS Observacao,
       g.CGC                                                             AS CNPJDestinatario,

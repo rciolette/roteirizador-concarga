@@ -18,6 +18,24 @@ export function addrKey(parts: (string | undefined | null)[]): string {
 }
 
 /**
+ * Chave de geocoding de uma NF. Regra do Marcelo (21/08): clientes COZINHA (EA)
+ * entregam no ENDEREÇO ALTERNATIVO (nf.endereco já vem do ENDALT do SIAT) — o
+ * bairro/CEP do cadastro apontariam para o escritório, não para a entrega.
+ */
+export function addrKeyNota(nf: {
+  tipoCliente?: string
+  endereco?: string
+  municipio?: string
+  bairro?: string
+  cep?: string
+}): string {
+  if (nf.tipoCliente === 'Cozinha' && nf.endereco && nf.endereco !== '—') {
+    return addrKey([nf.endereco, nf.municipio])
+  }
+  return addrKey([nf.municipio, nf.bairro, nf.cep])
+}
+
+/**
  * Geocodifica um lote de endereços usando o cache de sessão e o cache
  * persistente do servidor. Endereços sem resultado ficam como null.
  */

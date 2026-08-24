@@ -42,6 +42,7 @@ export interface SiatRow {
 
   // Endereço alternativo (quando LOCENT_SIT <> 0)
   EnderecoFinal?:    string | null
+  IndiceReentrega?:  number | null
   MunicipioFinal?:   string | null
   BairroFinal?:      string | null
   UFFinal?:          string | null
@@ -161,6 +162,8 @@ function normalizarTipoCliente(tipo: string | null | undefined): ClientType {
   if (!tipo) return 'Varejo'
   const t = tipo.toLowerCase()
   if (t.includes('reentre'))                            return 'Reentrega'
+  // "EA - Cozinha" (Marcelo 21/08): tipo próprio, entrega no endereço alternativo.
+  if (t.includes('cozinha') || t.startsWith('ea'))      return 'Cozinha'
   if (t.includes('rede') || t.includes('network'))      return 'Rede'
   if (t.includes(' cd') || t.startsWith('cd') || t.includes('centro') || t.includes('distribu')) return 'CD'
   return 'Varejo'
@@ -221,6 +224,7 @@ export function siatRowsToNotasPendentes(rows: SiatRow[]): NotaFiscal[] {
       solucaoSac:       row.SolucaoSAC     ?? undefined,
       remetente:        row.Remetente != null ? String(row.Remetente) : undefined,
       regiao:           row.Regiao != null && row.Regiao !== '' ? String(row.Regiao) : undefined,
+      indiceReentrega:  typeof row.IndiceReentrega === 'number' ? row.IndiceReentrega : undefined,
     })
   }
 
@@ -300,6 +304,7 @@ export function siatRowsToRotas(
         solucaoSac:      row.SolucaoSAC     ?? undefined,
         remetente:       row.Remetente != null ? String(row.Remetente) : undefined,
         regiao:          row.Regiao != null && row.Regiao !== '' ? String(row.Regiao) : undefined,
+        indiceReentrega: typeof row.IndiceReentrega === 'number' ? row.IndiceReentrega : undefined,
       }
     })
 

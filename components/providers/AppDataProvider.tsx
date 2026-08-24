@@ -19,6 +19,7 @@ import { carregarRotasSupabase } from '@/lib/webhooks'
 import { DEFAULT_CONFIG } from '@/lib/data'
 import { carregarConfig } from '@/lib/config-store'
 import { useAuth } from '@/components/providers/AuthProvider'
+import { addrKeyNota } from '@/lib/geocode'
 
 /** Cache local da última importação de NFs (Marcelo, 17/08). */
 const NF_CACHE_KEY = 'concarga_nf_cache_v1'
@@ -183,7 +184,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
 
       // Pré-aquece o cache de geocoding em background (fire-and-forget)
       const addrs = pendentes
-        .map(nf => [nf.municipio, nf.bairro, nf.cep].filter(p => p && p !== '—').join(', '))
+        .map(nf => addrKeyNota(nf))
         .filter(Boolean)
       if (addrs.length) {
         fetch('/api/geocode', {

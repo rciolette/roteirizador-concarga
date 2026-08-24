@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { GoogleMap, useJsApiLoader, Marker, InfoWindow, DirectionsRenderer } from '@react-google-maps/api'
 import type { NotaFiscal } from '@/types'
 import { cn } from '@/lib/utils'
-import { geocodeMany, addrKey, type LatLng } from '@/lib/geocode'
+import { geocodeMany, addrKey, addrKeyNota, type LatLng } from '@/lib/geocode'
 
 const API_KEY   = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? ''
 const LIBRARIES: ('places' | 'geometry')[] = []
@@ -71,7 +71,7 @@ function MapaRotaInner({ nfs, height = '280px', className, originAddress }: Mapa
     setDirections(null)
     setActivePin(null)
 
-    const nfAddrs    = nfs.map(nf => addrKey([nf.municipio, nf.bairro, nf.cep]))
+    const nfAddrs    = nfs.map(nf => addrKeyNota(nf))
     const allAddrs   = originAddress ? [originAddress, ...nfAddrs] : nfAddrs
 
     geocodeMany(allAddrs).then(coordMap => {

@@ -1,6 +1,6 @@
 export type CondStatus = 'ok' | 'laranja' | 'vermelho'
 export type RouteStatus = 'rascunho' | 'aguardando' | 'aprovada' | 'enviada' | 'rejeitada'
-export type ClientType = 'CD' | 'Rede' | 'Varejo' | 'Reentrega'
+export type ClientType = 'CD' | 'Rede' | 'Varejo' | 'Cozinha' | 'Reentrega'
 
 export interface NotaFiscal {
   id: string
@@ -31,6 +31,8 @@ export interface NotaFiscal {
   remetente?: string
   /** Região do município (REGMUN) — segmentação por região (Marcelo, 17/08). */
   regiao?: string
+  /** Nº de vezes que a NF retornou (reentregas) — 0/undefined = nunca (Marcelo, 21/08). */
+  indiceReentrega?: number
 }
 
 export interface Veiculo {
