@@ -42,6 +42,16 @@ export async function queryNFsPendentes(): Promise<SiatRow[]> {
           FROM [TAB LG SAC OCO] b2
           WHERE b2.COD_SAC = a.COD_SAC
         )
+    ),
+
+    -- Índice de reentrega (Marcelo 21/08): nº de vezes que a NF retornou.
+    -- Cada retorno gera novo registro em [TAB NFS] encadeado por NFSDOC_REE;
+    -- logo, índice = total de registros da NF - 1 (0 = nunca saiu/voltou).
+    -- (em CTE porque o SQL Server não aceita agregado sobre subquery com agregado)
+    IndiceReentregaNF AS (
+      SELECT NUMNFS, EMPRESA, FILIAL, CODCLI_CLI, COUNT(*) - 1 AS IndiceReentrega
+      FROM [TAB NFS]
+      GROUP BY NUMNFS, EMPRESA, FILIAL, CODCLI_CLI
     )
 
     SELECT
@@ -60,9 +70,7 @@ export async function queryNFsPendentes(): Promise<SiatRow[]> {
       -- Índice de reentrega (Marcelo 21/08): nº de vezes que a NF retornou.
       -- Cada retorno gera novo registro em [TAB NFS] encadeado por NFSDOC_REE;
       -- logo, índice = total de registros da NF - 1 (0 = nunca saiu/voltou).
-      MAX((SELECT COUNT(*) - 1 FROM [TAB NFS] bb
-           WHERE bb.NUMNFS = b.NUMNFS AND bb.EMPRESA = b.EMPRESA
-             AND bb.FILIAL = b.FILIAL AND bb.CODCLI_CLI = b.CODCLI_CLI))    AS IndiceReentrega,
+      MAX(ir.IndiceReentrega)                                           AS IndiceReentrega,
       b.COD_SAC                                                         AS CodigoSAC,
       b.OBS                                                             AS Observacao,
       g.CGC                                                             AS CNPJDestinatario,
@@ -130,6 +138,9 @@ export async function queryNFsPendentes(): Promise<SiatRow[]> {
     LEFT JOIN [TAB CODMUN IBGE] q      ON q.CODMUN = p.CODMUN
     LEFT JOIN [TAB CODUF IBGE] r       ON r.CODUF = q.CODUF
     LEFT JOIN UltimaOcorrenciaSAC t    ON t.SAC = b.COD_SAC
+    LEFT JOIN IndiceReentregaNF ir
+      ON ir.NUMNFS = b.NUMNFS AND ir.EMPRESA = b.EMPRESA
+     AND ir.FILIAL = b.FILIAL AND ir.CODCLI_CLI = b.CODCLI_CLI
     LEFT JOIN [TAB MUNICIPIO] v        ON v.MUNICIPIO = n.ENTREGA
     LEFT JOIN [TAB CODMUN IBGE] x      ON x.CODMUN = v.CODMUN
     LEFT JOIN [TAB CODUF IBGE] z       ON z.CODUF = x.CODUF

@@ -223,7 +223,7 @@ export function ImportBar({ running, step, progress, result, onClose }: {
         </svg>
         <div className="flex-1 min-w-0">
           <div className="text-xs font-medium text-danger">{step}</div>
-          <div className="text-[11px] text-muted mt-0.5">Verifique se o workflow está ativo no n8n e tente novamente.</div>
+          <div className="text-[11px] text-muted mt-0.5">Falha ao consultar o SIAT. Tente novamente; se persistir, avise o suporte.</div>
         </div>
         {onClose && (
           <button onClick={onClose} className="bg-transparent border-none cursor-pointer text-muted text-lg px-1 leading-none rounded-md hover:text-base transition-colors">×</button>
