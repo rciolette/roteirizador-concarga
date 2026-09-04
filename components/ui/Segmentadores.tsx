@@ -36,14 +36,16 @@ export function Segmentador({
   const visiveis = useMemo(() => {
     const termo = q.trim().toLowerCase()
     const base = termo ? opcoes.filter(o => o.valor.toLowerCase().includes(termo)) : opcoes
-    // Selecionados primeiro, depois quem tem dados no recorte, depois alfabético.
-    return [...base].sort((a, b) => {
+    // Só o que existe dentro do recorte atual — opção zerada sai da lista, sem
+    // exceção (Raphael, 04/09). Uma seleção que zerou continua removível pelos
+    // chips de "Filtros aplicados" e pelo × do card, então não precisa ficar
+    // ocupando espaço aqui.
+    const uteis = base.filter(o => o.count > 0)
+    // Selecionados primeiro, depois alfabético.
+    return uteis.sort((a, b) => {
       const sa = selecionados.has(a.valor) ? 0 : 1
       const sb = selecionados.has(b.valor) ? 0 : 1
       if (sa !== sb) return sa - sb
-      const va = a.count > 0 ? 0 : 1
-      const vb = b.count > 0 ? 0 : 1
-      if (va !== vb) return va - vb
       return a.valor.localeCompare(b.valor, 'pt-BR')
     })
   }, [opcoes, q, selecionados])
@@ -83,7 +85,9 @@ export function Segmentador({
 
       <div className="flex flex-col overflow-y-auto max-h-[124px] p-1 gap-px">
         {visiveis.length === 0 ? (
-          <span className="text-[10px] text-subtle px-1 py-1">Nada encontrado</span>
+          <span className="text-[10px] text-subtle px-1 py-1">
+            {q ? 'Nada encontrado' : 'Sem opções no recorte'}
+          </span>
         ) : visiveis.map(o => {
           const ativo = selecionados.has(o.valor)
           return (
@@ -95,9 +99,7 @@ export function Segmentador({
                 'flex items-center gap-1 px-1.5 py-[3px] rounded text-[10px] text-left transition-colors cursor-pointer',
                 ativo
                   ? 'bg-primary text-white font-medium'
-                  : o.count === 0
-                    ? 'text-subtle hover:bg-cream dark:hover:bg-hover'
-                    : 'text-base hover:bg-cream dark:hover:bg-hover',
+                  : 'text-base hover:bg-cream dark:hover:bg-hover',
               )}
             >
               <span className="truncate flex-1">{o.valor}</span>

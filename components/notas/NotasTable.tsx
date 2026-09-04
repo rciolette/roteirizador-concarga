@@ -237,7 +237,7 @@ function ResumoSelecao({ notas, desmarcadas }: { notas: NotaFiscal[]; desmarcada
   ]
 
   return (
-    <div className="w-[170px] shrink-0 rounded-lg border border-[0.5px] border-[var(--border-subtle)] bg-surface overflow-hidden">
+    <div className="w-full shrink-0 rounded-lg border border-[0.5px] border-[var(--border-subtle)] bg-surface overflow-hidden">
       <div className="px-2.5 py-1.5 bg-primary text-white">
         <div className="text-[9px] uppercase tracking-[0.08em] font-medium opacity-80">Peso selecionado</div>
         <div className="text-[15px] font-semibold tabular-nums leading-tight">
@@ -245,10 +245,10 @@ function ResumoSelecao({ notas, desmarcadas }: { notas: NotaFiscal[]; desmarcada
         </div>
         <div className="text-[9px] opacity-80">{sel.length} NFs selecionadas</div>
       </div>
-      <div className="px-2.5 py-1">
+      <div className="px-2.5 py-1 grid grid-cols-2 gap-x-3">
         {linhas.map(([label, valor]) => (
           <div key={label} className={cn(
-            'flex items-center justify-between text-[10px] py-[3px] border-b border-[var(--border-faint)] last:border-0',
+            'flex items-center justify-between text-[10px] py-[3px] border-b border-[var(--border-faint)]',
             (label === 'Restrições' || label === 'Reentregas') && valor > 0 ? 'text-danger font-medium' : 'text-mid',
           )}>
             <span>{label}</span>
@@ -345,9 +345,11 @@ export function NotasTable() {
         </div>
       )}
 
-      {/* Barra de trabalho STICKY (Marcelo 17/08): filtros congelados no topo,
-          mapa compacto ao lado, notas abaixo. */}
-      <div className="sticky top-[36px] z-20 bg-[var(--color-page)] pb-2 pt-1">
+      {/* Barra de trabalho: segmentadores, ações e mapa. NÃO é sticky — com os
+          cards expostos o bloco é alto e, preso no topo, sobrepunha a lista.
+          Quem fica congelado agora é o cabeçalho da tabela, dentro da própria
+          área de rolagem dela (Raphael, 04/09). */}
+      <div className="bg-[var(--color-page)] pb-2 pt-1">
         <div className="flex gap-3 items-start">
           <div className="flex-1 min-w-0">
             <PainelSegmentadores
@@ -441,19 +443,21 @@ export function NotasTable() {
             {!loading && <ResumoRecorte notas={notasFiltradas} />}
           </div>
 
+          {/* Resumo em cima, mapa embaixo: empilhados o bloco usa a altura
+              disponível e o mapa fica maior (Raphael, 04/09). */}
           {mapaAberto && (
-            <div className="hidden lg:flex gap-2 shrink-0 items-start">
+            <div className="hidden lg:flex flex-col gap-2 shrink-0 w-[400px]">
               <ResumoSelecao notas={notasFiltradas} desmarcadas={desmarcadas} />
-              <div className="w-[400px]">
-                <MapaNotasInline notas={notasFiltradas} desmarcadas={desmarcadas} height={190} />
-              </div>
+              <MapaNotasInline notas={notasFiltradas} desmarcadas={desmarcadas} height={300} />
             </div>
           )}
         </div>
       </div>
 
-      {/* Tabela com scroll */}
-      <div className="overflow-auto rounded-xl border border-[var(--border-card)] bg-surface">
+      {/* Tabela com scroll PRÓPRIO: sem altura máxima o `overflow-auto` não
+          criava contexto de rolagem, a página inteira rolava e o cabeçalho
+          sticky escapava para cima da lista. */}
+      <div className="overflow-auto rounded-xl border border-[var(--border-card)] bg-surface max-h-[calc(100vh-260px)] min-h-[320px]">
         <table className="w-full text-[12px] border-collapse">
           <thead className="sticky top-0 z-10">
             <tr className="bg-cream dark:bg-hover border-b border-[var(--border-light)]">
