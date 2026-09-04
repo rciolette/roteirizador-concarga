@@ -1,4 +1,5 @@
 import { exigirPermissao, getAdminClient } from '@/lib/auth-server'
+import { queryEnderecoFilial } from '@/lib/siat-db'
 import { registrarLog } from '@/lib/log-atividade'
 
 // GET /api/empresa — retorna os dados da empresa
@@ -17,7 +18,28 @@ export async function GET() {
     return Response.json({ error: error.message }, { status: 500 })
   }
 
-  return Response.json({ empresa: data ?? null })
+  // O endereço da empresa é a ORIGEM das rotas. Como o cadastro do painel
+  // nasce vazio, buscamos a filial no SIAT quando ele não está preenchido —
+  // sem isso o mapa começava na primeira entrega, sem o trecho CD → 1ª parada.
+  let empresa = data ?? null
+  if (!empresa?.endereco) {
+    try {
+      const filial = await queryEnderecoFilial()
+      if (filial) {
+        empresa = {
+          ...(empresa ?? {}),
+          razao_social: empresa?.razao_social ?? filial.nome,
+          endereco: [filial.endereco, filial.bairro].filter(Boolean).join(', '),
+          cidade:   filial.municipio,
+          uf:       filial.uf,
+        } as typeof empresa
+      }
+    } catch {
+      // SIAT fora do ar não pode derrubar a tela de configurações
+    }
+  }
+
+  return Response.json({ empresa })
 }
 
 // PATCH /api/empresa — atualiza os dados da empresa

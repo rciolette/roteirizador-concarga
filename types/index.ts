@@ -1,6 +1,8 @@
 export type CondStatus = 'ok' | 'laranja' | 'vermelho'
 export type RouteStatus = 'rascunho' | 'aguardando' | 'aprovada' | 'enviada' | 'rejeitada'
-export type ClientType = 'CD' | 'Rede' | 'Varejo' | 'Cozinha' | 'Reentrega'
+// Padrão do cliente de destino. Reentrega NÃO entra aqui: é atributo da NF
+// (indRee / indiceReentrega) e usá-la como tipo mascarava o cliente real.
+export type ClientType = 'CD' | 'Rede' | 'Varejo' | 'Cozinha'
 
 export interface NotaFiscal {
   id: string

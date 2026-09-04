@@ -2,7 +2,8 @@
 import { useState, useEffect, useMemo } from 'react'
 import { getSupabaseBrowser } from '@/lib/supabase-browser'
 import { cn } from '@/lib/utils'
-import { Btn, Card, CardHeader, TextInput, Select } from '@/components/ui'
+import { Btn, Card, CardHeader, TextInput } from '@/components/ui'
+import { Segmentador, PainelSegmentadores, type OpcaoSegmento } from '@/components/ui/Segmentadores'
 import { useAppData } from '@/components/providers/AppDataProvider'
 import type { NotaFiscal } from '@/types'
 
@@ -24,6 +25,7 @@ interface NfRow {
   grade: string | null
   placa: string | null
   reentrega: boolean | null
+  indice_reentrega: number | null
   sac: string | number | null
   regiao: string | null
   observacao: string | null
@@ -42,7 +44,7 @@ function fmtData(iso: string | null | undefined): string {
 }
 
 function ObsBadge({ obs }: { obs: string | null | undefined }) {
-  if (!obs) return null
+  if (!obs || obs === '—') return <span className="text-[10px] text-subtle">—</span>
   const upper = obs.toUpperCase()
   const isRestr = upper.includes('RESTR') || upper.includes('RES DESC') || upper.includes('RES.DESC')
   const isSac   = upper.includes('SAC') || upper.includes('SOL SAC') || upper.includes('SOLUÇÃO')
@@ -51,13 +53,12 @@ function ObsBadge({ obs }: { obs: string | null | undefined }) {
     : isSac
       ? 'bg-warn-bg text-warn border-[0.5px] border-warn/20'
       : 'bg-cream text-muted border-[0.5px] border-[var(--border-subtle)]'
-  const label = isRestr ? 'Res' : isSac ? 'SAC' : 'Obs'
   return (
     <span
-      className={cn('inline-flex items-center px-1.5 py-px rounded text-[9px] font-medium cursor-default whitespace-nowrap', cls)}
+      className={cn('block truncate px-1.5 py-px rounded text-[10px] cursor-default', cls)}
       title={obs}
     >
-      {label}
+      {obs}
     </span>
   )
 }
@@ -118,7 +119,7 @@ function nfToRow(nf: NotaFiscal): NfRow {
   return {
     id:               nf.id,
     n_nfs:            parseInt(nf.numnfs, 10) || null,
-    remetente:        null,
+    remetente:        nf.remetente ?? null,
     destinatario:     nf.destinatario,
     bairro_dest:      nf.bairro   !== '—' ? nf.bairro   : null,
     bairro:           nf.bairro   !== '—' ? nf.bairro   : null,
@@ -131,6 +132,7 @@ function nfToRow(nf: NotaFiscal): NfRow {
     grade:            nf.grade && nf.grade !== '—' ? nf.grade : null,
     placa:            null,
     reentrega:        nf.indRee,
+    indice_reentrega: nf.indiceReentrega ?? null,
     sac:              nf.sac ?? null,
     regiao:           nf.rota && nf.rota !== '—' ? nf.rota : null,
     observacao:       nf.observacao ?? null,
@@ -149,10 +151,46 @@ function TipoBadge({ tipo }: { tipo: string | null | undefined }) {
     t === 'REDE'      ? 'bg-purple-bg text-purple' :
     t === 'VAREJO'    ? 'bg-teal-bg text-teal-dark' :
     t === 'COZINHA'   ? 'bg-warn-bg text-warn' :
-    t === 'REENTREGA' ? 'bg-warn-bg text-warn' :
                         'bg-cream text-mid'
   if (!tipo) return <span className="text-[10px] text-subtle">—</span>
   return <span className={cn('text-[10px] px-1.5 py-px rounded-full font-medium', cls)}>{tipo}</span>
+}
+
+// Dimensões da segmentação. A ordem define a ordem dos cards no painel.
+type Dim = 'rota' | 'municipio' | 'bairro' | 'tipo' | 'grade' | 'cond'
+         | 'remetente' | 'destinatario' | 'placa' | 'ree'
+
+const DIMS: Dim[] = ['rota', 'municipio', 'bairro', 'tipo', 'grade', 'cond',
+                     'remetente', 'destinatario', 'placa', 'ree']
+
+const TITULO_DIM: Record<Dim, string> = {
+  rota:         'Rota de entrega',
+  municipio:    'Município',
+  bairro:       'Bairro',
+  tipo:         'Tipo cliente',
+  grade:        'Grade',
+  cond:         'COND',
+  remetente:    'Remetente',
+  destinatario: 'Destinatário',
+  placa:        'Placa',
+  ree:          'Reentrega (nº saídas)',
+}
+
+/** Valor de uma linha na dimensão — é a chave usada no filtro e na contagem. */
+function valorDim(row: NfRow, d: Dim): string {
+  switch (d) {
+    case 'rota':         return row.regiao ?? ''
+    case 'municipio':    return row.municipio_dest ?? row.municipio ?? ''
+    case 'bairro':       return row.bairro_dest ?? row.bairro ?? ''
+    case 'tipo':         return row.tipo_cliente ?? ''
+    case 'grade':        return row.grade ?? ''
+    case 'cond':         return (row.cond ?? 'ok').toLowerCase() || 'ok'
+    case 'remetente':    return row.remetente ?? ''
+    case 'destinatario': return row.destinatario ?? ''
+    case 'placa':        return row.placa ?? ''
+    // Índice de reentrega como rótulo: permite segmentar "nunca saiu" x "1x" x "2x".
+    case 'ree':          return String(row.indice_reentrega ?? (row.reentrega ? 1 : 0))
+  }
 }
 
 export function NfsPendentesTable() {
@@ -162,41 +200,41 @@ export function NfsPendentesTable() {
   const [loading, setLoading] = useState(true)
   const [page,    setPage]    = useState(0)
   const [vista,          setVista]          = useState<'nfs' | 'destinatario'>('nfs')
-  const [busca,          setBusca]          = useState('')
-  const [tipoFiltro,     setTipoFiltro]     = useState('Todos')
-  const [gradeFiltro,    setGradeFiltro]    = useState('Todos')
-  const [condFiltro,     setCondFiltro]     = useState('Todos')
-  const [bairroFiltro,   setBairroFiltro]   = useState('Todos')
-  const [municipioFiltro,setMunicipioFiltro]= useState('Todos')
-  const [rotaFiltro,     setRotaFiltro]     = useState('Todos')
-  const [apenasRee,      setApenasRee]      = useState(false)
+  const [busca, setBusca] = useState('')
+
+  // Segmentação multi-seleção, uma dimensão por card. Set vazio = sem filtro.
+  const [sel, setSel] = useState<Record<Dim, Set<string>>>(() => ({
+    rota: new Set(), municipio: new Set(), bairro: new Set(), tipo: new Set(),
+    grade: new Set(), cond: new Set(), remetente: new Set(),
+    destinatario: new Set(), placa: new Set(), ree: new Set(),
+  }))
+
+  function toggle(dim: Dim, valor: string) {
+    setSel(prev => {
+      const n = new Set(prev[dim])
+      n.has(valor) ? n.delete(valor) : n.add(valor)
+      return { ...prev, [dim]: n }
+    })
+    setPage(0)
+  }
+
+  function limparDim(dim: Dim) {
+    setSel(prev => ({ ...prev, [dim]: new Set<string>() }))
+    setPage(0)
+  }
 
   function resetFiltros() {
-    setBusca(''); setTipoFiltro('Todos'); setGradeFiltro('Todos'); setCondFiltro('Todos')
-    setBairroFiltro('Todos'); setMunicipioFiltro('Todos'); setRotaFiltro('Todos')
-    setApenasRee(false); setPage(0)
+    setBusca('')
+    setSel({
+      rota: new Set(), municipio: new Set(), bairro: new Set(), tipo: new Set(),
+      grade: new Set(), cond: new Set(), remetente: new Set(),
+      destinatario: new Set(), placa: new Set(), ree: new Set(),
+    })
+    setPage(0)
   }
-  const temFiltroAtivo = busca || tipoFiltro !== 'Todos' || gradeFiltro !== 'Todos' ||
-    condFiltro !== 'Todos' || bairroFiltro !== 'Todos' || municipioFiltro !== 'Todos' ||
-    rotaFiltro !== 'Todos' || apenasRee
 
-  const opBairros = useMemo(() => {
-    const s = new Set<string>()
-    for (const r of rows) { const v = r.bairro_dest ?? r.bairro; if (v) s.add(v) }
-    return Array.from(s).sort()
-  }, [rows])
-
-  const opMunicipios = useMemo(() => {
-    const s = new Set<string>()
-    for (const r of rows) { const v = r.municipio_dest ?? r.municipio; if (v) s.add(v) }
-    return Array.from(s).sort()
-  }, [rows])
-
-  const opRotas = useMemo(() => {
-    const s = new Set<string>()
-    for (const r of rows) { if (r.regiao) s.add(r.regiao) }
-    return Array.from(s).sort()
-  }, [rows])
+  const dimsAtivas = DIMS.filter(d => sel[d].size > 0)
+  const temFiltroAtivo = Boolean(busca) || dimsAtivas.length > 0
 
   useEffect(() => {
     // Enquanto o SIAT está sendo importado, manter loading
@@ -216,12 +254,21 @@ export function NfsPendentesTable() {
       const sb = getSupabaseBrowser()
       const { data, error } = await sb
         .from('notas_fiscais')
-        .select('id, n_nfs, remetente, destinatario, bairro_dest, bairro, municipio_dest, municipio, tipo_cliente, peso_bruto, peso_kg, cond, grade, placa, reentrega, sac, regiao')
+        // Observação e datas faltavam aqui: no fallback do Supabase as colunas
+        // apareciam vazias mesmo com dado gravado. `indice_reentrega` não existe
+        // nesta tabela (só `ind_reentrega`, 0/1), então o índice real vem do SIAT.
+        .select('id, n_nfs, remetente, destinatario, bairro_dest, bairro, municipio_dest, municipio, tipo_cliente, peso_bruto, peso_kg, cond, grade, placa, reentrega, sac, regiao, observacao, data_emissao, dt_agend, hora_agendamento')
         .is('rota_id', null)
         .order('n_nfs', { ascending: true })
         .limit(2000)
       if (!cancelled) {
-        if (!error && data) setRows(data as NfRow[])
+        if (!error && data) {
+          setRows((data as (NfRow & { dt_agend?: string | null })[]).map(r => ({
+            ...r,
+            data_agendamento: r.data_agendamento ?? r.dt_agend ?? null,
+            indice_reentrega: r.indice_reentrega ?? null,
+          })))
+        }
         setLoading(false)
       }
     }
@@ -229,37 +276,55 @@ export function NfsPendentesTable() {
     return () => { cancelled = true }
   }, [nfsPendentes, nfImportState.running])
 
-  const filtered = rows.filter(row => {
-    if (busca) {
-      const q = busca.toLowerCase()
-      if (
-        !(row.destinatario ?? '').toLowerCase().includes(q) &&
-        !(row.remetente    ?? '').toLowerCase().includes(q) &&
-        !(row.bairro_dest  ?? row.bairro   ?? '').toLowerCase().includes(q) &&
-        !(row.municipio_dest ?? row.municipio ?? '').toLowerCase().includes(q) &&
-        !String(row.n_nfs ?? '').includes(q)
-      ) return false
+  const casaBusca = (row: NfRow) => {
+    if (!busca) return true
+    const q = busca.toLowerCase()
+    return (row.destinatario ?? '').toLowerCase().includes(q)
+      || (row.remetente    ?? '').toLowerCase().includes(q)
+      || (row.bairro_dest  ?? row.bairro   ?? '').toLowerCase().includes(q)
+      || (row.municipio_dest ?? row.municipio ?? '').toLowerCase().includes(q)
+      || String(row.n_nfs ?? '').includes(q)
+  }
+
+  // `exceto` deixa a dimensão do próprio card de fora, para as contagens
+  // refletirem o recorte das OUTRAS dimensões — como os slicers do Excel.
+  const passa = (row: NfRow, exceto?: Dim) => {
+    if (!casaBusca(row)) return false
+    for (const d of DIMS) {
+      if (d === exceto) continue
+      const escolhidos = sel[d]
+      if (escolhidos.size === 0) continue
+      if (!escolhidos.has(valorDim(row, d))) return false
     }
-    if (tipoFiltro !== 'Todos' && (row.tipo_cliente ?? '').toUpperCase() !== tipoFiltro) return false
-    if (gradeFiltro !== 'Todos' && (row.grade ?? '').toUpperCase() !== gradeFiltro.toUpperCase()) return false
-    if (condFiltro !== 'Todos') {
-      const c = (row.cond ?? 'ok').toLowerCase()
-      if (condFiltro === 'Vermelho' && c !== 'vermelho') return false
-      if (condFiltro === 'Laranja'  && c !== 'laranja')  return false
-      if (condFiltro === 'ok'       && c !== 'ok' && c !== '') return false
-    }
-    if (bairroFiltro !== 'Todos') {
-      const b = row.bairro_dest ?? row.bairro ?? ''
-      if (b !== bairroFiltro) return false
-    }
-    if (municipioFiltro !== 'Todos') {
-      const m = row.municipio_dest ?? row.municipio ?? ''
-      if (m !== municipioFiltro) return false
-    }
-    if (rotaFiltro !== 'Todos' && (row.regiao ?? '') !== rotaFiltro) return false
-    if (apenasRee && !row.reentrega) return false
     return true
-  })
+  }
+
+  const filtered = useMemo(
+    () => rows.filter(r => passa(r)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [rows, busca, sel],
+  )
+
+  // Opções de cada card: universo vindo de `rows`, contagem vinda do recorte.
+  const opcoes = useMemo(() => {
+    const out = {} as Record<Dim, OpcaoSegmento[]>
+    for (const d of DIMS) {
+      const universo = new Set<string>()
+      for (const r of rows) {
+        const v = valorDim(r, d)
+        if (v && v !== '—') universo.add(v)
+      }
+      const contagem = new Map<string, number>()
+      for (const r of rows) {
+        if (!passa(r, d)) continue
+        const v = valorDim(r, d)
+        if (v) contagem.set(v, (contagem.get(v) ?? 0) + 1)
+      }
+      out[d] = Array.from(universo).map(valor => ({ valor, count: contagem.get(valor) ?? 0 }))
+    }
+    return out
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, busca, sel])
 
   const rowsDestinatario = useMemo<RowDestinatario[]>(() => {
     const map = new Map<string, RowDestinatario>()
@@ -313,6 +378,27 @@ export function NfsPendentesTable() {
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
   const paginated  = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
+
+  // Destinatários repetidos na página: mesma entrega, várias NFs. Contamos por
+  // destinatário (não por linhas vizinhas) para o destaque não depender da
+  // ordenação, e marcamos a primeira ocorrência para delimitar grupos vizinhos.
+  const grupos = useMemo(() => {
+    const chave = (r: NfRow) => (r.destinatario ?? '').trim().toUpperCase()
+    const contagem = new Map<string, number>()
+    for (const r of paginated) {
+      const k = chave(r)
+      if (k) contagem.set(k, (contagem.get(k) ?? 0) + 1)
+    }
+    const primeira = new Set<string>()
+    const vistos = new Set<string>()
+    for (const r of paginated) {
+      const k = chave(r)
+      if (!k || (contagem.get(k) ?? 0) < 2 || vistos.has(k)) continue
+      vistos.add(k)
+      primeira.add(r.id)
+    }
+    return { chave, contagem, primeira }
+  }, [paginated])
   const hoje = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
 
   const thCls = 'text-left text-[10px] text-muted font-medium px-2 py-1.5 border-b border-[0.5px] border-[var(--border-subtle)] bg-page whitespace-nowrap'
@@ -357,71 +443,46 @@ export function NfsPendentesTable() {
         </div>
       </CardHeader>
 
-      {/* Filtros — linha 1 */}
-      <div className="px-4 py-2.5 flex flex-wrap items-center gap-2 border-b border-[0.5px] border-[var(--border-faint)]">
-        <div className="flex-1 min-w-[160px] max-w-[240px]">
+      {/* Busca livre */}
+      <div className="px-4 py-2 flex flex-wrap items-center gap-2 border-b border-[0.5px] border-[var(--border-faint)]">
+        <div className="flex-1 min-w-[180px] max-w-[300px]">
           <TextInput
             value={busca}
             onChange={v => { setBusca(v); setPage(0) }}
-            placeholder="Buscar dest., bairro, município, NF…"
+            placeholder="Buscar dest., remetente, bairro, município, NF…"
           />
         </div>
-        <Select value={tipoFiltro} onChange={v => { setTipoFiltro(v); setPage(0) }}>
-          <option value="Todos">Tipo Cliente</option>
-          <option value="CD">CD</option>
-          <option value="REDE">REDE</option>
-          <option value="VAREJO">VAREJO</option>
-          <option value="COZINHA">COZINHA</option>
-        </Select>
-        <Select value={gradeFiltro} onChange={v => { setGradeFiltro(v); setPage(0) }}>
-          <option value="Todos">Grade</option>
-          <option value="DIARIO">DIARIO</option>
-          <option value="DIAS ALTERNADOS">DIAS ALTERNADOS</option>
-          <option value="TERÇA FEIRA">TERÇA FEIRA</option>
-          <option value="QUARTA FEIRA">QUARTA FEIRA</option>
-          <option value="QUINTA FEIRA">QUINTA FEIRA</option>
-          <option value="SEXTA">SEXTA</option>
-        </Select>
-        <Select value={condFiltro} onChange={v => { setCondFiltro(v); setPage(0) }}>
-          <option value="Todos">COND</option>
-          <option value="Vermelho">Vermelho</option>
-          <option value="Laranja">Laranja</option>
-          <option value="ok">ok</option>
-        </Select>
-        <label className="flex items-center gap-1.5 cursor-pointer select-none">
-          <input
-            type="checkbox"
-            checked={apenasRee}
-            onChange={e => { setApenasRee(e.target.checked); setPage(0) }}
-            className="w-3.5 h-3.5 accent-primary"
-          />
-          <span className="text-[11px] text-muted whitespace-nowrap">Reentregas</span>
-        </label>
       </div>
 
-      {/* Filtros — linha 2: Bairro, Município, Rota */}
-      <div className="px-4 py-2 flex flex-wrap items-center gap-2 border-b border-[0.5px] border-[var(--border-faint)] bg-page/50">
-        <Select value={bairroFiltro} onChange={v => { setBairroFiltro(v); setPage(0) }}>
-          <option value="Todos">Bairro</option>
-          {opBairros.map(b => <option key={b} value={b}>{b}</option>)}
-        </Select>
-        <Select value={municipioFiltro} onChange={v => { setMunicipioFiltro(v); setPage(0) }}>
-          <option value="Todos">Município</option>
-          {opMunicipios.map(m => <option key={m} value={m}>{m}</option>)}
-        </Select>
-        <Select value={rotaFiltro} onChange={v => { setRotaFiltro(v); setPage(0) }}>
-          <option value="Todos">Rota/Região</option>
-          {opRotas.map(r => <option key={r} value={r}>{r}</option>)}
-        </Select>
-        {temFiltroAtivo && (
-          <button
-            onClick={resetFiltros}
-            className="text-[11px] text-muted hover:text-danger transition-colors cursor-pointer bg-transparent border-none whitespace-nowrap ml-auto"
-          >
-            Limpar filtros
-          </button>
-        )}
-      </div>
+      {/* Segmentadores sempre à vista — as opções ficam visíveis sem abrir
+          dropdown, como os slicers da planilha que a operação usa hoje. */}
+      <PainelSegmentadores
+        temFiltro={temFiltroAtivo}
+        onLimparTudo={resetFiltros}
+        resumo={dimsAtivas.length > 0
+          ? (
+            <span className="text-[10px] text-muted truncate">
+              {dimsAtivas.map(d => `${TITULO_DIM[d]} (${sel[d].size})`).join(' · ')}
+            </span>
+          )
+          : (
+            <span className="text-[10px] text-subtle">
+              clique nas opções para filtrar · seleção múltipla
+            </span>
+          )}
+      >
+        {DIMS.map(d => (
+          <Segmentador
+            key={d}
+            titulo={TITULO_DIM[d]}
+            opcoes={opcoes[d]}
+            selecionados={sel[d]}
+            onToggle={v => toggle(d, v)}
+            onLimpar={() => limparDim(d)}
+            comBusca
+          />
+        ))}
+      </PainelSegmentadores>
 
       {/* KPI strip — totais reativos */}
       {!loading && filtered.length > 0 && (
@@ -476,7 +537,7 @@ export function NfsPendentesTable() {
                 <th className={cn(thCls, 'text-right')}>NFs</th>
                 <th className={cn(thCls, 'text-right')}>Peso total (kg)</th>
                 <th className={thCls}>Placa</th>
-                <th className={thCls}>Ree</th>
+                <th className={cn(thCls, 'text-center w-8')} title="Índice de reentrega: quantas vezes a NF já saiu">Ree</th>
                 <th className={thCls}>SAC</th>
               </tr>
             </thead>
@@ -523,7 +584,7 @@ export function NfsPendentesTable() {
             <thead>
               <tr>
                 <th className={thCls}>N NF</th>
-                <th className={thCls}>Região</th>
+                <th className={thCls}>Rota</th>
                 <th className={thCls}>Remetente</th>
                 <th className={thCls}>Destinatário</th>
                 <th className={thCls}>Bairro</th>
@@ -544,14 +605,40 @@ export function NfsPendentesTable() {
               </tr>
             </thead>
             <tbody>
-              {paginated.map((row, i) => (
-                <tr key={row.id} className={i % 2 === 0 ? 'bg-surface' : 'bg-page'}>
+              {paginated.map((row, i) => {
+                const k        = grupos.chave(row)
+                const qtdGrupo = k ? (grupos.contagem.get(k) ?? 0) : 0
+                const agrupado = qtdGrupo > 1
+                return (
+                <tr
+                  key={row.id}
+                  className={cn(
+                    agrupado ? 'bg-success-bg' : (i % 2 === 0 ? 'bg-surface' : 'bg-page'),
+                    grupos.primeira.has(row.id) && 'border-t border-[var(--border-input)]',
+                  )}
+                  title={agrupado ? `${qtdGrupo} NFs para o mesmo destinatário` : undefined}
+                >
                   <td className={cn(tdCls, 'font-mono whitespace-nowrap')}>{row.n_nfs ?? '—'}</td>
                   <td className={cn(tdCls, 'text-[10px] text-muted whitespace-nowrap')}>{row.regiao ?? '—'}</td>
-                  <td className={cn(tdCls, 'max-w-[100px] truncate text-muted')} title={row.remetente ?? ''}>{row.remetente ?? '—'}</td>
-                  <td className={cn(tdCls, 'max-w-[180px] truncate')} title={row.destinatario ?? ''}>{row.destinatario ?? '—'}</td>
-                  <td className={cn(tdCls, 'max-w-[110px] truncate text-muted')}>{row.bairro_dest ?? row.bairro ?? '—'}</td>
-                  <td className={cn(tdCls, 'whitespace-nowrap text-muted')}>{row.municipio_dest ?? row.municipio ?? '—'}</td>
+                  <td className={cn(tdCls, 'max-w-[150px] min-w-[110px] truncate text-muted')} title={row.remetente ?? ''}>{row.remetente ?? '—'}</td>
+                  <td className={cn(tdCls, 'max-w-[180px]')} title={row.destinatario ?? ''}>
+                    <span className="flex items-center gap-1">
+                      <span className="truncate">{row.destinatario ?? '—'}</span>
+                      {agrupado && (
+                        <span className="shrink-0 text-[9px] px-1 rounded bg-success text-white font-medium tabular-nums">
+                          {qtdGrupo}
+                        </span>
+                      )}
+                    </span>
+                  </td>
+                  <td
+                    className={cn(tdCls, 'max-w-[110px] truncate text-muted')}
+                    title={row.bairro_dest ?? row.bairro ?? ''}
+                  >{row.bairro_dest ?? row.bairro ?? '—'}</td>
+                  <td
+                    className={cn(tdCls, 'max-w-[120px] truncate text-muted')}
+                    title={row.municipio_dest ?? row.municipio ?? ''}
+                  >{row.municipio_dest ?? row.municipio ?? '—'}</td>
                   <td className={tdCls}><TipoBadge tipo={row.tipo_cliente} /></td>
                   <td className={cn(tdCls, 'whitespace-nowrap tabular-nums text-right')}>
                     {(row.peso_bruto ?? row.peso_kg) != null
@@ -561,10 +648,14 @@ export function NfsPendentesTable() {
                   <td className={tdCls}><CondBadge cond={row.cond} /></td>
                   <td className={cn(tdCls, 'text-[10px] text-muted whitespace-nowrap')}>{row.grade ?? '—'}</td>
                   <td className={cn(tdCls, 'font-mono text-[10px] whitespace-nowrap')}>{row.placa ?? '—'}</td>
-                  <td className={cn(tdCls, 'text-center')}>
-                    {row.reentrega && (
-                      <span className="text-warn text-sm" title="Reentrega">↩</span>
-                    )}
+                  <td className={cn(tdCls, 'text-center tabular-nums w-8')}>
+                    {(() => {
+                      // 0 = nunca saiu. Mostrar em branco escondia a informação.
+                      const ix = row.indice_reentrega ?? (row.reentrega ? 1 : 0)
+                      return (
+                        <span className={ix > 0 ? 'text-warn font-medium' : 'text-subtle'}>{ix}</span>
+                      )
+                    })()}
                   </td>
                   <td className={tdCls}>
                     {row.sac != null && Number(row.sac) > 0 && (
@@ -573,7 +664,7 @@ export function NfsPendentesTable() {
                       </span>
                     )}
                   </td>
-                  <td className={tdCls}>
+                  <td className={cn(tdCls, 'max-w-[220px] min-w-[140px]')}>
                     <ObsBadge obs={row.observacao} />
                   </td>
                   <td className={cn(tdCls, 'tabular-nums text-right text-muted whitespace-nowrap')}>{fmtData(row.data_emissao)}</td>
@@ -590,7 +681,8 @@ export function NfsPendentesTable() {
                       : '—'}
                   </td>
                 </tr>
-              ))}
+                )
+              })}
             </tbody>
           </table>
         )}

@@ -263,3 +263,54 @@ export async function queryMotoristasAtividade(dias = 90): Promise<MotoristaAtiv
     notasEntregues:   Number(r.NotasEntregues ?? 0),
   }))
 }
+
+/**
+ * Endereço do CD (filial da Concarga) no SIAT — é o ponto de partida das rotas.
+ *
+ * Fica aqui e não só no cadastro do painel porque a tabela `empresa` do
+ * Supabase nasce vazia: sem isso o mapa montava a rota começando na primeira
+ * entrega, silenciosamente, e o motorista não via o trecho CD → 1ª parada.
+ */
+export interface EnderecoFilial {
+  nome:      string
+  endereco:  string
+  bairro:    string | null
+  municipio: string | null
+  uf:        string | null
+  cep:       string | null
+  /** Já formatado para geocodificação / link do Google Maps. */
+  completo:  string
+}
+
+export async function queryEnderecoFilial(): Promise<EnderecoFilial | null> {
+  const db = await getSiatPool()
+  const result = await db.request().batch<Record<string, unknown>>(`
+    SELECT TOP 1
+      NOME        AS Nome,
+      [END]       AS Endereco,
+      BAIRRO      AS Bairro,
+      MUNICIPIO   AS Municipio,
+      UF          AS UF,
+      CEP         AS Cep
+    FROM [TAB FILIAL]
+    ORDER BY EMPRESA, FILIAL
+  `)
+  const r = result.recordset?.[0]
+  if (!r) return null
+
+  const txt = (v: unknown) => (v == null ? null : String(v).trim() || null)
+  const endereco  = txt(r.Endereco) ?? ''
+  const bairro    = txt(r.Bairro)
+  const municipio = txt(r.Municipio)
+  const uf        = txt(r.UF)
+  const cepBruto  = txt(r.Cep)?.replace(/\D/g, '') ?? null
+  const cep       = cepBruto && cepBruto.length === 8
+    ? `${cepBruto.slice(0, 5)}-${cepBruto.slice(5)}`
+    : cepBruto
+
+  return {
+    nome: txt(r.Nome) ?? 'CD',
+    endereco, bairro, municipio, uf, cep,
+    completo: [endereco, bairro, municipio, uf, cep].filter(Boolean).join(', '),
+  }
+}

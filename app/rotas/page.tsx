@@ -581,7 +581,8 @@ function RouteCard({ rota, onUpdateStatus, onAskConfirm, enderecoOrigem }: {
 // substituição/troca — apenas remover ou mover, conforme combinado.
 function GerenciarRota({ rota }: { rota: Rota }) {
   const { veiculos, rotas, refresh } = useAppData()
-  const [nfSel, setNfSel]           = useState('')
+  // Multi-seleção: o operador move/remove várias NFs de uma vez (Raphael, 03/09).
+  const [nfsSel, setNfsSel]         = useState<Set<string>>(new Set())
   const [destinoSel, setDestinoSel] = useState('')
   const [veiculoSel, setVeiculoSel] = useState('')
   const [salvando, setSalvando]     = useState(false)
@@ -597,7 +598,7 @@ function GerenciarRota({ rota }: { rota: Rota }) {
       await acao()
       await refresh()
       setMsg(`✓ ${ok}`)
-      setNfSel(''); setDestinoSel('')
+      setNfsSel(new Set()); setDestinoSel('')
     } catch (err) {
       setMsg(`Erro: ${err instanceof Error ? err.message : 'falha na operação'}`)
     } finally {
@@ -645,22 +646,51 @@ function GerenciarRota({ rota }: { rota: Rota }) {
 
       {/* Remover / mover NF */}
       <div className="flex flex-wrap items-center gap-1.5">
-        <select className={selCls} value={nfSel} onChange={e => setNfSel(e.target.value)}>
-          <option value="">NF desta rota…</option>
+        <div className="rounded-md border border-[var(--border-input)] bg-surface w-[260px] max-h-[132px] overflow-y-auto p-1">
+          <div className="flex items-center justify-between px-1 pb-1 mb-0.5 border-b border-[0.5px] border-[var(--border-faint)]">
+            <span className="text-[10px] text-muted">
+              {nfsSel.size > 0 ? `${nfsSel.size} de ${rota.notasFiscais.length} NFs` : 'NFs desta rota'}
+            </span>
+            <button
+              className="text-[10px] text-primary hover:underline cursor-pointer"
+              onClick={() => setNfsSel(prev =>
+                prev.size === rota.notasFiscais.length
+                  ? new Set()
+                  : new Set(rota.notasFiscais.map(n => n.id)))}
+            >
+              {nfsSel.size === rota.notasFiscais.length ? 'Limpar' : 'Todas'}
+            </button>
+          </div>
           {rota.notasFiscais.map(nf => (
-            <option key={nf.id} value={nf.id}>
-              {nf.numnfs} · {nf.destinatario.slice(0, 28)}
-            </option>
+            <label
+              key={nf.id}
+              className="flex items-center gap-1.5 px-1 py-[3px] rounded hover:bg-cream dark:hover:bg-hover cursor-pointer select-none"
+            >
+              <input
+                type="checkbox"
+                checked={nfsSel.has(nf.id)}
+                onChange={() => setNfsSel(prev => {
+                  const n = new Set(prev)
+                  n.has(nf.id) ? n.delete(nf.id) : n.add(nf.id)
+                  return n
+                })}
+                className="w-3 h-3 shrink-0 accent-primary"
+              />
+              <span className="text-[10px] font-mono shrink-0">{nf.numnfs}</span>
+              <span className="text-[10px] text-muted truncate" title={nf.destinatario}>
+                {nf.destinatario}
+              </span>
+            </label>
           ))}
-        </select>
+        </div>
         <button
           className={btnCls}
-          disabled={!nfSel || salvando}
+          disabled={nfsSel.size === 0 || salvando}
           onClick={() => {
-            const nf = rota.notasFiscais.find(n => n.id === nfSel)
+            const ids = Array.from(nfsSel)
             executar(
-              () => removerNotaDaRota(rota.id, nfSel),
-              `NF ${nf?.numnfs ?? ''} removida da rota`,
+              async () => { for (const id of ids) await removerNotaDaRota(rota.id, id) },
+              `${ids.length} NF${ids.length > 1 ? 's removidas' : ' removida'} da rota`,
             )
           }}
         >
@@ -674,13 +704,13 @@ function GerenciarRota({ rota }: { rota: Rota }) {
         </select>
         <button
           className={btnCls}
-          disabled={!nfSel || !destinoSel || salvando}
+          disabled={nfsSel.size === 0 || !destinoSel || salvando}
           onClick={() => {
-            const nf = rota.notasFiscais.find(n => n.id === nfSel)
+            const ids = Array.from(nfsSel)
             const destino = outrasRotas.find(r => r.id === destinoSel)
             executar(
-              () => moverNotaParaRota(rota.id, destinoSel, nfSel),
-              `NF ${nf?.numnfs ?? ''} movida para ${destino?.codigoRota ?? 'outra rota'}`,
+              async () => { for (const id of ids) await moverNotaParaRota(rota.id, destinoSel, id) },
+              `${ids.length} NF${ids.length > 1 ? 's movidas' : ' movida'} para ${destino?.codigoRota ?? 'outra rota'}`,
             )
           }}
         >

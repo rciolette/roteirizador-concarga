@@ -368,23 +368,6 @@ function MapaDashboardInner({ rotas }: { rotas: Rota[] }) {
           )}
         </GoogleMap>
 
-        {/* Legenda por tipo de carga (só quando exibindo NFs pendentes) */}
-        {rotas.length === 0 && nfsPendentes.length > 0 && (
-          <div className="absolute bottom-3 left-3 flex flex-wrap items-center gap-2 bg-surface/90 rounded-lg px-2.5 py-1.5 text-[10px] shadow-sm max-w-[70%]">
-            {[...corPorTipo.entries()].map(([tipo, cor]) => (
-              <span key={tipo} className="flex items-center gap-1">
-                <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ backgroundColor: cor }} />
-                {tipo}
-              </span>
-            ))}
-            {nfsPendentes.some(n => !n.grade || n.grade === '—') && (
-              <span className="flex items-center gap-1">
-                <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ backgroundColor: SEM_TIPO_COLOR }} />
-                Sem tipo
-              </span>
-            )}
-          </div>
-        )}
       </div>
     </div>
   )

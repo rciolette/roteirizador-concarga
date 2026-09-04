@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { cn } from '@/lib/utils'
 import { useNotasFiscais, filtrosPadrao, type PageSize, type NotasFiltros } from '@/hooks/useNotasFiscais'
+import { Segmentador, PainelSegmentadores } from '@/components/ui/Segmentadores'
 
 import { useAppData } from '@/components/providers/AppDataProvider'
 import { salvarRotasSupabase } from '@/lib/webhooks'
@@ -63,29 +64,13 @@ function fmtData(iso: string | null): string {
   return d && m ? `${d}/${m}` : iso
 }
 
-// Filtros na barra (Marcelo, 21/08): Solução SAC em PRIMEIRO; Região fora da
-// UI (o campo continua no código). Multi-seleção em todos.
-const CAMPOS_UI = ['solucaoSac', 'tipoCarga', 'rota', 'municipio', 'bairro', 'tipoCliente', 'remetente'] as const
-
-const FILTRO_LABELS: Record<(typeof CAMPOS_UI)[number], string> = {
-  solucaoSac:  'Solução SAC',
-  tipoCarga:   'Tipo Carga',
-  rota:        'Rota de Entrega',
-  municipio:   'Município',
-  bairro:      'Bairro',
-  tipoCliente: 'Tipo Cliente',
-  remetente:   'Remetente',
-}
-
-// Chip de filtro multi-seleção (estilo slicer da planilha): botão com contador
-// e dropdown de checkboxes; fecha ao clicar fora.
-function MultiFiltro({ label, opcoes, selecionadas, onToggle, onLimpar }: {
-  label:        string
-  opcoes:       string[]
-  selecionadas: string[]
-  onToggle:     (valor: string) => void
-  onLimpar:     () => void
-}) {
+/**
+ * Observação: a linha da tabela NUNCA quebra — o texto fica numa única linha
+ * truncada. Quando não cabe, um botão abre o conteúdo completo num popover,
+ * porque observação carrega instrução de entrega que o operador precisa ler
+ * inteira (Marcelo/Raphael, 03/09).
+ */
+function ObservacaoCelula({ texto }: { texto: string | null }) {
   const [aberto, setAberto] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
@@ -98,61 +83,50 @@ function MultiFiltro({ label, opcoes, selecionadas, onToggle, onLimpar }: {
     return () => document.removeEventListener('mousedown', fecha)
   }, [aberto])
 
-  const ativo = selecionadas.length > 0
+  if (!texto || texto === '—') return <span className="text-subtle">—</span>
+
+  const longo = texto.length > 28
 
   return (
-    <div className="relative" ref={ref}>
-      <button
-        onClick={() => setAberto(v => !v)}
-        className={cn(
-          'text-[11px] px-2 py-1 rounded-md border cursor-pointer inline-flex items-center gap-1 whitespace-nowrap',
-          ativo
-            ? 'border-primary text-primary bg-primary/5 font-medium'
-            : 'border-[var(--border-input)] bg-surface text-mid hover:text-base',
-        )}
-      >
-        {label}
-        {ativo && (
-          <span className="bg-primary text-white rounded-full px-1.5 leading-[14px] text-[10px]">
-            {selecionadas.length}
-          </span>
-        )}
-        <svg className={cn('w-2.5 h-2.5 transition-transform', aberto && 'rotate-180')} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M4 6l4 4 4-4"/>
-        </svg>
-      </button>
-
+    <div className="relative flex items-center gap-1 min-w-0" ref={ref}>
+      <span className="truncate whitespace-nowrap" title={texto}>{texto}</span>
+      {longo && (
+        <button
+          onClick={() => setAberto(v => !v)}
+          title="Ver observação completa"
+          className="shrink-0 text-[9px] px-1 rounded border border-[0.5px] border-[var(--border-input)] text-muted hover:bg-cream dark:hover:bg-hover cursor-pointer"
+        >
+          ⤢
+        </button>
+      )}
       {aberto && (
-        <div className="absolute left-0 top-full mt-1 z-30 bg-surface border border-[var(--border-card)] rounded-lg shadow-lg min-w-[210px] max-w-[300px] max-h-[280px] overflow-auto py-1">
-          {ativo && (
-            <button
-              onClick={onLimpar}
-              className="w-full text-left px-2.5 py-1 text-[11px] text-primary hover:underline cursor-pointer"
-            >
-              Limpar seleção
-            </button>
-          )}
-          {opcoes.map(op => (
-            <label key={op} className="flex items-center gap-2 px-2.5 py-1 text-[11px] text-base hover:bg-cream dark:hover:bg-hover cursor-pointer">
-              <input
-                type="checkbox"
-                checked={selecionadas.includes(op)}
-                onChange={() => onToggle(op)}
-              />
-              <span className="truncate" title={op}>{op}</span>
-            </label>
-          ))}
-          {opcoes.length === 0 && (
-            <div className="px-2.5 py-1.5 text-[11px] text-muted">Sem opções no recorte atual</div>
-          )}
+        <div className="absolute z-40 top-full right-0 mt-1 w-[320px] max-h-[220px] overflow-y-auto bg-surface border border-[0.5px] border-[var(--border-light)] rounded-lg shadow-lg p-2.5">
+          <div className="text-[10px] text-muted mb-1 font-medium">Observação</div>
+          <div className="text-[11px] text-base whitespace-pre-wrap break-words">{texto}</div>
         </div>
       )}
     </div>
   )
 }
 
-// Tags dos filtros APLICADOS (Raphael, 24/08): deixa visual o recorte ativo —
-// cada valor selecionado vira uma tag removível no espaço abaixo da barra.
+// Filtros na barra (Marcelo, 21/08): Solução SAC em PRIMEIRO; Região fora da
+// UI (o campo continua no código). Multi-seleção em todos.
+const CAMPOS_UI = ['solucaoSac', 'tipoCarga', 'rota', 'municipio', 'bairro', 'tipoCliente',
+                   'remetente', 'destinatario', 'placa', 'reentrega'] as const
+
+const FILTRO_LABELS: Record<(typeof CAMPOS_UI)[number], string> = {
+  solucaoSac:  'Solução SAC',
+  tipoCarga:   'Tipo Carga',
+  rota:        'Rota de Entrega',
+  municipio:   'Município',
+  bairro:      'Bairro',
+  tipoCliente: 'Tipo Cliente',
+  remetente:   'Remetente',
+  destinatario:'Destinatário',
+  placa:       'Placa',
+  reentrega:   'Reentrega (nº saídas)',
+}
+
 function FiltrosAplicados({ filtros, incluirParciais, onRemover, onRemoverParciais }: {
   filtros:           NotasFiltros
   incluirParciais:   boolean
@@ -249,7 +223,7 @@ function ResumoSelecao({ notas, desmarcadas }: { notas: NotaFiscal[]; desmarcada
   const pesoKg     = sel.reduce((acc, n) => acc + n.peso, 0)
   const entregas   = new Set(sel.map(n => n.destinatario)).size
   const porTipo    = (t: string) => sel.filter(n => n.tipoCliente === t).length
-  const reentregas = sel.filter(n => n.indRee || n.tipoCliente === 'Reentrega').length
+  const reentregas = sel.filter(n => n.indRee).length
   const restricoes = sel.filter(n => n.observacao && n.observacao !== '—').length
 
   const linhas: [string, number][] = [
@@ -376,17 +350,29 @@ export function NotasTable() {
       <div className="sticky top-[36px] z-20 bg-[var(--color-page)] pb-2 pt-1">
         <div className="flex gap-3 items-start">
           <div className="flex-1 min-w-0">
-            <div className="flex flex-wrap items-center gap-1.5">
+            <PainelSegmentadores
+              temFiltro={filtrosAtivos}
+              onLimparTudo={limparFiltros}
+              resumo={
+                <span className="text-[10px] text-subtle">
+                  clique nas opções para filtrar · seleção múltipla
+                </span>
+              }
+            >
               {CAMPOS_UI.map(campo => (
-                <MultiFiltro
+                <Segmentador
                   key={campo}
-                  label={FILTRO_LABELS[campo]}
+                  titulo={FILTRO_LABELS[campo]}
                   opcoes={opcoesFiltro[campo]}
-                  selecionadas={filtros[campo]}
+                  selecionados={new Set(filtros[campo])}
                   onToggle={valor => toggleFiltro(campo, valor)}
                   onLimpar={() => limparFiltro(campo)}
+                  comBusca
                 />
               ))}
+            </PainelSegmentadores>
+
+            <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
               {filtrosAtivos && (
                 <button
                   onClick={limparFiltros}
@@ -484,6 +470,7 @@ export function NotasTable() {
               <th className="px-3 py-2 text-left font-medium text-muted whitespace-nowrap">NF</th>
               <th className="px-2 py-2 text-left font-medium text-muted whitespace-nowrap">Emissão</th>
               <th className="px-2 py-2 text-left font-medium text-muted whitespace-nowrap">Agenda</th>
+              <th className="px-3 py-2 text-left font-medium text-muted whitespace-nowrap">Remetente</th>
               <th className="px-3 py-2 text-left font-medium text-muted whitespace-nowrap">Destinatário</th>
               <th className="px-3 py-2 text-left font-medium text-muted whitespace-nowrap">Endereço</th>
               <th className="px-3 py-2 text-left font-medium text-muted whitespace-nowrap">Município</th>
@@ -499,7 +486,7 @@ export function NotasTable() {
               <Skeleton rows={pageSize > 25 ? 25 : pageSize} />
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={13} className="px-4 py-8 text-center text-muted text-[12px]">
+                <td colSpan={14} className="px-4 py-8 text-center text-muted text-[12px]">
                   Nenhuma NF pendente
                 </td>
               </tr>
@@ -530,7 +517,9 @@ export function NotasTable() {
                     />
                   </td>
                   <td className="px-2 py-2 text-center font-mono text-[11px] tabular-nums" title="Vezes que a NF retornou (reentrega)">
-                    {row.indice_reentrega > 0 ? row.indice_reentrega : ''}
+                    <span className={row.indice_reentrega > 0 ? 'text-warn font-medium' : 'text-subtle'}>
+                      {row.indice_reentrega}
+                    </span>
                   </td>
                   <td className="px-3 py-2 font-mono text-[11px] text-base whitespace-nowrap">
                     {row.alertaSac && (
@@ -549,8 +538,29 @@ export function NotasTable() {
                   <td className={cn('px-2 py-2 whitespace-nowrap tabular-nums', row.agenda ? 'text-base font-medium' : 'text-muted')}>
                     {fmtData(row.agenda)}
                   </td>
-                  <td className={cn('px-3 py-2 max-w-[180px] truncate', row.mesmoDestAnterior ? 'text-success-dark font-medium' : 'text-base')} title={row.destinatario ?? undefined}>
-                    {row.destinatario ?? '—'}
+                  <td className="px-3 py-2 text-mid max-w-[150px] truncate" title={row.remetente ?? undefined}>
+                    {row.remetente ?? '—'}
+                  </td>
+                  <td
+                    className={cn(
+                      'px-3 py-2 max-w-[180px]',
+                      // Grupo inteiro destacado — antes só as linhas que repetiam
+                      // a anterior ficavam verdes e a 1ª parecia outra entrega.
+                      row.qtdMesmoDest > 1 ? 'text-success-dark font-medium' : 'text-base',
+                    )}
+                    title={row.destinatario ?? undefined}
+                  >
+                    <span className="flex items-center gap-1">
+                      <span className="truncate">{row.destinatario ?? '—'}</span>
+                      {row.qtdMesmoDest > 1 && (
+                        <span
+                          className="shrink-0 text-[9px] px-1 rounded bg-success text-white font-medium tabular-nums"
+                          title={`${row.qtdMesmoDest} NFs para este destinatário`}
+                        >
+                          {row.qtdMesmoDest}
+                        </span>
+                      )}
+                    </span>
                   </td>
                   <td className="px-3 py-2 text-mid max-w-[180px] truncate" title={row.endereco !== '—' ? row.endereco : undefined}>
                     {row.endereco ?? '—'}
@@ -569,8 +579,8 @@ export function NotasTable() {
                   <td className="px-3 py-2 text-mid whitespace-nowrap">
                     {row.rota ?? '—'}
                   </td>
-                  <td className="px-3 py-2 text-mid max-w-[140px] truncate" title={row.observacao ?? undefined}>
-                    {row.observacao ?? '—'}
+                  <td className="px-3 py-2 text-mid max-w-[220px] min-w-[140px]">
+                    <ObservacaoCelula texto={row.observacao} />
                   </td>
                   <td className="px-2 py-2 font-mono text-[11px] whitespace-nowrap">
                     {row.em_rota ?? ''}

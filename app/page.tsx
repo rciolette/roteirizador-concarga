@@ -48,7 +48,6 @@ export default function Page() {
       { tipo: 'Rede',      count: base.filter(n => n.tipoCliente === 'Rede').length },
       { tipo: 'Varejo',    count: base.filter(n => n.tipoCliente === 'Varejo').length },
       { tipo: 'Cozinha',   count: base.filter(n => n.tipoCliente === 'Cozinha').length },
-      { tipo: 'Reentrega', count: base.filter(n => n.tipoCliente === 'Reentrega').length },
     ]
 
     const marcadosHoje        = veiculos.filter(v => v.disponivel_hoje).length
@@ -95,7 +94,7 @@ export default function Page() {
     const pendentesVermelho = nfsPendentes.filter(n => n.cond === 'vermelho').length
     const sacPendente = nfsPendentes.filter(n =>
       n.solucaoSac && !n.indRee && n.solucaoSac.trim().toUpperCase() !== 'REENTREGA').length
-    const reentregas = nfsPendentes.filter(n => n.indRee || n.tipoCliente === 'Reentrega').length
+    const reentregas = nfsPendentes.filter(n => n.indRee).length
     if (pendentesVermelho > 0)
       list.push({ color: 'bg-cond-err', text: `${pendentesVermelho} NFs pendentes com agendamento vencido ou hoje`, meta: 'urgente' })
     if (sacPendente > 0)
@@ -304,7 +303,7 @@ export default function Page() {
             {metrics.porTipoCliente.map((t, i, arr) => (
               <div key={t.tipo} className={`px-3.5 py-2.5 ${i < arr.length - 1 ? 'border-r border-[0.5px] border-[var(--border-faint)]' : ''}`}>
                 <div className="text-[11px] text-muted mb-1">{t.tipo}</div>
-                <div className={`text-[18px] font-medium ${t.tipo === 'Reentrega' ? 'text-warn-mid' : 'text-base'}`}>{t.count}</div>
+                <div className={`text-[18px] font-medium text-base`}>{t.count}</div>
                 <div className="text-[11px] text-muted">NFs</div>
               </div>
             ))}
@@ -330,7 +329,7 @@ export default function Page() {
               {(() => {
                 const sacPend = nfsPendentes.filter(n =>
                   n.solucaoSac && !n.indRee && n.solucaoSac.trim().toUpperCase() !== 'REENTREGA').length
-                const reent = nfsPendentes.filter(n => n.indRee || n.tipoCliente === 'Reentrega').length
+                const reent = nfsPendentes.filter(n => n.indRee).length
                 const agenda = nfsPendentes.filter(n => n.dataAgendamento).length
                 const peso = nfsPendentes.reduce((s, n) => s + n.peso, 0)
                 const cells: { label: string; val: string; cls?: string }[] = [

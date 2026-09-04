@@ -56,6 +56,10 @@ function MapaRotaInner({ nfs, height = '280px', className, originAddress }: Mapa
   const [originCoord, setOriginCoord] = useState<LatLng | null>(null)
   const [geocoding, setGeocoding]     = useState(false)
   const [directions, setDirections]   = useState<google.maps.DirectionsResult | null>(null)
+  // Posição de entrega de cada NF (1-based) depois que o Google otimiza a ordem.
+  // Sem isso o traçado seguia a rota otimizada mas os pins mostravam a ordem
+  // original — número do pin não batia com a sequência real.
+  const [ordemEntrega, setOrdemEntrega] = useState<Map<number, number>>(new Map())
   const [activePin, setActivePin]     = useState<number | null>(null)
 
   const onLoad    = useCallback((map: google.maps.Map) => { mapRef.current = map }, [])
@@ -107,10 +111,43 @@ function MapaRotaInner({ nfs, height = '280px', className, originAddress }: Mapa
         destination:       allPoints[allPoints.length - 1],
         waypoints:         allPoints.slice(1, -1).slice(0, 23).map(loc => ({ location: loc, stopover: true })),
         travelMode:        google.maps.TravelMode.DRIVING,
-        optimizeWaypoints: false,
+        // Origem fixa no CD; o Google reordena as paradas intermediárias pelo
+        // menor trajeto (Raphael, 03/09: sair da Concarga e otimizar as entregas).
+        optimizeWaypoints: true,
       },
       (result, status) => {
-        if (status === 'OK' && result) setDirections(result)
+        if (status !== 'OK' || !result) return
+        setDirections(result)
+
+        // waypoint_order traz os waypoints reordenados; origem e destino ficam
+        // fixos. Reconstruímos a posição de cada NF a partir disso.
+        const ordem = result.routes[0]?.waypoint_order ?? []
+        const idxValidos = coords.reduce<number[]>((acc, c, i) => {
+          if (c) acc.push(i)
+          return acc
+        }, [])
+        const posicoes = new Map<number, number>()
+
+        if (originCoord) {
+          // allPoints = [CD, ...validNfs] → waypoints = validNfs[0..n-2]
+          ordem.forEach((wp, pos) => {
+            const alvo = idxValidos[wp]
+            if (alvo !== undefined) posicoes.set(alvo, pos + 1)
+          })
+          const ultimo = idxValidos[idxValidos.length - 1]
+          if (ultimo !== undefined) posicoes.set(ultimo, idxValidos.length)
+        } else {
+          // Sem CD: a 1ª NF é a origem e os waypoints começam na 2ª
+          const primeiro = idxValidos[0]
+          if (primeiro !== undefined) posicoes.set(primeiro, 1)
+          ordem.forEach((wp, pos) => {
+            const alvo = idxValidos[wp + 1]
+            if (alvo !== undefined) posicoes.set(alvo, pos + 2)
+          })
+          const ultimo = idxValidos[idxValidos.length - 1]
+          if (ultimo !== undefined) posicoes.set(ultimo, idxValidos.length)
+        }
+        setOrdemEntrega(posicoes)
       },
     )
   }, [isLoaded, coords, originCoord])
@@ -188,7 +225,7 @@ function MapaRotaInner({ nfs, height = '280px', className, originAddress }: Mapa
             <Marker
               key={i}
               position={coord}
-              label={{ text: String(i + 1), color: 'white', fontWeight: 'bold', fontSize: '11px' }}
+              label={{ text: String(ordemEntrega.get(i) ?? i + 1), color: 'white', fontWeight: 'bold', fontSize: '11px' }}
               onClick={() => setActivePin(prev => (prev === i ? null : i))}
             />
           )

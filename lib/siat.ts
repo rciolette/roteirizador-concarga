@@ -161,7 +161,6 @@ export function capKgFromSiat(tipo: string | null, raw: number | null): number {
 function normalizarTipoCliente(tipo: string | null | undefined): ClientType {
   if (!tipo) return 'Varejo'
   const t = tipo.toLowerCase()
-  if (t.includes('reentre'))                            return 'Reentrega'
   // "EA - Cozinha" (Marcelo 21/08): tipo próprio, entrega no endereço alternativo.
   if (t.includes('cozinha') || t.startsWith('ea'))      return 'Cozinha'
   if (t.includes('rede') || t.includes('network'))      return 'Rede'
@@ -196,9 +195,7 @@ export function siatRowsToNotasPendentes(rows: SiatRow[]): NotaFiscal[] {
     seen.add(nf)
 
     const reentrega = Boolean(row.Reentrega)
-    const tipoCliente: ClientType = reentrega
-      ? 'Reentrega'
-      : normalizarTipoCliente(row.TipoCliente)
+    const tipoCliente: ClientType = normalizarTipoCliente(row.TipoCliente)
 
     result.push({
       id:               `siat-${nf}`,
@@ -279,7 +276,7 @@ export function siatRowsToRotas(
     const notasFiscais: NotaFiscal[] = nfNums.map(nf => {
       const row = rotaRows.find(r => getNF(r) === nf)!
       const reentrega    = Boolean(row.Reentrega)
-      const tipoCliente: ClientType = reentrega ? 'Reentrega' : normalizarTipoCliente(row.TipoCliente)
+      const tipoCliente: ClientType = normalizarTipoCliente(row.TipoCliente)
       return {
         id:              `nf-${nf}`,
         numnfs:          nf,

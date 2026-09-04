@@ -36,6 +36,8 @@ export interface NfPendenteRow {
   selecionada: boolean
   /** true quando esta linha repete o destinatário da anterior, já ordenado (item 10). */
   mesmoDestAnterior: boolean
+  /** Quantas NFs da página vão para o MESMO destinatário (1 = entrega única). */
+  qtdMesmoDest: number
 }
 
 // Filtros MULTI-SELEÇÃO (Marcelo, 21/08): cada campo aceita várias opções ao
@@ -48,8 +50,18 @@ export interface NotasFiltros {
   bairro:       string[]
   tipoCliente:  string[]
   remetente:    string[]
+  /** Segmentadores acrescentados pelo Marcelo na planilha (03/09). */
+  destinatario: string[]
+  placa:        string[]
+  reentrega:    string[]
   /** Região continua no código (mapa/futuro), mas SEM UI — Marcelo 21/08. */
   regiao:       string[]
+}
+
+/** Opção de um segmentador, com quantas notas do recorte atual ela cobre. */
+export interface OpcaoFiltro {
+  valor: string
+  count: number
 }
 
 /** Opção especial do filtro Solução SAC: notas SEM solução preenchida. */
@@ -61,6 +73,7 @@ export function filtrosPadrao(): NotasFiltros {
   return {
     solucaoSac: [SAC_VAZIO, 'REENTREGA'],
     tipoCarga: [], rota: [], municipio: [], bairro: [], tipoCliente: [], remetente: [], regiao: [],
+    destinatario: [], placa: [], reentrega: [],
   }
 }
 
@@ -81,7 +94,7 @@ interface UseNotasFiscaisResult {
   limparFiltro: (campo: keyof NotasFiltros) => void
   /** Volta TODOS os filtros ao padrão (SAC Vazio+Reentrega preservado). */
   limparFiltros: () => void
-  opcoesFiltro: Record<keyof NotasFiltros, string[]>
+  opcoesFiltro: Record<keyof NotasFiltros, OpcaoFiltro[]>
   toggleSelecionada: (numnfs: string) => void
   limparDesmarcacoes: () => void
   /** Seleção múltipla: quantas NFs do conjunto filtrado estão selecionadas. */
@@ -164,6 +177,9 @@ export function useNotasFiscais(defaultPageSize: PageSize = 25): UseNotasFiscais
       tipoCliente: (n: typeof base[number]) => multi(filtros.tipoCliente, n.tipoCliente),
       remetente:   (n: typeof base[number]) => multi(filtros.remetente,   n.remetente),
       regiao:      (n: typeof base[number]) => multi(filtros.regiao,      n.regiao),
+      destinatario:(n: typeof base[number]) => multi(filtros.destinatario, n.destinatario),
+      placa:       (n: typeof base[number]) => multi(filtros.placa,       rotaPorNf.get(n.numnfs) ?? undefined),
+      reentrega:   (n: typeof base[number]) => multi(filtros.reentrega,   String(n.indiceReentrega ?? 0)),
     }
   }, [filtros])
 
@@ -180,17 +196,33 @@ export function useNotasFiscais(defaultPageSize: PageSize = 25): UseNotasFiscais
       tipoCliente: n => n.tipoCliente,
       remetente:   n => n.remetente,
       regiao:      n => n.regiao,
+      destinatario:n => n.destinatario,
+      placa:       n => rotaPorNf.get(n.numnfs) ?? undefined,
+      reentrega:   n => String(n.indiceReentrega ?? 0),
     }
-    const out = {} as Record<keyof NotasFiltros, string[]>
+    const out = {} as Record<keyof NotasFiltros, OpcaoFiltro[]>
     for (const campo of campos) {
       const outros = campos.filter(c => c !== campo)
       const subset = base.filter(n => outros.every(c => passa[c](n)))
-      out[campo] = opcoesUnicas(subset.map(valor[campo]))
+
+      // Universo = TODAS as opções que existem na base, mesmo fora do recorte.
+      // Sem isso, uma opção some do card assim que outro filtro a exclui e o
+      // operador não consegue mais alcançá-la (Marcelo, 03/09: em Solução SAC
+      // todas as opções devem estar disponíveis).
+      const universo = opcoesUnicas(base.map(valor[campo]))
+      const contagem = new Map<string, number>()
+      for (const n of subset) {
+        const v = valor[campo](n)
+        if (v) contagem.set(norm(v), (contagem.get(norm(v)) ?? 0) + 1)
+      }
+      out[campo] = universo.map(v => ({ valor: v, count: contagem.get(norm(v)) ?? 0 }))
     }
-    // Opção "(Vazio)" sempre disponível no topo do filtro de Solução SAC.
-    out.solucaoSac = [SAC_VAZIO, ...out.solucaoSac]
+    // "(Vazio)" sempre no topo do filtro de Solução SAC.
+    const semSac = base.filter(n =>
+      !n.solucaoSac && campos.filter(c => c !== 'solucaoSac').every(c => passa[c](n))).length
+    out.solucaoSac = [{ valor: SAC_VAZIO, count: semSac }, ...out.solucaoSac]
     return out
-  }, [base, passa])
+  }, [base, passa, rotaPorNf])
 
   const filtradas = useMemo(() => {
     const campos = Object.keys(passa) as (keyof NotasFiltros)[]
@@ -210,7 +242,17 @@ export function useNotasFiscais(defaultPageSize: PageSize = 25): UseNotasFiscais
   const from = page * pageSize
 
   const rows = useMemo<NfPendenteRow[]>(
-    () => sorted.slice(from, from + pageSize).map((nf, i, arr) => ({
+    () => {
+    const pagina = sorted.slice(from, from + pageSize)
+    // Contagem por destinatário na página: o destaque precisa cobrir o GRUPO
+    // inteiro. Antes só marcava "repete a anterior", então a primeira nota do
+    // grupo ficava sem cor e parecia outra entrega (Marcelo, 03/09).
+    const porDest = new Map<string, number>()
+    for (const nf of pagina) {
+      const k = (nf.destinatario ?? '').trim().toUpperCase()
+      if (k) porDest.set(k, (porDest.get(k) ?? 0) + 1)
+    }
+    return pagina.map((nf, i, arr) => ({
       id:                nf.id,
       n_nfs:             nf.numnfs,
       destinatario:      nf.destinatario,
@@ -234,7 +276,9 @@ export function useNotasFiscais(defaultPageSize: PageSize = 25): UseNotasFiscais
       alertaSac:         temAlertaSac(nf),
       selecionada:       !nfsDesmarcadas.has(nf.numnfs),
       mesmoDestAnterior: i > 0 && arr[i - 1].destinatario === nf.destinatario,
-    })),
+      qtdMesmoDest:      porDest.get((nf.destinatario ?? '').trim().toUpperCase()) ?? 1,
+    }))
+    },
     [sorted, from, pageSize, nfsDesmarcadas, rotaPorNf],
   )
 
