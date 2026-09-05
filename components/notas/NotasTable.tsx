@@ -4,6 +4,7 @@ import dynamic from 'next/dynamic'
 import { cn } from '@/lib/utils'
 import { useNotasFiscais, filtrosPadrao, type PageSize, type NotasFiltros } from '@/hooks/useNotasFiscais'
 import { Segmentador, PainelSegmentadores } from '@/components/ui/Segmentadores'
+import { useColunasRedimensionaveis, type ColunaDef } from '@/hooks/useColunasRedimensionaveis'
 
 import { useAppData } from '@/components/providers/AppDataProvider'
 import { salvarRotasSupabase } from '@/lib/webhooks'
@@ -108,6 +109,47 @@ function ObservacaoCelula({ texto }: { texto: string | null }) {
     </div>
   )
 }
+
+/** Alça de arraste na borda direita do cabeçalho — 5px, fácil de pegar. */
+function AlcaResize({ onMouseDown, ativo }: { onMouseDown: (e: React.MouseEvent) => void; ativo: boolean }) {
+  return (
+    <span
+      onMouseDown={onMouseDown}
+      onClick={e => e.stopPropagation()}
+      title="Arraste para ajustar a largura"
+      className={cn(
+        'absolute top-0 right-0 h-full w-[5px] cursor-col-resize select-none',
+        'hover:bg-primary/40',
+        ativo && 'bg-primary/60',
+      )}
+    />
+  )
+}
+
+const TITULO_COLUNA: Record<string, string | undefined> = {
+  ree:   'Índice de reentrega: 0 = nunca saiu; 1/2/3 = vezes que a NF voltou',
+  placa: 'Placa/rota já montada que contém esta NF',
+}
+
+// Colunas da tabela: a chave é estável e a largura é o padrão em px. O
+// operador ajusta arrastando a borda do cabeçalho e a preferência fica salva
+// no navegador dele (Raphael, 04/09).
+const COLUNAS: ColunaDef[] = [
+  { key: 'sel',          label: '',                 largura: 34,  min: 34 },
+  { key: 'ree',          label: 'Ree',              largura: 40,  min: 34 },
+  { key: 'nf',           label: 'NF',               largura: 82,  min: 60 },
+  { key: 'emissao',      label: 'Emissão',          largura: 70,  min: 56 },
+  { key: 'agenda',       label: 'Agenda',           largura: 70,  min: 56 },
+  { key: 'remetente',    label: 'Remetente',        largura: 150, min: 70 },
+  { key: 'destinatario', label: 'Destinatário',     largura: 200, min: 80 },
+  { key: 'endereco',     label: 'Endereço',         largura: 190, min: 80 },
+  { key: 'municipio',    label: 'Município',        largura: 120, min: 70 },
+  { key: 'tipo',         label: 'Tipo',             largura: 80,  min: 56 },
+  { key: 'peso',         label: 'Peso',             largura: 80,  min: 56 },
+  { key: 'rota',         label: 'Rota de Entrega',  largura: 130, min: 70 },
+  { key: 'observacao',   label: 'Observação',       largura: 200, min: 80 },
+  { key: 'placa',        label: 'Placa',            largura: 110, min: 60 },
+]
 
 // Filtros na barra (Marcelo, 21/08): Solução SAC em PRIMEIRO; Região fora da
 // UI (o campo continua no código). Multi-seleção em todos.
@@ -270,6 +312,8 @@ export function NotasTable() {
   const { refresh, setNfsDesmarcadasBulk } = useAppData()
   // Mapa visível por padrão (Raphael, 18/08) — o operador pode ocultar se quiser.
   const [mapaAberto, setMapaAberto] = useState(true)
+  const colunas = useColunasRedimensionaveis('concarga:larguras:notas', COLUNAS)
+  const larguraTotal = COLUNAS.reduce((t, c) => t + (colunas.larguras[c.key] ?? c.largura), 0)
   const [gerandoRota, setGerandoRota] = useState(false)
   const [msgRota, setMsgRota] = useState('')
 
@@ -403,6 +447,15 @@ export function NotasTable() {
               >
                 {mapaAberto ? 'Ocultar mapa' : '🗺 Ver no mapa'}
               </button>
+              {colunas.alterado && (
+                <button
+                  onClick={colunas.restaurar}
+                  className="text-[11px] px-2 py-1 rounded-md border border-[var(--border-input)] text-muted hover:bg-cream dark:hover:bg-hover cursor-pointer"
+                  title="Volta as colunas para a largura padrão"
+                >
+                  Restaurar larguras
+                </button>
+              )}
             </div>
 
             <div className="flex flex-wrap items-center gap-2 mt-1.5">
@@ -458,31 +511,43 @@ export function NotasTable() {
           criava contexto de rolagem, a página inteira rolava e o cabeçalho
           sticky escapava para cima da lista. */}
       <div className="overflow-auto rounded-xl border border-[var(--border-card)] bg-surface max-h-[calc(100vh-260px)] min-h-[320px]">
-        <table className="w-full text-[12px] border-collapse">
+        {/* table-fixed: sem isso o browser recalcula a largura pelo conteúdo e
+            o arraste do operador seria ignorado. As larguras vêm do colgroup. */}
+        <table className="text-[12px] border-collapse table-fixed" style={{ width: larguraTotal }}>
+          <colgroup>
+            {COLUNAS.map(c => (
+              <col key={c.key} style={{ width: colunas.larguras[c.key] ?? c.largura }} />
+            ))}
+          </colgroup>
           <thead className="sticky top-0 z-10">
             <tr className="bg-cream dark:bg-hover border-b border-[var(--border-light)]">
-              <th className="px-2 py-2 text-center font-medium text-muted whitespace-nowrap w-8">
-                <input
-                  ref={masterRef}
-                  type="checkbox"
-                  checked={todasSelecionadas}
-                  onChange={() => (todasSelecionadas ? desmarcarFiltradas() : marcarFiltradas())}
-                  title={todasSelecionadas ? 'Desmarcar todas as filtradas' : 'Marcar todas as filtradas'}
-                />
-              </th>
-              <th className="px-2 py-2 text-center font-medium text-muted whitespace-nowrap" title="Índice de reentrega: vazio = nunca retornou; 1/2/3 = vezes que a NF voltou">Reent.</th>
-              <th className="px-3 py-2 text-left font-medium text-muted whitespace-nowrap">NF</th>
-              <th className="px-2 py-2 text-left font-medium text-muted whitespace-nowrap">Emissão</th>
-              <th className="px-2 py-2 text-left font-medium text-muted whitespace-nowrap">Agenda</th>
-              <th className="px-3 py-2 text-left font-medium text-muted whitespace-nowrap">Remetente</th>
-              <th className="px-3 py-2 text-left font-medium text-muted whitespace-nowrap">Destinatário</th>
-              <th className="px-3 py-2 text-left font-medium text-muted whitespace-nowrap">Endereço</th>
-              <th className="px-3 py-2 text-left font-medium text-muted whitespace-nowrap">Município</th>
-              <th className="px-3 py-2 text-left font-medium text-muted whitespace-nowrap">Tipo</th>
-              <th className="px-3 py-2 text-right font-medium text-muted whitespace-nowrap">Peso</th>
-              <th className="px-3 py-2 text-left font-medium text-muted whitespace-nowrap">Rota de Entrega</th>
-              <th className="px-3 py-2 text-left font-medium text-muted whitespace-nowrap">Observação</th>
-              <th className="px-2 py-2 text-left font-medium text-muted whitespace-nowrap" title="Placa/rota já montada que contém esta NF">Placa</th>
+              {COLUNAS.map(c => (
+                <th
+                  key={c.key}
+                  className={cn(
+                    'relative py-2 font-medium text-muted whitespace-nowrap',
+                    c.key === 'sel' || c.key === 'ree' ? 'px-1 text-center' : 'px-2',
+                    c.key === 'peso' ? 'text-right' : c.key === 'sel' || c.key === 'ree' ? '' : 'text-left',
+                  )}
+                  title={TITULO_COLUNA[c.key]}
+                >
+                  {c.key === 'sel' ? (
+                    <input
+                      ref={masterRef}
+                      type="checkbox"
+                      checked={todasSelecionadas}
+                      onChange={() => (todasSelecionadas ? desmarcarFiltradas() : marcarFiltradas())}
+                      title={todasSelecionadas ? 'Desmarcar todas as filtradas' : 'Marcar todas as filtradas'}
+                    />
+                  ) : (
+                    <span className="block truncate">{c.label}</span>
+                  )}
+                  <AlcaResize
+                    ativo={colunas.arrastando === c.key}
+                    onMouseDown={e => colunas.iniciarArraste(c.key, e)}
+                  />
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
@@ -512,7 +577,7 @@ export function NotasTable() {
                           : (i % 2 === 0 ? 'bg-surface' : 'bg-cream/30 dark:bg-[#1A1918]/40'),
                   )}
                 >
-                  <td className="px-2 py-2 text-center">
+                  <td className="overflow-hidden px-2 py-2 text-center">
                     <input
                       type="checkbox"
                       checked={row.selecionada}
@@ -520,12 +585,12 @@ export function NotasTable() {
                       title={row.selecionada ? 'Desmarcar da roteirização' : 'Marcar para roteirização'}
                     />
                   </td>
-                  <td className="px-2 py-2 text-center font-mono text-[11px] tabular-nums" title="Vezes que a NF retornou (reentrega)">
+                  <td className="overflow-hidden px-2 py-2 text-center font-mono text-[11px] tabular-nums" title="Vezes que a NF retornou (reentrega)">
                     <span className={row.indice_reentrega > 0 ? 'text-warn font-medium' : 'text-subtle'}>
                       {row.indice_reentrega}
                     </span>
                   </td>
-                  <td className="px-3 py-2 font-mono text-[11px] text-base whitespace-nowrap">
+                  <td className="overflow-hidden px-3 py-2 font-mono text-[11px] text-base whitespace-nowrap">
                     {row.alertaSac && (
                       <span
                         className="text-warn mr-1 cursor-help"
@@ -536,18 +601,18 @@ export function NotasTable() {
                     )}
                     {row.n_nfs ?? '—'}
                   </td>
-                  <td className="px-2 py-2 text-mid whitespace-nowrap tabular-nums">
+                  <td className="overflow-hidden px-2 py-2 text-mid whitespace-nowrap tabular-nums">
                     {fmtData(row.emissao)}
                   </td>
-                  <td className={cn('px-2 py-2 whitespace-nowrap tabular-nums', row.agenda ? 'text-base font-medium' : 'text-muted')}>
+                  <td className={cn('overflow-hidden px-2 py-2 whitespace-nowrap tabular-nums', row.agenda ? 'text-base font-medium' : 'text-muted')}>
                     {fmtData(row.agenda)}
                   </td>
-                  <td className="px-3 py-2 text-mid max-w-[150px] truncate" title={row.remetente ?? undefined}>
+                  <td className="overflow-hidden px-3 py-2 text-mid truncate" title={row.remetente ?? undefined}>
                     {row.remetente ?? '—'}
                   </td>
                   <td
                     className={cn(
-                      'px-3 py-2 max-w-[180px]',
+                      'px-3 py-2 ',
                       // Grupo inteiro destacado — antes só as linhas que repetiam
                       // a anterior ficavam verdes e a 1ª parecia outra entrega.
                       row.qtdMesmoDest > 1 ? 'text-success-dark font-medium' : 'text-base',
@@ -566,27 +631,30 @@ export function NotasTable() {
                       )}
                     </span>
                   </td>
-                  <td className="px-3 py-2 text-mid max-w-[180px] truncate" title={row.endereco !== '—' ? row.endereco : undefined}>
+                  <td className="overflow-hidden px-3 py-2 text-mid truncate" title={row.endereco !== '—' ? row.endereco : undefined}>
                     {row.endereco ?? '—'}
                   </td>
-                  <td className="px-3 py-2 text-mid whitespace-nowrap">
+                  <td
+                    className="px-3 py-2 text-mid truncate"
+                    title={row.municipio_dest ?? row.municipio ?? undefined}
+                  >
                     {row.municipio_dest ?? row.municipio ?? '—'}
                   </td>
-                  <td className="px-3 py-2 text-mid whitespace-nowrap">
+                  <td className="overflow-hidden px-2 py-2 text-mid whitespace-nowrap truncate" title={row.tipo_cliente ?? undefined}>
                     {row.tipo_cliente ?? '—'}
                   </td>
-                  <td className="px-3 py-2 text-right text-mid tabular-nums whitespace-nowrap">
+                  <td className="overflow-hidden px-3 py-2 text-right text-mid tabular-nums whitespace-nowrap">
                     {row.peso_kg != null
                       ? `${row.peso_kg.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} kg`
                       : '—'}
                   </td>
-                  <td className="px-3 py-2 text-mid whitespace-nowrap">
+                  <td className="overflow-hidden px-3 py-2 text-mid whitespace-nowrap">
                     {row.rota ?? '—'}
                   </td>
-                  <td className="px-3 py-2 text-mid max-w-[220px] min-w-[140px]">
+                  <td className="overflow-hidden px-3 py-2 text-mid ">
                     <ObservacaoCelula texto={row.observacao} />
                   </td>
-                  <td className="px-2 py-2 font-mono text-[11px] whitespace-nowrap">
+                  <td className="overflow-hidden px-2 py-2 font-mono text-[11px] whitespace-nowrap">
                     {row.em_rota ?? ''}
                   </td>
                 </tr>

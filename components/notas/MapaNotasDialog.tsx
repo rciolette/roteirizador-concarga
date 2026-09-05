@@ -217,21 +217,10 @@ function MapaNotasInner({ notas, desmarcadas, height = 420 }: { notas: NotaFisca
         </GoogleMap>
       </div>
 
-      {/* Legenda por tipo de carga + contadores (Marcelo, 21/08) */}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2 border-t border-[0.5px] border-[var(--border-subtle)]">
-        {[...corPorTipo.entries()].map(([tipo, cor]) => (
-          <span key={tipo} className="inline-flex items-center gap-1 text-[10px] text-mid">
-            <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ backgroundColor: cor }} />
-            {tipo} ({notas.filter(n => n.grade === tipo).length})
-          </span>
-        ))}
-        {notas.some(n => !n.grade || n.grade === '—') && (
-          <span className="inline-flex items-center gap-1 text-[10px] text-mid">
-            <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ backgroundColor: SEM_TIPO_COLOR }} />
-            Sem tipo ({notas.filter(n => !n.grade || n.grade === '—').length})
-          </span>
-        )}
-        <span className="text-[10px] text-muted ml-auto">
+      {/* Sem legenda de cores: ela ocupava altura que o mapa aproveita melhor
+          (Raphael, 03/09). Fica só o contador, numa linha fina. */}
+      <div className="px-4 py-1 border-t border-[0.5px] border-[var(--border-subtle)]">
+        <span className="text-[10px] text-muted">
           {totalSelecionadas}/{pins.length} selecionadas no mapa
           {semCoord > 0 && ` · ${semCoord} sem endereço localizável`}
         </span>
