@@ -232,7 +232,8 @@ export function veiculoDaFrotaToVeiculo(v: VeiculoDaFrota): Veiculo {
     tipo:            tipoVeiculoFromSiat(v.tipo_veiculo),
     capacidadeKg:    v.capacidade_kg,
     volumeCubado:    v.volume_m3 ?? undefined,
-    sigla:           v.placa,
+    tipoSiat:        v.tipo_veiculo,
+    sigla:           (v.motorista_sigla ?? '').trim() || '—',
     status,
     disponivel_hoje: v.disponivel_hoje,
     motoristaNome:   v.motorista_nome ?? undefined,
@@ -340,5 +341,42 @@ export async function atualizarAtivoBulkMotoristas(ids: string[], ativo: boolean
 export async function atualizarAtivoBulkVeiculos(ids: string[], ativo: boolean): Promise<void> {
   if (ids.length === 0) return
   const { error } = await getSupabaseBrowser().from('veiculos').update({ ativo }).in('id', ids)
+  if (error) throw error
+}
+
+// ── Preferências por veículo (espec Rotas do Dia, item 4) ─────────────────────
+export interface PreferenciaVeiculo {
+  veiculo_id:     string
+  regioes:        string[]
+  rotas_entrega:  string[]
+  intermunicipal: boolean
+  tipos_carga:    string[]
+  observacao:     string | null
+}
+
+export async function listarPreferenciasVeiculos(): Promise<Map<string, PreferenciaVeiculo>> {
+  const rows = await fetchAllPages<Record<string, unknown>>(
+    (from, to) => getSupabaseBrowser().from('veiculo_preferencias').select('*').range(from, to),
+  )
+  const m = new Map<string, PreferenciaVeiculo>()
+  for (const r of rows) {
+    m.set(r.veiculo_id as string, {
+      veiculo_id:     r.veiculo_id as string,
+      regioes:        (r.regioes as string[]) ?? [],
+      rotas_entrega:  (r.rotas_entrega as string[]) ?? [],
+      intermunicipal: Boolean(r.intermunicipal),
+      tipos_carga:    (r.tipos_carga as string[]) ?? [],
+      observacao:     (r.observacao as string | null) ?? null,
+    })
+  }
+  return m
+}
+
+export async function salvarPreferenciaVeiculo(p: PreferenciaVeiculo): Promise<void> {
+  const { error } = await getSupabaseBrowser().from('veiculo_preferencias').upsert({
+    veiculo_id: p.veiculo_id, regioes: p.regioes, rotas_entrega: p.rotas_entrega,
+    intermunicipal: p.intermunicipal, tipos_carga: p.tipos_carga, observacao: p.observacao,
+    atualizado_em: new Date().toISOString(),
+  }, { onConflict: 'veiculo_id' })
   if (error) throw error
 }

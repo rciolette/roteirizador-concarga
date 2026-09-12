@@ -1,14 +1,17 @@
 'use client'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { cn } from '@/lib/utils'
-import { useNotasFiscais, filtrosPadrao, type PageSize, type NotasFiltros } from '@/hooks/useNotasFiscais'
+import { useNotasFiscais, filtrosPadrao, type PageSize, type NotasFiltros, type FonteNotas } from '@/hooks/useNotasFiscais'
 import { Segmentador, PainelSegmentadores } from '@/components/ui/Segmentadores'
 import { useColunasRedimensionaveis, type ColunaDef } from '@/hooks/useColunasRedimensionaveis'
 
 import { useAppData } from '@/components/providers/AppDataProvider'
-import { salvarRotasSupabase } from '@/lib/webhooks'
-import type { Rota, NotaFiscal } from '@/types'
+import { useAuth } from '@/components/providers/AuthProvider'
+import { salvarRotaManual, type VeiculoLivre } from '@/lib/webhooks'
+import { listarCapacidades, type CapacidadeVeiculo } from '@/lib/frota'
+import { formatPeso, formatarCep } from '@/lib/utils'
+import type { NotaFiscal } from '@/types'
 
 const MapaNotasInline = dynamic(
   () => import('@/components/notas/MapaNotasDialog').then(m => m.MapaNotasInline),
@@ -86,20 +89,20 @@ function ObservacaoCelula({ texto }: { texto: string | null }) {
 
   if (!texto || texto === '—') return <span className="text-subtle">—</span>
 
-  const longo = texto.length > 28
-
   return (
     <div className="relative flex items-center gap-1 min-w-0" ref={ref}>
-      <span className="truncate whitespace-nowrap" title={texto}>{texto}</span>
-      {longo && (
-        <button
-          onClick={() => setAberto(v => !v)}
-          title="Ver observação completa"
-          className="shrink-0 text-[9px] px-1 rounded border border-[0.5px] border-[var(--border-input)] text-muted hover:bg-cream dark:hover:bg-hover cursor-pointer"
-        >
-          ⤢
-        </button>
-      )}
+      {/* Botão sempre visível quando há texto (espec, item 1): o balão mostra o conteúdo integral. */}
+      <button
+        onClick={() => setAberto(v => !v)}
+        title="Ver observação completa"
+        className={cn(
+          'shrink-0 text-[9px] px-1 rounded border border-[0.5px] cursor-pointer font-medium',
+          aberto ? 'bg-primary text-white border-primary' : 'border-warn-mid/60 text-warn bg-warn-bg hover:brightness-95',
+        )}
+      >
+        ⤢
+      </button>
+      <span className="truncate whitespace-nowrap">{texto}</span>
       {aberto && (
         <div className="absolute z-40 top-full right-0 mt-1 w-[320px] max-h-[220px] overflow-y-auto bg-surface border border-[0.5px] border-[var(--border-light)] rounded-lg shadow-lg p-2.5">
           <div className="text-[10px] text-muted mb-1 font-medium">Observação</div>
@@ -128,7 +131,7 @@ function AlcaResize({ onMouseDown, ativo }: { onMouseDown: (e: React.MouseEvent)
 
 const TITULO_COLUNA: Record<string, string | undefined> = {
   ree:   'Índice de reentrega: 0 = nunca saiu; 1/2/3 = vezes que a NF voltou',
-  placa: 'Placa/rota já montada que contém esta NF',
+  placa: 'Veículo (Placa | Sigla | Tipo) da rota ativa que contém esta NF',
 }
 
 // Colunas da tabela: a chave é estável e a largura é o padrão em px. O
@@ -143,20 +146,32 @@ const COLUNAS: ColunaDef[] = [
   { key: 'remetente',    label: 'Remetente',        largura: 150, min: 70 },
   { key: 'destinatario', label: 'Destinatário',     largura: 200, min: 80 },
   { key: 'endereco',     label: 'Endereço',         largura: 190, min: 80 },
+  { key: 'numero',       label: 'Nº',               largura: 52,  min: 40 },
+  { key: 'bairro',       label: 'Bairro',           largura: 120, min: 70 },
   { key: 'municipio',    label: 'Município',        largura: 120, min: 70 },
+  { key: 'uf',           label: 'UF',               largura: 42,  min: 36 },
+  { key: 'cep',          label: 'CEP',              largura: 78,  min: 70 },
   { key: 'tipo',         label: 'Tipo',             largura: 80,  min: 56 },
   { key: 'peso',         label: 'Peso',             largura: 80,  min: 56 },
+  { key: 'volume',       label: 'Vol. m³',          largura: 62,  min: 50 },
+  { key: 'caixas',       label: 'Cx',               largura: 48,  min: 40 },
+  { key: 'valor',        label: 'Valor',            largura: 90,  min: 60 },
   { key: 'rota',         label: 'Rota de Entrega',  largura: 130, min: 70 },
+  { key: 'restricoes',   label: 'Restrições',       largura: 140, min: 70 },
   { key: 'observacao',   label: 'Observação',       largura: 200, min: 80 },
-  { key: 'placa',        label: 'Placa',            largura: 110, min: 60 },
+  { key: 'placa',        label: 'Placa | Sigla | Tipo', largura: 170, min: 90 },
 ]
 
 // Filtros na barra (Marcelo, 21/08): Solução SAC em PRIMEIRO; Região fora da
 // UI (o campo continua no código). Multi-seleção em todos.
-const CAMPOS_UI = ['solucaoSac', 'tipoCarga', 'rota', 'municipio', 'bairro', 'tipoCliente',
-                   'remetente', 'destinatario', 'placa', 'reentrega'] as const
+// Linha 1: SAC, Tipo Carga, Rota, Município, Bairro, Tipo Cliente.
+// Linha 2: bloco Placa (veículos livres) + Remetente + Destinatário.
+// Reentrega saiu (Raphael, 12/09); Placa virou seletor do veículo da rota.
+const CAMPOS_UI = ['solucaoSac', 'tipoCarga', 'rota', 'municipio', 'bairro', 'tipoCliente'] as const
+const CAMPOS_LINHA2 = ['remetente', 'destinatario'] as const
+type CampoUI = (typeof CAMPOS_UI)[number] | (typeof CAMPOS_LINHA2)[number]
 
-const FILTRO_LABELS: Record<(typeof CAMPOS_UI)[number], string> = {
+const FILTRO_LABELS: Record<CampoUI, string> = {
   solucaoSac:  'Solução SAC',
   tipoCarga:   'Tipo Carga',
   rota:        'Rota de Entrega',
@@ -165,17 +180,84 @@ const FILTRO_LABELS: Record<(typeof CAMPOS_UI)[number], string> = {
   tipoCliente: 'Tipo Cliente',
   remetente:   'Remetente',
   destinatario:'Destinatário',
-  placa:       'Placa',
-  reentrega:   'Reentrega (nº saídas)',
+}
+const TODOS_CAMPOS: CampoUI[] = [...CAMPOS_UI, ...CAMPOS_LINHA2]
+
+/** Ordem fixa de exibição dos grupos de veículo (espec, item 4). */
+const TIPOS_ORDEM = ['Fiorino', 'VUC', '3/4', 'Truck', 'Carreta'] as const
+
+/**
+ * Bloco Placa (espec, item 2): mesmo card dos segmentadores, listando SÓ
+ * veículos livres hoje como `Placa | Sigla | Tipo`, agrupados por tipo.
+ * Seleção única — é o veículo que recebe a rota ao salvar.
+ */
+function BlocoPlaca({ veiculos, selecionado, onSelect, pesoKg, capacidades, loading, onRefresh }: {
+  veiculos:    VeiculoLivre[]
+  selecionado: string | null
+  onSelect:    (id: string | null) => void
+  pesoKg:      number
+  capacidades: CapacidadeVeiculo[]
+  loading:     boolean
+  onRefresh:   () => void
+}) {
+  const [q, setQ] = useState('')
+  const termo = q.trim().toLowerCase()
+  const lista = termo ? veiculos.filter(v => v.rotulo.toLowerCase().includes(termo) || (v.motoristaNome ?? '').toLowerCase().includes(termo)) : veiculos
+  const grupos = TIPOS_ORDEM.map(t => ({ tipo: t, itens: lista.filter(v => v.tipo === t) })).filter(g => g.itens.length)
+  // Sugestão: menor tipo cuja capacidade × limite comporta o peso E que tenha veículo livre.
+  const sugerido = pesoKg > 0
+    ? [...capacidades].sort((a, b) => a.capacidade_kg - b.capacidade_kg)
+        .find(c => pesoKg <= c.capacidade_kg * (c.ocupacao_max_percent ?? 95) / 100 && veiculos.some(v => v.tipo === c.tipo))?.tipo ?? null
+    : null
+  const sel = veiculos.find(v => v.id === selecionado)
+  const ocup = sel && sel.capacidadeKg > 0 ? Math.round(pesoKg / sel.capacidadeKg * 100) : null
+  return (
+    <div className={cn('flex flex-col rounded-lg border border-[0.5px] bg-surface overflow-hidden', selecionado ? 'border-primary' : 'border-[var(--border-subtle)]')}>
+      <div className="flex items-center gap-1 px-2 py-1 bg-page border-b border-[0.5px] border-[var(--border-faint)]">
+        <span className="text-[10px] font-medium text-muted truncate flex-1">Placa</span>
+        <span className="text-[9px] text-subtle tabular-nums" title="Veículos livres hoje (disponíveis, com motorista, sem rota ativa)">{veiculos.length} livres</span>
+        <button onClick={onRefresh} title="Atualizar" className="text-[10px] text-muted hover:text-base cursor-pointer px-0.5">↻</button>
+        {selecionado && <button onClick={() => onSelect(null)} title="Limpar" className="text-[11px] leading-none text-muted hover:text-danger-mid px-0.5 cursor-pointer">×</button>}
+      </div>
+      <input value={q} onChange={e => setQ(e.target.value)} placeholder="Filtrar…"
+        className="mx-1 mt-1 h-6 px-1.5 text-[10px] font-sans rounded border border-[0.5px] border-[var(--border-input)] bg-page outline-none focus:border-primary" />
+      <div className="flex flex-col overflow-y-auto max-h-[124px] p-1 gap-px">
+        {loading ? <span className="text-[10px] text-subtle px-1 py-1">Carregando…</span>
+          : grupos.length === 0 ? <span className="text-[10px] text-subtle px-1 py-1">{termo ? 'Nada encontrado' : 'Nenhum veículo livre hoje — marque a disponibilidade em Frota'}</span>
+          : grupos.map(g => (
+            <div key={g.tipo}>
+              <div className={cn('text-[9px] uppercase tracking-[0.06em] px-1.5 pt-1 pb-0.5 font-medium', sugerido === g.tipo ? 'text-primary' : 'text-subtle')}>
+                {g.tipo} · {g.itens.length}{sugerido === g.tipo ? ' · sugerido' : ''}
+              </div>
+              {g.itens.map(v => {
+                const ativo = v.id === selecionado
+                return (
+                  <button key={v.id} onClick={() => onSelect(ativo ? null : v.id)} title={`${v.rotulo} · ${v.motoristaNome ?? ''} · ${formatPeso(v.capacidadeKg)}`}
+                    className={cn('flex items-center gap-1 px-1.5 py-[3px] rounded text-[10px] text-left transition-colors cursor-pointer w-full',
+                      ativo ? 'bg-primary text-white font-medium' : 'text-base hover:bg-cream dark:hover:bg-hover')}>
+                    <span className="font-mono truncate flex-1">{v.rotulo}</span>
+                    <span className={cn('tabular-nums shrink-0 text-[9px]', ativo ? 'text-white/80' : 'text-subtle')}>{formatPeso(v.capacidadeKg)}</span>
+                  </button>
+                )
+              })}
+            </div>
+          ))}
+      </div>
+      <div className={cn('px-2 py-1 text-[9px] border-t border-[0.5px] border-[var(--border-faint)] truncate', ocup !== null && sel && ocup > (capacidades.find(c => c.tipo === sel.tipo)?.ocupacao_max_percent ?? 95) ? 'text-danger' : 'text-muted')}
+        title={sel ? `${sel.rotulo} · ${formatPeso(pesoKg)} / ${formatPeso(sel.capacidadeKg)}` : undefined}>
+        {sel ? `${sel.rotulo} · ${ocup}% de ${formatPeso(sel.capacidadeKg)}` : sugerido ? `Sugestão: ${sugerido} para ${formatPeso(pesoKg)}` : 'Escolha o veículo da rota'}
+      </div>
+    </div>
+  )
 }
 
 function FiltrosAplicados({ filtros, incluirParciais, onRemover, onRemoverParciais }: {
   filtros:           NotasFiltros
   incluirParciais:   boolean
-  onRemover:         (campo: (typeof CAMPOS_UI)[number], valor: string) => void
+  onRemover:         (campo: CampoUI, valor: string) => void
   onRemoverParciais: () => void
 }) {
-  const tags = CAMPOS_UI.flatMap(campo =>
+  const tags = TODOS_CAMPOS.flatMap(campo =>
     filtros[campo].map(valor => ({ campo, valor })))
   if (tags.length === 0 && !incluirParciais) return null
 
@@ -260,69 +342,66 @@ function ResumoRecorte({ notas }: { notas: NotaFiscal[] }) {
 
 // Resumo da SELEÇÃO ao lado do mapa (Marcelo, 21/08) — espelha o quadro da
 // planilha (PESO / ENTREGA / REDES / CD / RESTRIÇÕES / REENTREGA), mais completo.
-function ResumoSelecao({ notas, desmarcadas }: { notas: NotaFiscal[]; desmarcadas: Set<string> }) {
-  const sel        = notas.filter(n => !desmarcadas.has(n.numnfs))
-  const pesoKg     = sel.reduce((acc, n) => acc + n.peso, 0)
-  const entregas   = new Set(sel.map(n => n.destinatario)).size
-  const porTipo    = (t: string) => sel.filter(n => n.tipoCliente === t).length
-  const reentregas = sel.filter(n => n.indRee).length
-  const restricoes = sel.filter(n => n.observacao && n.observacao !== '—').length
-
-  const linhas: [string, number][] = [
-    ['Entregas',   entregas],
-    ['Redes',      porTipo('Rede')],
-    ['CD',         porTipo('CD')],
-    ['Varejo',     porTipo('Varejo')],
-    ['Cozinha',    porTipo('Cozinha')],
-    ['Restrições', restricoes],
-    ['Reentregas', reentregas],
-  ]
-
+// Cabeçalho do mapa (espec, item 7 + Raphael 12/09): só peso, rota e NFs.
+// Os contadores Entregas/Redes/CD/Varejo/Cozinha/Restrições/Reentregas saíram.
+function ResumoSelecao({ notas, desmarcadas, codigo }: { notas: NotaFiscal[]; desmarcadas: Set<string>; codigo: string }) {
+  const sel    = notas.filter(n => !desmarcadas.has(n.numnfs))
+  const pesoKg = sel.reduce((acc, n) => acc + n.peso, 0)
   return (
-    <div className="w-full shrink-0 rounded-lg border border-[0.5px] border-[var(--border-subtle)] bg-surface overflow-hidden">
-      <div className="px-2.5 py-1.5 bg-primary text-white">
+    <div className="w-full shrink-0 rounded-lg border border-[0.5px] border-[var(--border-subtle)] bg-primary text-white px-2.5 py-1.5 flex items-center justify-between gap-3">
+      <div>
         <div className="text-[9px] uppercase tracking-[0.08em] font-medium opacity-80">Peso selecionado</div>
-        <div className="text-[15px] font-semibold tabular-nums leading-tight">
-          {pesoKg.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} kg
-        </div>
-        <div className="text-[9px] opacity-80">{sel.length} NFs selecionadas</div>
+        <div className="text-[15px] font-semibold tabular-nums leading-tight">{pesoKg.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} kg</div>
       </div>
-      <div className="px-2.5 py-1 grid grid-cols-2 gap-x-3">
-        {linhas.map(([label, valor]) => (
-          <div key={label} className={cn(
-            'flex items-center justify-between text-[10px] py-[3px] border-b border-[var(--border-faint)]',
-            (label === 'Restrições' || label === 'Reentregas') && valor > 0 ? 'text-danger font-medium' : 'text-mid',
-          )}>
-            <span>{label}</span>
-            <span className="tabular-nums font-medium">{valor}</span>
-          </div>
-        ))}
+      <div className="text-right min-w-0">
+        <div className="text-[9px] uppercase tracking-[0.08em] font-medium opacity-80">Rota</div>
+        <div className="text-[11px] font-medium truncate max-w-[180px]" title={codigo}>{codigo}</div>
+      </div>
+      <div className="text-right">
+        <div className="text-[9px] uppercase tracking-[0.08em] font-medium opacity-80">NFs</div>
+        <div className="text-[15px] font-semibold tabular-nums leading-tight">{sel.length}</div>
       </div>
     </div>
   )
 }
 
-export function NotasTable() {
+export function NotasTable({ fonte = 'livres' }: { fonte?: FonteNotas }) {
+  const emUso = fonte === 'em_uso'
   const {
     rows, total, totalDesmarcadas, page, pageSize, setPage, setPageSize, loading, error,
     filtros, toggleFiltro, limparFiltro, limparFiltros, opcoesFiltro, toggleSelecionada, limparDesmarcacoes,
     totalFiltradasSelecionadas, marcarFiltradas, desmarcarFiltradas,
     notasFiltradas, desmarcadas, incluirParciais, setIncluirParciais,
-  } = useNotasFiscais(25)
-  const { refresh, setNfsDesmarcadasBulk } = useAppData()
+  } = useNotasFiscais(25, fonte)
+  const { refresh, setNfsDesmarcadasBulk, veiculosLivres, loadingVeiculosLivres, refreshVeiculosLivres } = useAppData()
+  const { usuario } = useAuth()
   // Mapa visível por padrão (Raphael, 18/08) — o operador pode ocultar se quiser.
   const [mapaAberto, setMapaAberto] = useState(true)
   const colunas = useColunasRedimensionaveis('concarga:larguras:notas', COLUNAS)
   const larguraTotal = COLUNAS.reduce((t, c) => t + (colunas.larguras[c.key] ?? c.largura), 0)
   const [gerandoRota, setGerandoRota] = useState(false)
   const [msgRota, setMsgRota] = useState('')
+  const [veiculoSel, setVeiculoSel] = useState<string | null>(null)
+  const [capacidades, setCapacidades] = useState<CapacidadeVeiculo[]>([])
+  useEffect(() => { listarCapacidades().then(setCapacidades).catch(() => {}) }, [])
+  // Se outra sessão reservou o veículo escolhido, ele some da lista de livres e a escolha cai.
+  const veiculoSelValido = veiculoSel && veiculosLivres.some(v => v.id === veiculoSel) ? veiculoSel : null
 
-  // Fluxo MANUAL (Marcelo 17/08): filtrar → marcar → Gerar rota. Sem IA.
-  // A rota nasce "aguardando" e vai para a aprovação, onde o operador define
-  // veículo/motorista e pode remover ou mover NFs.
+  const selecionadas = useMemo(() => notasFiltradas.filter(n => !desmarcadas.has(n.numnfs)), [notasFiltradas, desmarcadas])
+  const pesoSel = selecionadas.reduce((acc, n) => acc + n.peso, 0)
+  const codigoRota = useMemo(() => {
+    if (filtros.rota.length === 1) return filtros.rota[0]
+    const rotas = [...new Set(selecionadas.map(n => n.rota).filter(r => r && r !== '—'))]
+    if (rotas.length === 1) return rotas[0]
+    return `MONTADA ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
+  }, [filtros.rota, selecionadas])
+
+  // Fluxo MANUAL: filtrar → marcar → escolher Placa → Salvar rota.
+  // A rota nasce "aguardando" e reserva NFs, rotas de entrega e veículo numa
+  // única transação no banco (RPC rota_salvar). "Aprovar" é etapa posterior.
   async function handleGerarRota() {
-    const selecionadas = notasFiltradas.filter(n => !desmarcadas.has(n.numnfs))
     if (!selecionadas.length || gerandoRota) return
+    if (!veiculoSelValido) { setMsgRota('Erro: escolha o veículo no bloco Placa (Placa | Sigla | Tipo)'); return }
 
     const comAlerta = selecionadas.filter(n =>
       n.solucaoSac && !n.indRee && n.solucaoSac.trim().toUpperCase() !== 'REENTREGA')
@@ -334,31 +413,18 @@ export function NotasTable() {
     setGerandoRota(true)
     setMsgRota('')
     try {
-      const agora  = new Date()
-      const codigo = filtros.rota.length === 1
-        ? filtros.rota[0]
-        : `MONTADA ${agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
+      const codigo = codigoRota
       const regiao = filtros.regiao[0] || selecionadas.find(n => n.regiao)?.regiao || ''
-      const hoje   = agora.toISOString().slice(0, 10)
-      const rota: Rota = {
-        id:              `manual-${agora.getTime()}`,
-        data:            hoje,
-        codigoRota:      codigo,
-        regiao,
-        status:          'aguardando',
-        pesoTotal:       selecionadas.reduce((acc, n) => acc + n.peso, 0),
-        qtdNotas:        selecionadas.length,
-        notasFiscais:    selecionadas,
-        nfsConcatenadas: selecionadas.map(n => n.numnfs).join(';'),
-        createdAt:       hoje,
-      }
-      await salvarRotasSupabase([rota], hoje)
-      // As NFs usadas saem da seleção para não entrarem duas vezes em rotas.
-      setNfsDesmarcadasBulk(selecionadas.map(n => n.numnfs), true)
+      const hoje   = new Date().toISOString().slice(0, 10)
+      await salvarRotaManual({ data: hoje, codigo, regiao, veiculoId: veiculoSelValido, notas: selecionadas, usuario: usuario?.email ?? undefined })
+      // As NFs salvas saem do universo livre ao recarregar as rotas (reserva no banco).
+      setNfsDesmarcadasBulk(selecionadas.map(n => n.numnfs), false)
+      setVeiculoSel(null)
       await refresh()
-      setMsgRota(`✓ Rota "${codigo}" montada (${selecionadas.length} NFs) — aguardando aprovação`)
-    } catch {
-      setMsgRota('Erro ao montar a rota — tente novamente')
+      setMsgRota(`✓ Rota "${codigo}" salva (${selecionadas.length} NFs) — aguardando aprovação`)
+    } catch (err) {
+      setMsgRota(`Erro: ${err instanceof Error ? err.message : 'falha ao salvar a rota'}`)
+      refresh().catch(() => {})
     } finally {
       setGerandoRota(false)
     }
@@ -416,6 +482,32 @@ export function NotasTable() {
                   comBusca
                 />
               ))}
+              {/* Linha 2 (Raphael, 12/09): Placa (veículos livres) + Remetente + Destinatário, largura dupla */}
+              {!emUso && (
+                <div className="col-span-2">
+                  <BlocoPlaca
+                    veiculos={veiculosLivres}
+                    selecionado={veiculoSelValido}
+                    onSelect={setVeiculoSel}
+                    pesoKg={pesoSel}
+                    capacidades={capacidades}
+                    loading={loadingVeiculosLivres}
+                    onRefresh={refreshVeiculosLivres}
+                  />
+                </div>
+              )}
+              {CAMPOS_LINHA2.map(campo => (
+                <Segmentador
+                  key={campo}
+                  className="col-span-2"
+                  titulo={FILTRO_LABELS[campo]}
+                  opcoes={opcoesFiltro[campo]}
+                  selecionados={new Set(filtros[campo])}
+                  onToggle={valor => toggleFiltro(campo, valor)}
+                  onLimpar={() => limparFiltro(campo)}
+                  comBusca
+                />
+              ))}
             </PainelSegmentadores>
 
             <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
@@ -459,14 +551,14 @@ export function NotasTable() {
             </div>
 
             <div className="flex flex-wrap items-center gap-2 mt-1.5">
-              {total > 0 && (
+              {total > 0 && !emUso && (
                 <button
                   onClick={handleGerarRota}
-                  disabled={gerandoRota || totalFiltradasSelecionadas === 0}
+                  disabled={gerandoRota || totalFiltradasSelecionadas === 0 || !veiculoSelValido}
                   className="text-[11px] px-3 py-1.5 rounded-md bg-primary text-white font-medium disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-                  title="Monta uma rota com as NFs selecionadas no filtro atual e envia para aprovação"
+                  title={veiculoSelValido ? 'Salva a rota em "aguardando" e reserva NFs, rotas de entrega e veículo' : 'Escolha o veículo no bloco Placa para salvar'}
                 >
-                  {gerandoRota ? 'Montando rota…' : `➕ Gerar rota (${totalFiltradasSelecionadas} NFs)`}
+                  {gerandoRota ? 'Salvando rota…' : `💾 Salvar rota (${totalFiltradasSelecionadas} NFs)`}
                 </button>
               )}
               <span className="text-[11px] text-muted flex items-center gap-2">
@@ -500,8 +592,8 @@ export function NotasTable() {
               disponível e o mapa fica maior (Raphael, 04/09). */}
           {mapaAberto && (
             <div className="hidden lg:flex flex-col gap-2 shrink-0 w-[400px]">
-              <ResumoSelecao notas={notasFiltradas} desmarcadas={desmarcadas} />
-              <MapaNotasInline notas={notasFiltradas} desmarcadas={desmarcadas} height={300} />
+              <ResumoSelecao notas={notasFiltradas} desmarcadas={desmarcadas} codigo={codigoRota} />
+              <MapaNotasInline notas={notasFiltradas} desmarcadas={desmarcadas} height={340} />
             </div>
           )}
         </div>
@@ -555,8 +647,8 @@ export function NotasTable() {
               <Skeleton rows={pageSize > 25 ? 25 : pageSize} />
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={14} className="px-4 py-8 text-center text-muted text-[12px]">
-                  Nenhuma NF pendente
+                <td colSpan={COLUNAS.length} className="px-4 py-8 text-center text-muted text-[12px]">
+                  {emUso ? 'Nenhuma NF reservada por rota ativa' : 'Nenhuma NF pendente'}
                 </td>
               </tr>
             ) : (
@@ -581,8 +673,9 @@ export function NotasTable() {
                     <input
                       type="checkbox"
                       checked={row.selecionada}
+                      disabled={emUso}
                       onChange={() => toggleSelecionada(row.n_nfs)}
-                      title={row.selecionada ? 'Desmarcar da roteirização' : 'Marcar para roteirização'}
+                      title={emUso ? (row.motivo_uso ?? 'Em uso') : row.selecionada ? 'Desmarcar da roteirização' : 'Marcar para roteirização'}
                     />
                   </td>
                   <td className="overflow-hidden px-2 py-2 text-center font-mono text-[11px] tabular-nums" title="Vezes que a NF retornou (reentrega)">
@@ -634,12 +727,18 @@ export function NotasTable() {
                   <td className="overflow-hidden px-3 py-2 text-mid truncate" title={row.endereco !== '—' ? row.endereco : undefined}>
                     {row.endereco ?? '—'}
                   </td>
+                  <td className="overflow-hidden px-2 py-2 text-mid whitespace-nowrap">{row.numero ?? ''}</td>
+                  <td className="overflow-hidden px-3 py-2 text-mid truncate" title={row.bairro !== '—' ? row.bairro : undefined}>
+                    {row.bairro ?? '—'}
+                  </td>
                   <td
                     className="px-3 py-2 text-mid truncate"
                     title={row.municipio_dest ?? row.municipio ?? undefined}
                   >
                     {row.municipio_dest ?? row.municipio ?? '—'}
                   </td>
+                  <td className="overflow-hidden px-2 py-2 text-mid">{row.uf ?? ''}</td>
+                  <td className="overflow-hidden px-2 py-2 text-mid font-mono text-[10px] whitespace-nowrap">{formatarCep(row.cep)}</td>
                   <td className="overflow-hidden px-2 py-2 text-mid whitespace-nowrap truncate" title={row.tipo_cliente ?? undefined}>
                     {row.tipo_cliente ?? '—'}
                   </td>
@@ -648,13 +747,19 @@ export function NotasTable() {
                       ? `${row.peso_kg.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} kg`
                       : '—'}
                   </td>
+                  <td className="overflow-hidden px-2 py-2 text-right text-mid tabular-nums">{row.volume != null ? row.volume.toLocaleString('pt-BR', { maximumFractionDigits: 2 }) : ''}</td>
+                  <td className="overflow-hidden px-2 py-2 text-right text-mid tabular-nums">{row.caixas ?? ''}</td>
+                  <td className="overflow-hidden px-2 py-2 text-right text-mid tabular-nums whitespace-nowrap">{row.valor != null ? row.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : ''}</td>
                   <td className="overflow-hidden px-3 py-2 text-mid whitespace-nowrap">
                     {row.rota ?? '—'}
+                  </td>
+                  <td className="overflow-hidden px-3 py-2 text-mid">
+                    <ObservacaoCelula texto={row.restricoes} />
                   </td>
                   <td className="overflow-hidden px-3 py-2 text-mid ">
                     <ObservacaoCelula texto={row.observacao} />
                   </td>
-                  <td className="overflow-hidden px-2 py-2 font-mono text-[11px] whitespace-nowrap">
+                  <td className="overflow-hidden px-2 py-2 font-mono text-[11px] whitespace-nowrap" title={row.motivo_uso ?? undefined}>
                     {row.em_rota ?? ''}
                   </td>
                 </tr>

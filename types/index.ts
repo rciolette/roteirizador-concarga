@@ -35,6 +35,14 @@ export interface NotaFiscal {
   regiao?: string
   /** Nº de vezes que a NF retornou (reentregas) — 0/undefined = nunca (Marcelo, 21/08). */
   indiceReentrega?: number
+  /** Campos SIAT normalizados (espec Rotas do Dia, 12/09). */
+  numero?: string
+  uf?: string
+  volume?: number
+  restricoes?: string
+  cnpjDestinatario?: string
+  /** Veículo da rota ativa que contém a NF (só na visão "Em uso"). */
+  veiculoRotulo?: string
 }
 
 export interface Veiculo {
@@ -44,7 +52,10 @@ export interface Veiculo {
   tipo: 'Fiorino' | 'VUC' | '3/4' | 'Truck' | 'Carreta'
   capacidadeKg: number
   volumeCubado?: number
+  /** Sigla do MOTORISTA vinculado (motoristas.sigla) — nunca derivada da placa. */
   sigla: string
+  /** Descrição bruta do tipo no SIAT (ex.: "Cam 3/4 Refr"). */
+  tipoSiat?: string
   status: 'disponivel' | 'indisponivel' | 'manutencao'
   regiaoPreferencial?: string
   codigoSiatMotorista?: string
@@ -76,6 +87,8 @@ export interface Rota {
   veiculoId?: string
   veiculo?: Veiculo
   pesoTotal: number
+  volumeTotal?: number
+  caixasTotal?: number
   qtdNotas: number
   notasFiscais: NotaFiscal[]
   linkMaps?: string

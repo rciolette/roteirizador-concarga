@@ -1,8 +1,40 @@
 'use client'
 import { useMemo, useState } from 'react'
 import { useAppData } from '@/components/providers/AppDataProvider'
+import type { NotaFiscal, Rota } from '@/types'
+import { rotuloVeiculo } from '@/lib/utils'
 
 export type PageSize = 25 | 50 | 100
+
+/** Fonte da grade: NFs livres para montar rota, ou em uso por rota ativa (auditoria). */
+export type FonteNotas = 'livres' | 'em_uso'
+
+const ATIVAS = new Set(['rascunho', 'aguardando', 'aprovada', 'enviada'])
+
+/** Rota de entrega que conta como recurso reservável (espelha rota_entrega_reservavel no banco). */
+export function rotaEntregaReservavel(r: string | undefined): boolean {
+  const s = (r ?? '').trim()
+  if (!s || s === '—') return false
+  const u = s.toUpperCase()
+  return !u.includes('S/ROTA') && !u.includes('S/ ROTA')
+}
+
+/** Recursos reservados pelas rotas ATIVAS carregadas (espelho local de reservas_dia). */
+export function reservasDasRotas(rotas: Rota[]) {
+  const nfs          = new Map<string, Rota>()
+  const rotasEntrega = new Map<string, Rota>()
+  for (const r of rotas) {
+    if (!ATIVAS.has(r.status)) continue
+    for (const nf of r.notasFiscais) {
+      if (!nfs.has(nf.numnfs)) nfs.set(nf.numnfs, r)
+      if (rotaEntregaReservavel(nf.rota)) {
+        const k = nf.rota.trim().toUpperCase()
+        if (!rotasEntrega.has(k)) rotasEntrega.set(k, r)
+      }
+    }
+  }
+  return { nfs, rotasEntrega }
+}
 
 export interface NfPendenteRow {
   id: string
@@ -28,8 +60,21 @@ export interface NfPendenteRow {
   endereco: string
   /** Nº de vezes que a NF retornou; 0 = nunca (coluna Reent., Marcelo 21/08). */
   indice_reentrega: number
-  /** Placa (ou código) da rota já montada que contém esta NF — null se em nenhuma. */
+  /** `Placa | Sigla | Tipo` da rota ativa que contém esta NF (fonte em_uso) — null se livre. */
   em_rota: string | null
+  /** Motivo de estar em uso (NF reservada / rota de entrega reservada). */
+  motivo_uso: string | null
+  // Campos SIAT adicionais (espec Rotas do Dia, item 1)
+  numero: string | null
+  uf: string | null
+  cep: string | null
+  volume: number | null
+  caixas: number | null
+  valor: number | null
+  restricoes: string | null
+  hora_agenda: string | null
+  regiao: string | null
+  nota: NotaFiscal
   /** true quando a NF tem Solução SAC preenchida ≠ reentrega — analisar antes de incluir em rota (Marcelo, 17/08). */
   alertaSac: boolean
   /** false quando o operador desmarcou a nota da roteirização (item 8). */
@@ -52,7 +97,6 @@ export interface NotasFiltros {
   remetente:    string[]
   /** Segmentadores acrescentados pelo Marcelo na planilha (03/09). */
   destinatario: string[]
-  placa:        string[]
   reentrega:    string[]
   /** Região continua no código (mapa/futuro), mas SEM UI — Marcelo 21/08. */
   regiao:       string[]
@@ -73,7 +117,7 @@ export function filtrosPadrao(): NotasFiltros {
   return {
     solucaoSac: [SAC_VAZIO, 'REENTREGA'],
     tipoCarga: [], rota: [], municipio: [], bairro: [], tipoCliente: [], remetente: [], regiao: [],
-    destinatario: [], placa: [], reentrega: [],
+    destinatario: [], reentrega: [],
   }
 }
 
@@ -110,10 +154,13 @@ interface UseNotasFiscaisResult {
   /** Incluir rotas parciais 996/999 na listagem (padrão: ocultas). */
   incluirParciais: boolean
   setIncluirParciais: (v: boolean) => void
+  /** Quantas NFs importadas estão reservadas por rota ativa (aba "Em uso"). */
+  totalEmUso: number
 }
 
 function opcoesUnicas(valores: (string | undefined)[]): string[] {
-  return [...new Set(valores.filter((v): v is string => Boolean(v) && v !== '—'))].sort()
+  return [...new Set(valores.filter((v): v is string => Boolean(v) && v !== '—'))]
+    .sort((a, b) => a.localeCompare(b, 'pt-BR', { numeric: true, sensitivity: 'base' }))
 }
 
 /** Rotas parciais 996/999 ficam fora da listagem padrão (Marcelo, 17/08). */
@@ -131,22 +178,33 @@ function temAlertaSac(n: { solucaoSac?: string; indRee: boolean }): boolean {
 
 const norm = (s: string | undefined) => (s ?? '').trim().toUpperCase()
 
-export function useNotasFiscais(defaultPageSize: PageSize = 25): UseNotasFiscaisResult {
+export function useNotasFiscais(defaultPageSize: PageSize = 25, fonte: FonteNotas = 'livres'): UseNotasFiscaisResult {
   const { nfsPendentes, nfImportState, nfsDesmarcadas, toggleNfDesmarcada, limparNfsDesmarcadas, setNfsDesmarcadasBulk, rotas } = useAppData()
 
-  // Coluna Placa (Marcelo, 21/08): em qual rota já montada a NF está — para o
-  // operador ver e poder tirar/mover na aprovação.
-  const rotaPorNf = useMemo(() => {
-    const m = new Map<string, string>()
-    for (const r of rotas) {
-      if (r.status === 'rejeitada') continue
-      const marcador = r.veiculo?.placa || r.codigoRota
-      for (const nf of r.notasFiscais) {
-        if (!m.has(nf.numnfs)) m.set(nf.numnfs, marcador)
+  // Espec Rotas do Dia (item 2): NFs e rotas de entrega já reservadas por rota
+  // ativa saem do universo segmentável; ficam só na aba "Em uso" (auditoria).
+  const reservas = useMemo(() => reservasDasRotas(rotas), [rotas])
+  const { livres, emUso, usoPorNf } = useMemo(() => {
+    const livres: NotaFiscal[] = []
+    const emUso: NotaFiscal[] = []
+    const usoPorNf = new Map<string, { rotulo: string; motivo: string }>()
+    for (const n of nfsPendentes) {
+      const porNf = reservas.nfs.get(n.numnfs)
+      const porRe = rotaEntregaReservavel(n.rota) ? reservas.rotasEntrega.get(n.rota.trim().toUpperCase()) : undefined
+      const r = porNf ?? porRe
+      if (r) {
+        emUso.push(n)
+        usoPorNf.set(n.numnfs, {
+          rotulo: r.veiculo ? rotuloVeiculo(r.veiculo) : r.codigoRota,
+          motivo: porNf ? `NF na rota ${r.codigoRota} (${r.status})` : `Rota de entrega ${n.rota} reservada por ${r.codigoRota} (${r.status})`,
+        })
+      } else {
+        livres.push(n)
       }
     }
-    return m
-  }, [rotas])
+    return { livres, emUso, usoPorNf }
+  }, [nfsPendentes, reservas])
+  const origem = fonte === 'livres' ? livres : emUso
   const [page, setPage] = useState(0)
   const [pageSize, setPageSizeState] = useState<PageSize>(defaultPageSize)
   const [filtros, setFiltros] = useState<NotasFiltros>(filtrosPadrao)
@@ -155,8 +213,8 @@ export function useNotasFiscais(defaultPageSize: PageSize = 25): UseNotasFiscais
 
   // Base da listagem: sem as rotas parciais, a menos que o operador inclua.
   const base = useMemo(
-    () => incluirParciais ? nfsPendentes : nfsPendentes.filter(n => !isRotaParcial(n.rota)),
-    [nfsPendentes, incluirParciais],
+    () => incluirParciais ? origem : origem.filter(n => !isRotaParcial(n.rota)),
+    [origem, incluirParciais],
   )
 
   // Predicado de um filtro individual (multi-seleção; array vazio = passa tudo).
@@ -178,7 +236,6 @@ export function useNotasFiscais(defaultPageSize: PageSize = 25): UseNotasFiscais
       remetente:   (n: typeof base[number]) => multi(filtros.remetente,   n.remetente),
       regiao:      (n: typeof base[number]) => multi(filtros.regiao,      n.regiao),
       destinatario:(n: typeof base[number]) => multi(filtros.destinatario, n.destinatario),
-      placa:       (n: typeof base[number]) => multi(filtros.placa,       rotaPorNf.get(n.numnfs) ?? undefined),
       reentrega:   (n: typeof base[number]) => multi(filtros.reentrega,   String(n.indiceReentrega ?? 0)),
     }
   }, [filtros])
@@ -197,7 +254,6 @@ export function useNotasFiscais(defaultPageSize: PageSize = 25): UseNotasFiscais
       remetente:   n => n.remetente,
       regiao:      n => n.regiao,
       destinatario:n => n.destinatario,
-      placa:       n => rotaPorNf.get(n.numnfs) ?? undefined,
       reentrega:   n => String(n.indiceReentrega ?? 0),
     }
     const out = {} as Record<keyof NotasFiltros, OpcaoFiltro[]>
@@ -222,7 +278,7 @@ export function useNotasFiscais(defaultPageSize: PageSize = 25): UseNotasFiscais
       !n.solucaoSac && campos.filter(c => c !== 'solucaoSac').every(c => passa[c](n))).length
     out.solucaoSac = [{ valor: SAC_VAZIO, count: semSac }, ...out.solucaoSac]
     return out
-  }, [base, passa, rotaPorNf])
+  }, [base, passa])
 
   const filtradas = useMemo(() => {
     const campos = Object.keys(passa) as (keyof NotasFiltros)[]
@@ -232,9 +288,9 @@ export function useNotasFiscais(defaultPageSize: PageSize = 25): UseNotasFiscais
   // Pedido do Marcelo (item 10): ordenado por Tipo Carga / Rota / Destinatário.
   const sorted = useMemo(() => {
     return [...filtradas].sort((a, b) =>
-      (a.grade || '').localeCompare(b.grade || '') ||
-      (a.rota  || '').localeCompare(b.rota  || '') ||
-      a.destinatario.localeCompare(b.destinatario, undefined, { numeric: true }),
+      (a.grade || '').localeCompare(b.grade || '', 'pt-BR', { numeric: true }) ||
+      (a.rota  || '').localeCompare(b.rota  || '', 'pt-BR', { numeric: true }) ||
+      a.destinatario.localeCompare(b.destinatario, 'pt-BR', { numeric: true }),
     )
   }, [filtradas])
 
@@ -272,14 +328,25 @@ export function useNotasFiscais(defaultPageSize: PageSize = 25): UseNotasFiscais
       agenda:            nf.dataAgendamento ?? null,
       endereco:          nf.endereco,
       indice_reentrega:  nf.indiceReentrega ?? 0,
-      em_rota:           rotaPorNf.get(nf.numnfs) ?? null,
+      em_rota:           usoPorNf.get(nf.numnfs)?.rotulo ?? null,
+      motivo_uso:        usoPorNf.get(nf.numnfs)?.motivo ?? null,
+      numero:            nf.numero ?? null,
+      uf:                nf.uf ?? null,
+      cep:               nf.cep && nf.cep !== '—' ? nf.cep : null,
+      volume:            nf.volume ?? null,
+      caixas:            nf.qtd ?? null,
+      valor:             nf.valor ?? null,
+      restricoes:        nf.restricoes ?? null,
+      hora_agenda:       nf.horaAgendamento ?? null,
+      regiao:            nf.regiao ?? null,
+      nota:              nf,
       alertaSac:         temAlertaSac(nf),
-      selecionada:       !nfsDesmarcadas.has(nf.numnfs),
+      selecionada:       fonte === 'livres' && !nfsDesmarcadas.has(nf.numnfs),
       mesmoDestAnterior: i > 0 && arr[i - 1].destinatario === nf.destinatario,
       qtdMesmoDest:      porDest.get((nf.destinatario ?? '').trim().toUpperCase()) ?? 1,
     }))
     },
-    [sorted, from, pageSize, nfsDesmarcadas, rotaPorNf],
+    [sorted, from, pageSize, nfsDesmarcadas, usoPorNf, fonte],
   )
 
   function handleSetPage(p: number) {
@@ -351,5 +418,6 @@ export function useNotasFiscais(defaultPageSize: PageSize = 25): UseNotasFiscais
     desmarcadas: nfsDesmarcadas,
     incluirParciais,
     setIncluirParciais,
+    totalEmUso: emUso.length,
   }
 }

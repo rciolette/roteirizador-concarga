@@ -14,6 +14,7 @@ import {
   atualizarAtivoBulkVeiculos,
   type VeiculoDaFrota,
 } from '@/lib/frota'
+import { importarDisponibilidade } from '@/lib/webhooks'
 
 // Decisão do Raphael (15/08/26): a Frota tem UMA aba só — Veículos — que
 // absorveu as colunas do antigo "Vinculados" (ANTT/CPF/Fornecedor/TAG, item 3
@@ -90,31 +91,57 @@ const TD = ({ children, mono, medium }: { children: React.ReactNode; mono?: bool
   </td>
 )
 
-// ── CSV/XLSX parser ───────────────────────────────────────────────────────────
-async function parseArquivoVeiculos(file: File): Promise<string[]> {
+// ── CSV/XLSX parser (espec Rotas do Dia, item 8) ──────────────────────────────
+// Colunas mínimas: `Placa` e `Disponível Hoje`. Sem a coluna de disponibilidade
+// a linha vale como "disponível" (compatível com a planilha antiga só de placas).
+export interface LinhaDisponibilidade { placa: string; disponivel: boolean }
+
+const SIM = new Set(['SIM', 'S', '1', 'DISPONIVEL', 'DISPONÍVEL', 'TRUE', 'VERDADEIRO', 'X'])
+const NAO = new Set(['NAO', 'NÃO', 'N', '0', 'INDISPONIVEL', 'INDISPONÍVEL', 'FALSE', 'FALSO'])
+
+function normKey(k: string): string {
+  return k.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '')
+}
+
+export function interpretarDisponivel(v: unknown): boolean | null {
+  if (v === true) return true
+  if (v === false) return false
+  const t = String(v ?? '').trim().toUpperCase()
+  if (!t) return null
+  if (SIM.has(t)) return true
+  if (NAO.has(t)) return false
+  return null
+}
+
+export function linhasParaDisponibilidade(rows: Record<string, unknown>[]): LinhaDisponibilidade[] {
+  const out: LinhaDisponibilidade[] = []
+  for (const r of rows) {
+    const porChave = new Map(Object.entries(r).map(([k, v]) => [normKey(k), v]))
+    const placaRaw = porChave.get('placa') ?? Object.values(r)[0]
+    const placa = String(placaRaw ?? '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '')
+    if (!placa) continue
+    const dispRaw = porChave.get('disponivelhoje') ?? porChave.get('disponivel') ?? porChave.get('disponibilidade') ?? porChave.get('hoje')
+    const disp = dispRaw === undefined ? true : interpretarDisponivel(dispRaw)
+    if (disp === null) continue // valor não reconhecido → não altera a placa
+    out.push({ placa, disponivel: disp })
+  }
+  return out
+}
+
+async function parseArquivoDisponibilidade(file: File): Promise<LinhaDisponibilidade[]> {
   if (file.name.toLowerCase().endsWith('.csv')) {
     return new Promise(resolve => {
       Papa.parse(file, {
         header: true,
         skipEmptyLines: true,
-        complete: (results) => {
-          const rows = results.data as Record<string, string>[]
-          resolve(rows
-            .map(r => r.placa ?? r.Placa ?? r.PLACA ?? String(Object.values(r)[0] ?? ''))
-            .map(p => p.trim().toUpperCase())
-            .filter(Boolean))
-        },
+        complete: (results) => resolve(linhasParaDisponibilidade(results.data as Record<string, unknown>[])),
       })
     })
   }
   const buffer = await file.arrayBuffer()
   const wb = XLSX.read(buffer)
   const sheet = wb.Sheets[wb.SheetNames[0]]
-  const rows = XLSX.utils.sheet_to_json(sheet) as Record<string, unknown>[]
-  return rows
-    .map(r => String(r.placa ?? r.Placa ?? r.PLACA ?? Object.values(r)[0] ?? ''))
-    .map(p => p.trim().toUpperCase())
-    .filter(Boolean)
+  return linhasParaDisponibilidade(XLSX.utils.sheet_to_json(sheet) as Record<string, unknown>[])
 }
 
 // BulkBar e Checkbox importados de @/components/ui/SelectionControls
@@ -271,19 +298,26 @@ export default function FrotaPage() {
     if (!file) return
     e.target.value = ''
     try {
-      const placas = await parseArquivoVeiculos(file)
-      const placasSet = new Set(placas)
-      await resetarDisponivelHoje()
-      const ids = veiculos.filter(v => placasSet.has(v.placa.toUpperCase().trim())).map(v => v.id)
-      await marcarDisponiveisHoje(ids)
-      setVeiculos(prev => prev.map(v => ({
-        ...v,
-        disponivel_hoje: placasSet.has(v.placa.toUpperCase().trim()),
-        disponibilidade_origem: placasSet.has(v.placa.toUpperCase().trim()) ? 'operador' as const : null,
-      })))
-      showToastV(`${ids.length} veículo${ids.length !== 1 ? 's' : ''} disponível${ids.length !== 1 ? 'is' : ''} hoje`)
-    } catch {
-      showToastV('Erro ao importar arquivo')
+      // Atualização PARCIAL (espec, item 8): só as placas presentes no arquivo
+      // são criadas/alteradas; as ausentes não são resetadas.
+      const itens = await parseArquivoDisponibilidade(file)
+      if (itens.length === 0) { showToastV('Arquivo sem placas reconhecidas (colunas: Placa, Disponível Hoje)'); return }
+      const hoje = new Date().toISOString().slice(0, 10)
+      const res = await importarDisponibilidade(hoje, itens)
+      const porPlaca = new Map(itens.map(i => [i.placa, i.disponivel]))
+      setVeiculos(prev => prev.map(v => {
+        const chave = v.placa.toUpperCase().replace(/[^A-Z0-9]/g, '')
+        const d = porPlaca.get(chave)
+        return d === undefined ? v : { ...v, disponivel_hoje: d, disponibilidade_origem: 'operador' as const }
+      }))
+      const sim = itens.filter(i => i.disponivel).length
+      const nao = itens.length - sim
+      showToastV(
+        `✓ ${res.atualizadas} placa${res.atualizadas !== 1 ? 's' : ''} atualizada${res.atualizadas !== 1 ? 's' : ''} (${sim} disponível${sim !== 1 ? 'is' : ''}, ${nao} indisponível${nao !== 1 ? 'is' : ''})` +
+        (res.naoEncontradas.length ? ` · não encontradas: ${res.naoEncontradas.slice(0, 8).join(', ')}${res.naoEncontradas.length > 8 ? '…' : ''}` : ''),
+      )
+    } catch (err) {
+      showToastV(`Erro ao importar arquivo: ${err instanceof Error ? err.message : 'falha'}`)
     }
   }
 

@@ -13,7 +13,7 @@ export async function listarVeiculos(): Promise<Veiculo[]> {
     fetchAllPages<Record<string, unknown>>(
       (from, to) => sb
         .from('veiculos')
-        .select('id, placa, modelo, tipo_veiculo, capacidade_kg, situacao_siat, motorista_id, codigo_siat_motorista, disponivel_hoje, motoristas(nome, celular)')
+        .select('id, placa, modelo, tipo_veiculo, capacidade_kg, volume_m3, situacao_siat, motorista_id, codigo_siat_motorista, disponivel_hoje, motoristas(nome, celular, sigla)')
         .eq('ativo', true)
         .eq('disponivel_hoje', true)
         .not('motorista_id', 'is', null)
@@ -35,7 +35,7 @@ export async function listarVeiculos(): Promise<Veiculo[]> {
   }
 
   return veicRows.map(row => {
-    const mot   = row.motoristas as { nome?: string; celular?: string } | null
+    const mot   = row.motoristas as { nome?: string; celular?: string; sigla?: string } | null
     const id    = row.id    as string
     const placa = row.placa as string
     const tipoSiat = row.tipo_veiculo as string
@@ -48,8 +48,11 @@ export async function listarVeiculos(): Promise<Veiculo[]> {
       placa,
       modelo:              (row.modelo as string) ?? '',
       tipo:                tipoVeiculoFromSiat(tipoSiat),
+      tipoSiat:            tipoSiat ?? undefined,
       capacidadeKg:        capKgFromSiat(tipoSiat, row.capacidade_kg ? Number(row.capacidade_kg) : null),
-      sigla:               placa.replace(/\W/g, '').slice(-4),
+      volumeCubado:        row.volume_m3 != null ? Number(row.volume_m3) : undefined,
+      // Sigla é do MOTORISTA (motoristas.sigla) — nunca derivada da placa.
+      sigla:               (mot?.sigla ?? '').trim() || '—',
       status:              mapSituacao(row.situacao_siat as string | null),
       codigoSiatMotorista: (row.codigo_siat_motorista as string | null) ?? undefined,
       disponivel_hoje:     dispHoje,

@@ -3,13 +3,23 @@
 // Cache de sessão (em memória) + cache persistente via /api/geocode.
 // O cache de sessão evita chamadas repetidas na mesma aba; o Supabase persiste entre sessões.
 
+import { normalizarCep, formatarCep } from '@/lib/utils'
+
 export interface LatLng { lat: number; lng: number }
 
 const sessionCache = new Map<string, LatLng | null>()
 
+const UFS = new Set(['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'])
+
+/** Só aceita UF real de 2 letras — um bairro chamado "Pernambuco" nunca vira UF. */
+export function ufValida(uf: string | null | undefined): string | null {
+  const u = (uf ?? '').trim().toUpperCase()
+  return UFS.has(u) ? u : null
+}
+
 /**
  * Monta a chave de geocoding a partir dos campos de endereço da NF.
- * Ordem: municipio, bairro, cep — filtra vazios e '—'.
+ * Filtra vazios e '—'.
  */
 export function addrKey(parts: (string | undefined | null)[]): string {
   return parts
@@ -18,21 +28,34 @@ export function addrKey(parts: (string | undefined | null)[]): string {
 }
 
 /**
- * Chave de geocoding de uma NF. Regra do Marcelo (21/08): clientes COZINHA (EA)
- * entregam no ENDEREÇO ALTERNATIVO (nf.endereco já vem do ENDALT do SIAT) — o
- * bairro/CEP do cadastro apontariam para o escritório, não para a entrega.
+ * Chave de geocoding de uma NF (espec Rotas do Dia, item 5):
+ * rua + número + bairro + município/UF + CEP. O CEP é referência, não a única
+ * fonte; a UF só entra quando é uma sigla válida, para um bairro nunca ser lido
+ * como estado. Exemplo validado: `Rua Dois, 51, Pernambuco, Bocaiúva - MG, 33390-000`.
+ *
+ * Cozinha (EA): `nf.endereco` já vem do endereço ALTERNATIVO do SIAT (ENDALT) —
+ * é ele que manda, nunca o endereço do remetente/cadastro.
  */
 export function addrKeyNota(nf: {
   tipoCliente?: string
   endereco?: string
+  numero?: string
   municipio?: string
   bairro?: string
+  uf?: string
   cep?: string
 }): string {
-  if (nf.tipoCliente === 'Cozinha' && nf.endereco && nf.endereco !== '—') {
-    return addrKey([nf.endereco, nf.municipio])
-  }
-  return addrKey([nf.municipio, nf.bairro, nf.cep])
+  const rua       = nf.endereco && nf.endereco !== '—' ? nf.endereco.trim() : ''
+  const numero    = nf.numero && nf.numero !== '—' ? nf.numero.trim() : ''
+  const logradouro = rua ? (numero && !rua.includes(numero) ? `${rua}, ${numero}` : rua) : ''
+  const uf        = ufValida(nf.uf)
+  const municipio = nf.municipio && nf.municipio !== '—' ? nf.municipio.trim() : ''
+  const cidadeUf  = municipio ? (uf ? `${municipio} - ${uf}` : municipio) : (uf ?? '')
+  const cep       = normalizarCep(nf.cep) ? formatarCep(nf.cep) : ''
+  const bairro    = nf.bairro && nf.bairro !== '—' ? nf.bairro.trim() : ''
+
+  const chave = addrKey([logradouro, bairro, cidadeUf, cep])
+  return chave ? `${chave}, Brasil` : ''
 }
 
 /**

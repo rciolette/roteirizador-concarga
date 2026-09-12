@@ -4,6 +4,7 @@
 // os aliases reais do SQL são repassados diretamente.
 
 import type { Rota, NotaFiscal, Veiculo, Motorista, ClientType, CondStatus } from '@/types'
+import { normalizarCep } from '@/lib/utils'
 
 // ── Campos de NF (aliases do SQL do WF-A) ────────────────────────────────────
 export interface SiatRow {
@@ -204,7 +205,7 @@ export function siatRowsToNotasPendentes(rows: SiatRow[]): NotaFiscal[] {
       municipio:        row.MunicipioFinal || row.Municipio  || '—',
       bairro:           row.BairroFinal    || row.Bairro     || '—',
       endereco:         row.EnderecoFinal  || row.Endereco   || '—',
-      cep:              row.Cep            || '—',
+      cep:              normalizarCep(row.Cep) ?? '—',
       peso:             typeof row.PesoBruto === 'number' ? row.PesoBruto : 0,
       qtd:              typeof row.Qtd     === 'number'   ? row.Qtd      : 1,
       tipoCliente,
@@ -222,6 +223,12 @@ export function siatRowsToNotasPendentes(rows: SiatRow[]): NotaFiscal[] {
       remetente:        row.Remetente != null ? String(row.Remetente) : undefined,
       regiao:           row.Regiao != null && row.Regiao !== '' ? String(row.Regiao) : undefined,
       indiceReentrega:  typeof row.IndiceReentrega === 'number' ? row.IndiceReentrega : undefined,
+      // Campos SIAT que antes ficavam só no payload bruto (espec Rotas do Dia, problema 9).
+      numero:           row.Numero != null && String(row.Numero).trim() !== '' ? String(row.Numero).trim() : undefined,
+      uf:               (row.UFFinal || row.UF) ? String(row.UFFinal || row.UF).trim().toUpperCase().slice(0, 2) : undefined,
+      volume:           typeof row.Volume === 'number' ? row.Volume : undefined,
+      restricoes:       row.RestricaoDesc ? String(row.RestricaoDesc) : undefined,
+      cnpjDestinatario: row.CNPJDestinatario ? String(row.CNPJDestinatario) : undefined,
     })
   }
 

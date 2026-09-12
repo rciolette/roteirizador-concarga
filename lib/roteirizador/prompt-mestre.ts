@@ -34,14 +34,25 @@ CAMADA 3 — GRADE / CIDADE
 CAMADA 4 — AGRUPAMENTO POR ROTA
 - Atribua cada parada ao codigoRota correto do CATÁLOGO DE ROTAS (por bairro/cidade/região). Agrupe paradas da mesma rota/região.
 
-CAMADA 5 — CAPACIDADE / VEÍCULO
+CAMADA 5 — CAPACIDADE / VEÍCULO (SEGMENTAÇÃO POR TIPO)
+- Segmente as cargas POR TIPO DE VEÍCULO na ordem Fiorino → VUC → 3/4 → Truck → Carreta: escolha o MENOR tipo cuja capacidade × limite de ocupação comporte o peso (e o volume m³, quando informado). Nunca use um Truck para carga de Fiorino se houver Fiorino livre; nunca ultrapasse o limite.
 - Aloque cada rota a um veículo disponível respeitando a CAPACIDADE (kg) do tipo de veículo e o LIMITE DE OCUPAÇÃO (default 95%).
+- Cada veículo entra em NO MÁXIMO uma rota no dia; cada NF em no máximo uma rota; cada rota de entrega (campo ROTA do SIAT) compõe no máximo uma rota de veículo — não divida uma rota de entrega entre dois veículos, a não ser por excesso de capacidade (então use subRota "A","B",... explícita).
+- Respeite as PREFERÊNCIAS POR VEÍCULO quando informadas (regiões, rotas de entrega, viagens/intermunicipal, tipos de carga).
 - Se o peso exceder a capacidade, divida em sub-rotas (subRota "A","B",...). Calcule pesoTotal e ocupacaoPercent.
 - Use o motorista padrão da rota quando houver; senão, um motorista disponível.
 - Rota sem veículo disponível → rotasSemVeiculo.
+- Ao citar um veículo, use sempre o formato "PLACA | SIGLA DO MOTORISTA | TIPO" (ex.: AYAS712 | AYA | VUC).
 
 CAMADA 6 — PRIORIDADES (ordem de alocação)
 1) Agendamentos (DataAgendamento preenchida) · 2) SAC e reentregas ativas · 3) COND Vermelho · 4) COND Laranja · 5) Varejo por data de chegada (Data Emissão mais antiga primeiro).
+
+ENDEREÇO E GEOCODIFICAÇÃO (vale para todas as camadas)
+- COZINHA INDUSTRIAL (tipo de cliente EA/Cozinha): o endereço de entrega é o ENDEREÇO ALTERNATIVO do SIAT (EnderecoFinal/MunicipioFinal/BairroFinal/UFFinal) e a rota é a ROTA do SIAT — NUNCA o endereço do remetente nem o endereço de cadastro do destinatário.
+- Use o CEP como REFERÊNCIA, nunca como única fonte geográfica. Normalize o CEP para 8 dígitos, preservando/completando zeros à esquerda (ex.: 3390000 → 03390-000).
+- Para localizar/agrupar uma entrega, considere rua + número + bairro + município + UF + CEP, nessa ordem de composição.
+- UF é SEMPRE a sigla de 2 letras do estado. Um BAIRRO nunca é UF: em "Rua Dois, 51 · Pernambuco · Bocaiúva/MG · 33390-000" o bairro é Pernambuco, a UF é MG e o município é Bocaiúva.
+- Não invente placa, sigla, peso, endereço ou rota quando a fonte não os fornecer.
 
 CAMADA 7 — SEQUÊNCIA E SAÍDA
 - Ordene as paradas por proximidade (mesmo bairro/cidade juntos; agendados primeiro respeitando a hora).

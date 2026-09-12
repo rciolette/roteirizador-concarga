@@ -15,7 +15,7 @@ import { normalizeSiatPayload, summarizeSiat, siatRowsToNotasPendentes } from '@
 import type { MotoristaAtividade } from '@/lib/siat'
 import { listarMotoristas } from '@/lib/motoristas'
 import { listarVeiculos } from '@/lib/veiculos'
-import { carregarRotasSupabase } from '@/lib/webhooks'
+import { carregarRotasSupabase, listarVeiculosLivres, type VeiculoLivre } from '@/lib/webhooks'
 import { DEFAULT_CONFIG } from '@/lib/data'
 import { carregarConfig } from '@/lib/config-store'
 import { useAuth } from '@/components/providers/AuthProvider'
@@ -54,6 +54,10 @@ export interface AppData {
   veiculos:        Veiculo[]
   rotas:           Rota[]
   loadingRotas:    boolean
+  /** Veículos livres HOJE (RPC veiculos_livres): disponíveis, com motorista e sem rota ativa. */
+  veiculosLivres:        VeiculoLivre[]
+  loadingVeiculosLivres: boolean
+  refreshVeiculosLivres: () => Promise<void>
   nfRows:          SiatRow[]
   nfsPendentes:    NotaFiscal[]
   nfImportState:   NfImportState
@@ -90,6 +94,8 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const [veiculos,      setVeiculos]      = useState<Veiculo[]>([])
   const [rotas,         setRotas]         = useState<Rota[]>([])
   const [loadingRotas,  setLoadingRotas]  = useState(true)
+  const [veiculosLivres, setVeiculosLivres] = useState<VeiculoLivre[]>([])
+  const [loadingVeiculosLivres, setLoadingVeiculosLivres] = useState(false)
   const [nfRows,        setNfRows]        = useState<SiatRow[]>([])
   const [nfsPendentes,  setNfsPendentes]  = useState<NotaFiscal[]>([])
   const [config,        setConfig]        = useState<AppConfig>(DEFAULT_CONFIG)
@@ -122,6 +128,15 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
 
   const bootstrapped   = useRef(false)
 
+  const refreshVeiculosLivres = useCallback(async () => {
+    setLoadingVeiculosLivres(true)
+    try {
+      setVeiculosLivres(await listarVeiculosLivres(todayISO()))
+    } catch { /* mantém estado atual */ } finally {
+      setLoadingVeiculosLivres(false)
+    }
+  }, [])
+
   const refresh = useCallback(async () => {
     setLoadingRotas(true)
     try {
@@ -132,7 +147,9 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setLoadingRotas(false)
     }
-  }, [])
+    // Rotas e veículos livres andam juntos: salvar/rejeitar muda os dois.
+    refreshVeiculosLivres().catch(() => {})
+  }, [refreshVeiculosLivres])
 
   const refreshVeiculos = useCallback(async () => {
     try {
@@ -264,9 +281,11 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       } finally {
         setLoadingRotas(false)
       }
+      refreshVeiculosLivres().catch(() => {})
     }
 
     bootstrap()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [usuario])
 
   // Pedido do Marcelo (11/08/26, item 4) — reforço em 15/08: NENHUMA importação
@@ -281,6 +300,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   return (
     <AppDataContext.Provider value={{
       motoristas, motoristasAtividade, veiculos, rotas,
+      veiculosLivres, loadingVeiculosLivres, refreshVeiculosLivres,
       // sem sessão o bootstrap nem roda — não faz sentido exibir spinner
       loadingRotas: usuario ? loadingRotas : false,
       nfRows, nfsPendentes, nfImportState, config,

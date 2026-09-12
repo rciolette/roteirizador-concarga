@@ -139,15 +139,21 @@ export function prepararDados(payload: GerarRotasPayload): DadosPreparados {
 
 // ── Referências (catálogo de rotas, grade de cidades, config da empresa) ─────
 async function carregarReferencias(admin: ReturnType<typeof getAdmin>) {
-  const [rc, gc, cfg] = await Promise.all([
+  const [rc, gc, cfg, vp] = await Promise.all([
     admin.from('rotas_cadastradas').select('*'),
     admin.from('grade_cidades').select('*').limit(2000),
     admin.from('configuracoes').select('*'),
+    // Sigla do motorista + preferências por veículo (espec Rotas do Dia, item 4)
+    admin.from('veiculos').select('placa, tipo_veiculo, motoristas(sigla), veiculo_preferencias(regioes, rotas_entrega, intermunicipal, tipos_carga, observacao)').eq('ativo', true).limit(3000),
   ])
+  type VP = { placa: string; tipo_veiculo: string | null; motoristas: { sigla?: string | null } | null; veiculo_preferencias: { regioes: string[]; rotas_entrega: string[]; intermunicipal: boolean; tipos_carga: string[]; observacao: string | null } | null }
+  const porPlaca = new Map<string, VP>()
+  for (const v of ((vp.data ?? []) as unknown as VP[])) porPlaca.set(String(v.placa).toUpperCase(), v)
   return {
     rotasCadastradas: rc.data ?? [],
     gradeCidades:     gc.data ?? [],
     configuracoes:    cfg.data ?? [],
+    veiculosInfo:     porPlaca,
   }
 }
 
@@ -376,7 +382,16 @@ export async function executarRoteirizacaoInterna(payload: GerarRotasPayload, mo
       rotasCadastradas:      refs.rotasCadastradas,
       gradeCidades:          refs.gradeCidades,
       configuracoes:         refs.configuracoes,
-      veiculos:              prep.veiculos,
+      veiculos:              prep.veiculos.map(v => {
+        const info = refs.veiculosInfo.get(v.placa.toUpperCase())
+        const sigla = (info?.motoristas?.sigla ?? '').trim() || '—'
+        return {
+          ...v,
+          sigla,
+          rotulo: `${v.placa} | ${sigla} | ${v.tipoVeiculo || '—'}`,
+          preferencias: info?.veiculo_preferencias ?? null,
+        }
+      }),
       nfs:                   prep.nfs,
     })
 

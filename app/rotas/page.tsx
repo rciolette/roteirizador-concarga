@@ -4,24 +4,25 @@ import {
   Topbar, Card, CardHeader, Btn, StatusPill, WeightBar,
   ImportBar, ConfirmDialog, ConfirmAction, TextArea, Select, TextInput,
 } from '@/components/ui'
-import { exportarCSV, exportarXLSX, rotasParaLinhas } from '@/lib/export'
+import { exportarCSV, exportarXLSX, rotasParaLinhasAprovadas, ExportacaoInconsistente } from '@/lib/export'
 import { NotasFiscaisTable } from '@/components/ui/NotasFiscaisTable'
 import { NotasTable } from '@/components/notas/NotasTable'
 import { AgendadosHojeTable } from '@/components/ui/AgendadosHojeTable'
 import { MapaRota } from '@/components/ui/MapaRota'
 import { ImportarSIATButton } from '@/components/ui/ImportarSIATButton'
 import { SiatImportDialog } from '@/components/ui/SiatImportDialog'
-import { webhookGerarRotas, mapRetornoGerarRotas, salvarRotasSupabase, salvarNfsNaoAlocadas, atualizarStatusRota, carregarRotasSupabase, aguardarRotasGeradas, Prioridade, MotoristaPayload, VeiculoDisponivel, removerNotaDaRota, moverNotaParaRota, definirVeiculoDaRota } from '@/lib/webhooks'
+import { webhookGerarRotas, mapRetornoGerarRotas, salvarRotasSupabase, salvarNfsNaoAlocadas, atualizarStatusRota, carregarRotasSupabase, aguardarRotasGeradas, Prioridade, MotoristaPayload, VeiculoDisponivel, desvincularNotasDaRota, moverNotasParaRota, definirVeiculoDaRota } from '@/lib/webhooks'
 import { gerarLinkMapsUrl } from '@/lib/maps'
 import { derivarCond } from '@/lib/siat'
 import { listarCapacidades, type CapacidadeVeiculo } from '@/lib/frota'
 import type { SiatRow } from '@/lib/siat'
 import type { Veiculo } from '@/types'
-import { cn, formatPeso } from '@/lib/utils'
+import { cn, formatPeso, rotuloVeiculo } from '@/lib/utils'
 import { useCopyToClipboard } from '@/lib/hooks'
 import { useAppData } from '@/components/providers/AppDataProvider'
 import { useAuth } from '@/components/providers/AuthProvider'
 import type { MotoristaAtividade } from '@/lib/siat'
+import { reservasDasRotas, rotaEntregaReservavel } from '@/hooks/useNotasFiscais'
 import { Rota, RouteStatus, RetornoGerarRotas } from '@/types'
 
 // ── Log de sessão ─────────────────────────────────────────────────────────────
@@ -400,8 +401,9 @@ function RouteCard({ rota, onUpdateStatus, onAskConfirm, enderecoOrigem }: {
     { label: 'Código da rota',   value: rota.codigoRota },
     { label: 'Região',           value: rota.regiao },
     { label: 'Motorista',        value: rota.motorista?.nome ?? '—' },
-    { label: 'Veículo',          value: `${rota.veiculo?.tipo ?? '—'} · ${rota.veiculo?.placa ?? '—'}` },
+    { label: 'Veículo',          value: rotuloVeiculo(rota.veiculo) },
     { label: 'Peso total',       value: `${formatPeso(rota.pesoTotal)} — ${pct}%` },
+    { label: 'Volume',           value: rota.volumeTotal != null ? `${rota.volumeTotal.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} m³` : '—' },
     { label: 'Qtd. NFs',         value: `${rota.qtdNotas} notas fiscais` },
     { label: 'NFs concatenadas', value: rota.nfsConcatenadas ?? '—' },
   ]
@@ -447,8 +449,8 @@ function RouteCard({ rota, onUpdateStatus, onAskConfirm, enderecoOrigem }: {
       {/* 2. MOTORISTA / VEÍCULO */}
       <div className="flex items-center px-3.5 pb-2">
         <div className="w-[42px] shrink-0" />
-        <div className="text-[10px] text-muted flex-1 truncate min-w-0">
-          {rota.motorista?.nome ?? '—'} · {rota.veiculo?.tipo ?? '—'} {rota.veiculo?.placa ?? ''}
+        <div className="text-[10px] text-muted flex-1 truncate min-w-0" title={rotuloVeiculo(rota.veiculo)}>
+          <span className="font-mono text-base">{rotuloVeiculo(rota.veiculo)}</span> · {rota.motorista?.nome ?? '—'}
         </div>
         <div className="text-right shrink-0 ml-2">
           <span className="text-xs font-medium">{rota.qtdNotas}</span>
@@ -545,7 +547,7 @@ function RouteCard({ rota, onUpdateStatus, onAskConfirm, enderecoOrigem }: {
             </p>
           )}
 
-          {isActionable && <GerenciarRota rota={rota} />}
+          {isActionable && <GerenciarRota rota={rota} onAskConfirm={onAskConfirm} />}
 
           {rota.notasFiscais.length > 0 && (
             <div className="mt-3">
@@ -579,8 +581,9 @@ function RouteCard({ rota, onUpdateStatus, onAskConfirm, enderecoOrigem }: {
 // Etapa de aprovação do fluxo manual: definir veículo/motorista da rota e
 // editar as NFs (remover da rota ou mover para outra rota do dia). Sem
 // substituição/troca — apenas remover ou mover, conforme combinado.
-function GerenciarRota({ rota }: { rota: Rota }) {
-  const { veiculos, rotas, refresh } = useAppData()
+function GerenciarRota({ rota, onAskConfirm }: { rota: Rota; onAskConfirm: (action: ConfirmAction, execute: () => void) => void }) {
+  const { rotas, refresh, veiculosLivres } = useAppData()
+  const { usuario } = useAuth()
   // Multi-seleção: o operador move/remove várias NFs de uma vez (Raphael, 03/09).
   const [nfsSel, setNfsSel]         = useState<Set<string>>(new Set())
   const [destinoSel, setDestinoSel] = useState('')
@@ -590,7 +593,8 @@ function GerenciarRota({ rota }: { rota: Rota }) {
 
   const outrasRotas = rotas.filter(r =>
     r.id !== rota.id && (r.status === 'rascunho' || r.status === 'aguardando'))
-  const frota = veiculos.filter(v => v.status === 'disponivel' || v.disponivel_hoje)
+  // Só veículos LIVRES hoje (sem rota ativa), rótulo Placa | Sigla | Tipo.
+  const frota = veiculosLivres
 
   async function executar(acao: () => Promise<void>, ok: string) {
     setSalvando(true); setMsg('')
@@ -615,12 +619,11 @@ function GerenciarRota({ rota }: { rota: Rota }) {
 
       {/* Veículo / motorista */}
       <div className="flex flex-wrap items-center gap-1.5">
+        <span className="text-[10px] text-muted">Atual: <span className="font-mono text-base">{rotuloVeiculo(rota.veiculo)}</span></span>
         <select className={selCls} value={veiculoSel} onChange={e => setVeiculoSel(e.target.value)}>
-          <option value="">Definir veículo/motorista…</option>
+          <option value="">Substituir por veículo livre…</option>
           {frota.map(v => (
-            <option key={v.id} value={v.id}>
-              {v.placa} · {v.tipo} · {v.motoristaNome ?? 'sem motorista'}
-            </option>
+            <option key={v.id} value={v.id}>{v.rotulo} · {formatPeso(v.capacidadeKg)}</option>
           ))}
         </select>
         <button
@@ -629,18 +632,29 @@ function GerenciarRota({ rota }: { rota: Rota }) {
           onClick={() => {
             const v = frota.find(f => f.id === veiculoSel)
             if (!v) return
-            executar(
-              () => definirVeiculoDaRota(rota.id, {
-                veiculoId:        v.id,
-                placa:            v.placa,
-                motoristaNome:    v.motoristaNome,
-                motoristaCelular: v.motoristaCelular,
-              }),
-              `Veículo ${v.placa} definido`,
-            )
+            const ocup = v.capacidadeKg > 0 ? Math.round(rota.pesoTotal / v.capacidadeKg * 100) : null
+            // Toda substituição passa por confirmação (espec, item 3).
+            onAskConfirm({
+              title: `Substituir veículo da rota ${rota.codigoRota}`,
+              description: 'O veículo anterior volta a ficar livre e o novo fica reservado para esta rota hoje.',
+              details: [
+                { label: 'Veículo anterior', value: rotuloVeiculo(rota.veiculo) },
+                { label: 'Veículo novo',     value: v.rotulo },
+                { label: 'Motorista novo',   value: v.motoristaNome ?? '—' },
+                { label: 'NFs',              value: `${rota.qtdNotas} · ${rota.nfsConcatenadas ?? '—'}` },
+                { label: 'Rotas de entrega', value: [...new Set(rota.notasFiscais.map(n => n.rota).filter(r => r && r !== '—'))].join(', ') || '—' },
+                { label: 'Peso',             value: `${formatPeso(rota.pesoTotal)} / ${formatPeso(v.capacidadeKg)}${ocup !== null ? ` · ${ocup}%` : ''}` },
+                { label: 'Volume',           value: rota.volumeTotal != null ? `${rota.volumeTotal.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} m³` : '—' },
+              ],
+              confirmLabel: 'Substituir veículo',
+              confirmVariant: 'warn-soft',
+            }, () => executar(
+              () => definirVeiculoDaRota(rota.id, v.id, usuario?.email ?? undefined),
+              `Veículo ${v.rotulo} definido`,
+            ))
           }}
         >
-          Aplicar
+          Substituir…
         </button>
       </div>
 
@@ -686,20 +700,21 @@ function GerenciarRota({ rota }: { rota: Rota }) {
         <button
           className={btnCls}
           disabled={nfsSel.size === 0 || salvando}
+          title="Desvincula da rota — a NF volta para a grade de pendentes (nunca é apagada)"
           onClick={() => {
             const ids = Array.from(nfsSel)
             executar(
-              async () => { for (const id of ids) await removerNotaDaRota(rota.id, id) },
-              `${ids.length} NF${ids.length > 1 ? 's removidas' : ' removida'} da rota`,
+              async () => { await desvincularNotasDaRota(rota.id, ids) },
+              `${ids.length} NF${ids.length > 1 ? 's devolvidas' : ' devolvida'} à grade`,
             )
           }}
         >
-          Remover da rota
+          Devolver à grade
         </button>
         <select className={selCls} value={destinoSel} onChange={e => setDestinoSel(e.target.value)}>
           <option value="">Mover para…</option>
           {outrasRotas.map(r => (
-            <option key={r.id} value={r.id}>{r.codigoRota} ({r.qtdNotas} NFs)</option>
+            <option key={r.id} value={r.id}>{r.codigoRota} · {rotuloVeiculo(r.veiculo)} ({r.qtdNotas} NFs)</option>
           ))}
         </select>
         <button
@@ -709,7 +724,7 @@ function GerenciarRota({ rota }: { rota: Rota }) {
             const ids = Array.from(nfsSel)
             const destino = outrasRotas.find(r => r.id === destinoSel)
             executar(
-              async () => { for (const id of ids) await moverNotaParaRota(rota.id, destinoSel, id) },
+              async () => { await moverNotasParaRota(rota.id, destinoSel, ids) },
               `${ids.length} NF${ids.length > 1 ? 's movidas' : ' movida'} para ${destino?.codigoRota ?? 'outra rota'}`,
             )
           }}
@@ -814,8 +829,9 @@ function SRotaTable({ rows }: { rows: SiatRow[] }) {
 }
 
 // ── Export Menu ───────────────────────────────────────────────────────────────
-function ExportMenuRotas({ rotas }: { rotas: import('@/types').Rota[] }) {
+function ExportMenuRotas({ rotas, onErro }: { rotas: import('@/types').Rota[]; onErro: (msg: string) => void }) {
   const [open, setOpen] = useState(false)
+  const [incluirEnviadas, setIncluirEnviadas] = useState(true)
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (!open) return
@@ -824,11 +840,17 @@ function ExportMenuRotas({ rotas }: { rotas: import('@/types').Rota[] }) {
     return () => document.removeEventListener('mousedown', h)
   }, [open])
   const hoje = new Date().toISOString().slice(0, 10)
+  // Espec, item 9: só rotas APROVADAS (enviadas opcionais), uma linha por rota,
+  // NFs concatenadas; bloqueia se houver NF/veículo duplicado.
   async function doExport(fmt: 'csv' | 'xlsx') {
     setOpen(false)
-    const rows = rotasParaLinhas(rotas)
-    if (!rows.length) return
-    fmt === 'csv' ? exportarCSV(rows, `rotas_${hoje}`) : exportarXLSX(rows, `rotas_${hoje}`)
+    try {
+      const rows = rotasParaLinhasAprovadas(rotas, { incluirEnviadas })
+      if (!rows.length) { onErro('Nenhuma rota aprovada para exportar'); return }
+      fmt === 'csv' ? exportarCSV(rows, `rotas_aprovadas_${hoje}`) : exportarXLSX(rows, `rotas_aprovadas_${hoje}`)
+    } catch (err) {
+      onErro(err instanceof ExportacaoInconsistente ? err.message : `Falha ao exportar: ${err instanceof Error ? err.message : 'erro'}`)
+    }
   }
   return (
     <div ref={ref} className="relative">
@@ -838,7 +860,12 @@ function ExportMenuRotas({ rotas }: { rotas: import('@/types').Rota[] }) {
         <svg className="w-2.5 h-2.5" viewBox="0 0 10 10" fill="currentColor"><path d="M2 3l3 4 3-4H2z"/></svg>
       </Btn>
       {open && (
-        <div className="absolute right-0 top-full mt-1 z-50 w-[130px] rounded-lg border border-[0.5px] border-[var(--border-subtle)] bg-surface shadow-lg overflow-hidden">
+        <div className="absolute right-0 top-full mt-1 z-50 w-[190px] rounded-lg border border-[0.5px] border-[var(--border-subtle)] bg-surface shadow-lg overflow-hidden">
+          <div className="px-3 py-1.5 text-[10px] text-muted border-b border-[0.5px] border-[var(--border-faint)]">Só rotas aprovadas · 1 linha por rota</div>
+          <label className="flex items-center gap-2 px-3 py-1.5 text-[11px] cursor-pointer border-b border-[0.5px] border-[var(--border-faint)]">
+            <input type="checkbox" checked={incluirEnviadas} onChange={e => setIncluirEnviadas(e.target.checked)} className="accent-primary" />
+            Incluir enviadas
+          </label>
           <button onClick={() => doExport('csv')} className="w-full text-left px-3 py-2 text-[11px] hover:bg-cream cursor-pointer bg-transparent border-none">CSV</button>
           <button onClick={() => doExport('xlsx')} className="w-full text-left px-3 py-2 text-[11px] hover:bg-cream cursor-pointer bg-transparent border-none border-t border-[0.5px] border-[var(--border-faint)]">Excel (XLSX)</button>
         </div>
@@ -849,7 +876,8 @@ function ExportMenuRotas({ rotas }: { rotas: import('@/types').Rota[] }) {
 
 // ── Carga por Veículo Panel (c2) ──────────────────────────────────────────────
 function CargaPorVeiculoPanel({ rotas }: { rotas: Rota[] }) {
-  const linhas = rotas.filter(r => r.veiculo)
+  // Rejeitada liberou o veículo — não conta como carga.
+  const linhas = rotas.filter(r => r.veiculo && r.status !== 'rejeitada')
   if (linhas.length === 0) return null
   return (
     <Card>
@@ -860,7 +888,7 @@ function CargaPorVeiculoPanel({ rotas }: { rotas: Rota[] }) {
         <table className="w-full">
           <thead>
             <tr className="border-b border-[0.5px] border-[var(--border-subtle)]">
-              {['Rota', 'Motorista', 'Placa', 'Tipo', 'Peso (kg)', 'Cap. (kg)', '% Ocup.'].map(h => (
+              {['Rota', 'Motorista', 'Placa | Sigla | Tipo', 'Peso (kg)', 'Cap. (kg)', '% Ocup.'].map(h => (
                 <th key={h} className="text-left px-4 py-2 text-[11px] text-muted font-medium whitespace-nowrap">{h}</th>
               ))}
             </tr>
@@ -879,8 +907,7 @@ function CargaPorVeiculoPanel({ rotas }: { rotas: Rota[] }) {
                 )}>
                   <td className="px-4 py-2 text-xs font-mono font-medium text-base">{rota.codigoRota}</td>
                   <td className="px-4 py-2 text-xs text-muted">{rota.motorista?.nome ?? '—'}</td>
-                  <td className="px-4 py-2 text-xs font-mono text-base">{v.placa}</td>
-                  <td className="px-4 py-2 text-xs text-muted">{v.tipo}</td>
+                  <td className="px-4 py-2 text-xs font-mono text-base">{rotuloVeiculo(v)}</td>
                   <td className="px-4 py-2 text-xs tabular-nums text-right text-muted">{rota.pesoTotal.toLocaleString('pt-BR')}</td>
                   <td className="px-4 py-2 text-xs tabular-nums text-right text-muted">{cap ? cap.toLocaleString('pt-BR') : '—'}</td>
                   <td className="px-4 py-2">
@@ -907,7 +934,7 @@ function CargaPorVeiculoPanel({ rotas }: { rotas: Rota[] }) {
 // ── Rotas Page ────────────────────────────────────────────────────────────────
 export default function RotasPage() {
   const { usuario } = useAuth()
-  const { nfImportState, importarNFs, dismissNFImport, nfRows, rotas: routes, setRotas: setRoutes, loadingRotas, motoristasAtividade, veiculos, config, refreshVeiculos, nfsDesmarcadas } = useAppData()
+  const { nfImportState, importarNFs, dismissNFImport, nfRows, rotas: routes, setRotas: setRoutes, loadingRotas, motoristasAtividade, veiculos, config, refreshVeiculos, nfsDesmarcadas, nfsPendentes, refresh } = useAppData()
 
   // Pedido do Marcelo (11/08/26, item 8): NFs desmarcadas pelo operador na
   // grade de pendentes não entram na próxima geração de rotas.
@@ -920,12 +947,17 @@ export default function RotasPage() {
   const [filter,         setFilter]         = useState<RouteStatus | 'todos'>('todos')
   const [busca,          setBusca]          = useState('')
   const [ordenar,        setOrdenar]        = useState('')
-  const [tabPendentes,   setTabPendentes]   = useState<'pendentes' | 'srota' | 'agendados'>('pendentes')
+  const [tabPendentes,   setTabPendentes]   = useState<'pendentes' | 'srota' | 'agendados' | 'em_uso'>('pendentes')
 
   const sRotaNfs = useMemo(
     () => nfRows.filter(r => String(r.ROTA || '').toUpperCase().includes('S/ROTA')),
     [nfRows],
   )
+  // NFs importadas reservadas por rota ativa (aba "Em uso", só auditoria).
+  const nfsEmUso = useMemo(() => {
+    const { nfs, rotasEntrega } = reservasDasRotas(routes)
+    return nfsPendentes.filter(n => nfs.has(n.numnfs) || (rotaEntregaReservavel(n.rota) && rotasEntrega.has(n.rota.trim().toUpperCase()))).length
+  }, [routes, nfsPendentes])
 
   // Atualiza veículos ao abrir a página — só com sessão ativa, senão o RLS
   // devolve lista vazia e sobrescreve o que o AppDataProvider já carregou.
@@ -1003,14 +1035,17 @@ export default function RotasPage() {
     setTimeout(() => setToast(''), 4000)
   }
 
-  function updateRouteStatus(id: string, status: RouteStatus) {
+  async function updateRouteStatus(id: string, status: RouteStatus) {
     const rota = routes.find(r => r.id === id)
-    setRoutes(prev => prev.map(r =>
-      r.id === id
-        ? { ...r, status, ...(status === 'enviada' ? { enviadoEm: new Date().toISOString(), notasFiscais: [] } : {}) }
-        : r
-    ))
-    atualizarStatusRota(id, status).catch(() => {})
+    try {
+      // RPC transacional: rejeitar libera NFs, rotas de entrega e veículo no banco.
+      await atualizarStatusRota(id, status, undefined, usuario?.email ?? undefined)
+    } catch (err) {
+      showToast(`Falha ao mudar status: ${err instanceof Error ? err.message : 'erro'}`)
+      return
+    }
+    setRoutes(prev => prev.map(r => r.id === id ? { ...r, status } : r))
+    refresh().catch(() => {})
     // O disparo automático de WhatsApp para o motorista foi removido: o webhook
     // `enviar-motorista` não existe no n8n e essa etapa do processo ainda não
     // está definida. "Enviada" segue como marcação manual do operador.
@@ -1161,7 +1196,7 @@ export default function RotasPage() {
             ? `${routes.length} rotas · ${routes.reduce((a, r) => a + r.qtdNotas, 0)} NFs · ${new Date().toLocaleDateString('pt-BR')}`
             : `Importe o SIAT para carregar as rotas de hoje · ${new Date().toLocaleDateString('pt-BR')}`}
         >
-          <ExportMenuRotas rotas={filtered} />
+          <ExportMenuRotas rotas={routes} onErro={showToast} />
           <ImportarSIATButton onClick={() => setImportDialog(true)} running={nfImportState.running} label="Importar NFs" loadingLabel="Importando..." />
 
           {generating ? (
@@ -1312,7 +1347,7 @@ export default function RotasPage() {
                   <table className="w-full">
                     <thead>
                       <tr className="border-b border-[0.5px] border-[var(--border-subtle)]">
-                        {['Rota', 'Motorista', 'Placa', 'Tipo', 'Peso (kg)', 'Cap. (kg)', '% Ocupação'].map(h => (
+                        {['Rota', 'Motorista', 'Placa | Sigla | Tipo', 'Peso (kg)', 'Cap. (kg)', '% Ocupação'].map(h => (
                           <th key={h} className="text-left px-4 py-2.5 text-[11px] text-muted font-medium whitespace-nowrap">{h}</th>
                         ))}
                       </tr>
@@ -1325,8 +1360,7 @@ export default function RotasPage() {
                         )}>
                           <td className="px-4 py-2.5 text-xs font-mono font-medium text-base">{rota.codigoRota}</td>
                           <td className="px-4 py-2.5 text-xs text-muted">{rota.motorista?.nome ?? '—'}</td>
-                          <td className="px-4 py-2.5 text-xs font-mono text-base">{v.placa}</td>
-                          <td className="px-4 py-2.5 text-xs text-muted">{v.tipo}</td>
+                          <td className="px-4 py-2.5 text-xs font-mono text-base">{rotuloVeiculo(v)}</td>
                           <td className="px-4 py-2.5 text-xs tabular-nums text-right text-muted">
                             {rota.pesoTotal.toLocaleString('pt-BR')}
                           </td>
@@ -1360,14 +1394,14 @@ export default function RotasPage() {
         {!nfImportState.running && (
           <>
             <div className="flex gap-1.5">
-              {(['pendentes', 'agendados', 'srota'] as const).map(tab => {
+              {(['pendentes', 'agendados', 'srota', 'em_uso'] as const).map(tab => {
                 const active = tabPendentes === tab
-                const label  = tab === 'pendentes' ? 'Pendentes' : tab === 'agendados' ? 'Agendados de hoje' : 'S/Rota'
+                const label  = tab === 'pendentes' ? 'Pendentes' : tab === 'agendados' ? 'Agendados de hoje' : tab === 'srota' ? 'S/Rota' : 'Em uso'
                 const count  = tab === 'srota'
                   ? sRotaNfs.length
                   : tab === 'agendados'
                     ? nfRows.filter(r => r.DataAgendamento && String(r.DataAgendamento).slice(0, 10) <= new Date().toISOString().slice(0, 10)).length
-                    : 0
+                    : tab === 'em_uso' ? nfsEmUso : 0
                 return (
                   <button
                     key={tab}
@@ -1395,6 +1429,7 @@ export default function RotasPage() {
               })}
             </div>
             {tabPendentes === 'pendentes' && <NotasTable />}
+            {tabPendentes === 'em_uso'    && <NotasTable fonte="em_uso" />}
             {tabPendentes === 'agendados' && <AgendadosHojeTable />}
             {tabPendentes === 'srota'     && <SRotaTable rows={sRotaNfs} />}
           </>

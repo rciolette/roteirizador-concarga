@@ -36,18 +36,13 @@ export function Segmentador({
   const visiveis = useMemo(() => {
     const termo = q.trim().toLowerCase()
     const base = termo ? opcoes.filter(o => o.valor.toLowerCase().includes(termo)) : opcoes
-    // Só o que existe dentro do recorte atual — opção zerada sai da lista, sem
-    // exceção (Raphael, 04/09). Uma seleção que zerou continua removível pelos
-    // chips de "Filtros aplicados" e pelo × do card, então não precisa ficar
-    // ocupando espaço aqui.
-    const uteis = base.filter(o => o.count > 0)
-    // Selecionados primeiro, depois alfabético.
-    return uteis.sort((a, b) => {
-      const sa = selecionados.has(a.valor) ? 0 : 1
-      const sb = selecionados.has(b.valor) ? 0 : 1
-      if (sa !== sb) return sa - sb
-      return a.valor.localeCompare(b.valor, 'pt-BR')
-    })
+    // Só o que existe dentro do recorte atual — opção zerada sai da lista
+    // (Raphael, 04/09), exceto se estiver selecionada (para dar como desmarcar).
+    // ORDEM FIXA natural/alfanumérica (espec Rotas do Dia, item 2): uma opção
+    // selecionada NUNCA sobe para o topo.
+    return base
+      .filter(o => o.count > 0 || selecionados.has(o.valor))
+      .sort((a, b) => a.valor.localeCompare(b.valor, 'pt-BR', { numeric: true, sensitivity: 'base' }))
   }, [opcoes, q, selecionados])
 
   return (
