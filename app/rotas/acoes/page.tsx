@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { Topbar, Card, CardHeader, Btn, StatusPill, TextArea } from '@/components/ui'
 import { Checkbox, BulkBar } from '@/components/ui/SelectionControls'
 import { useAppData } from '@/components/providers/AppDataProvider'
-import { atualizarStatusRota, reprocessarRota } from '@/lib/webhooks'
+import { atualizarStatusRota, excluirRota, reprocessarRota } from '@/lib/webhooks'
 import { formatPeso, cn } from '@/lib/utils'
 import type { Rota, RouteStatus, NotaFiscal } from '@/types'
 import { MapaRota } from '@/components/ui/MapaRota'
@@ -170,7 +170,7 @@ function RouteDrawer({ rota, onClose, onAprovar, onRejeitar }: {
 
         {isActionable && (
           <div className="px-5 py-3.5 border-t border-[0.5px] border-[var(--border-subtle)] flex gap-2 justify-end shrink-0 bg-page">
-            <Btn variant="danger-soft" onClick={() => onRejeitar(obs)}>Rejeitar</Btn>
+            <Btn variant="danger-soft" onClick={() => onRejeitar(obs)}>Excluir</Btn>
             <Btn variant="success" onClick={() => onAprovar(obs)}>
               <svg className="w-[11px] h-[11px]" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M3 8l3.5 3.5L13 5"/>
@@ -204,7 +204,7 @@ function BulkRejectModal({ count, onConfirm, onClose }: {
     >
       <div className="animate-fade-in bg-surface rounded-xl border border-[0.5px] border-[var(--border-light)] w-[400px] max-w-[92vw]">
         <div className="px-5 pt-4 pb-3 border-b border-[0.5px] border-[var(--border-subtle)]">
-          <div className="text-[13px] font-medium">Rejeitar {count} rota{count !== 1 ? 's' : ''}</div>
+          <div className="text-[13px] font-medium">Excluir {count} rota{count !== 1 ? 's' : ''}</div>
           <div className="text-[11px] text-muted mt-0.5">Essa ação não pode ser desfeita.</div>
         </div>
         <div className="px-5 py-4">
@@ -219,7 +219,7 @@ function BulkRejectModal({ count, onConfirm, onClose }: {
         <div className="px-5 pb-4 flex gap-2 justify-end">
           <Btn onClick={onClose}>Cancelar</Btn>
           <Btn variant="danger-soft" onClick={() => onConfirm(obs)}>
-            Rejeitar {count} rota{count !== 1 ? 's' : ''}
+            Excluir {count} rota{count !== 1 ? 's' : ''}
           </Btn>
         </div>
       </div>
@@ -283,17 +283,18 @@ export default function AprovacoesPage() {
 
   function updateStatus(id: string, status: RouteStatus, obs?: string) {
     const rota = rotas.find(r => r.id === id)
-    setRotas(prev => prev.map(r =>
-      r.id === id
+    setRotas(prev => status === 'rejeitada'
+      ? prev.filter(r => r.id !== id)   // excluída de vez — nada fica salvo
+      : prev.map(r => r.id === id
         ? { ...r, status, ...(status === 'enviada' ? { enviadoEm: new Date().toISOString(), notasFiscais: [] } : {}) }
-        : r
-    ))
-    atualizarStatusRota(id, status, obs).catch(() => {})
+        : r))
+    ;(status === 'rejeitada' ? excluirRota(id) : atualizarStatusRota(id, status, obs))
+      .catch(err => showToast(`Falha: ${err instanceof Error ? err.message : 'erro'}`))
     setDrawerRota(null)
     if (rota) {
       const msgs: Partial<Record<RouteStatus, string>> = {
         aprovada:  `✓ Rota ${rota.codigoRota} aprovada`,
-        rejeitada: `Rota ${rota.codigoRota} rejeitada`,
+        rejeitada: `Rota ${rota.codigoRota} excluída`,
         enviada:   `✓ Rota ${rota.codigoRota} marcada como enviada`,
       }
       showToast(msgs[status] || '')
@@ -342,14 +343,15 @@ export default function AprovacoesPage() {
     setShowRejectModal(false)
     setBulking(true)
     try {
-      await Promise.allSettled(ids.map(id => atualizarStatusRota(id, 'rejeitada', obs || undefined)))
-      setRotas(prev => prev.map(r => selectedAg.has(r.id) ? { ...r, status: 'rejeitada' as RouteStatus } : r))
+      void obs
+      await Promise.allSettled(ids.map(id => excluirRota(id)))
+      setRotas(prev => prev.filter(r => !selectedAg.has(r.id)))
       ids.forEach(id => {
         const r = rotas.find(x => x.id === id)
         if (r) addLog('rejeicao', r.codigoRota, `Rejeitada em lote${obs ? ` · "${obs}"` : ''}`)
       })
       setSelectedAg(new Set())
-      showToast(`${ids.length} rota${ids.length > 1 ? 's' : ''} rejeitada${ids.length > 1 ? 's' : ''}`)
+      showToast(`${ids.length} rota${ids.length > 1 ? 's' : ''} excluída${ids.length > 1 ? 's' : ''}`)
     } finally {
       setBulking(false)
     }
@@ -448,7 +450,7 @@ export default function AprovacoesPage() {
             onClear={() => setSelectedAg(new Set())}
             actions={[
               { label: 'Aprovar selecionadas',  variant: 'success',      onClick: handleBulkAprovar },
-              { label: 'Rejeitar selecionadas', variant: 'danger-soft',  onClick: () => setShowRejectModal(true) },
+              { label: 'Excluir selecionadas', variant: 'danger-soft',  onClick: () => setShowRejectModal(true) },
             ]}
           />
 
@@ -500,7 +502,7 @@ export default function AprovacoesPage() {
                         ) : '↺'}
                         {isReprocessing ? 'Processando…' : 'Reprocessar'}
                       </Btn>
-                      <Btn size="sm" variant="danger-soft" onClick={() => updateStatus(rota.id, 'rejeitada')}>Rejeitar</Btn>
+                      <Btn size="sm" variant="danger-soft" onClick={() => updateStatus(rota.id, 'rejeitada')}>Excluir</Btn>
                       <Btn size="sm" variant="success"     onClick={() => updateStatus(rota.id, 'aprovada')}>Aprovar</Btn>
                     </div>
                   </div>

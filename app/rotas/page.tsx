@@ -11,7 +11,7 @@ import { AgendadosHojeTable } from '@/components/ui/AgendadosHojeTable'
 import { MapaRota } from '@/components/ui/MapaRota'
 import { ImportarSIATButton } from '@/components/ui/ImportarSIATButton'
 import { SiatImportDialog } from '@/components/ui/SiatImportDialog'
-import { webhookGerarRotas, mapRetornoGerarRotas, salvarRotasSupabase, salvarNfsNaoAlocadas, atualizarStatusRota, carregarRotasSupabase, aguardarRotasGeradas, Prioridade, MotoristaPayload, VeiculoDisponivel, desvincularNotasDaRota, moverNotasParaRota, definirVeiculoDaRota } from '@/lib/webhooks'
+import { webhookGerarRotas, mapRetornoGerarRotas, salvarRotasSupabase, salvarNfsNaoAlocadas, atualizarStatusRota, excluirRota, carregarRotasSupabase, aguardarRotasGeradas, Prioridade, MotoristaPayload, VeiculoDisponivel, desvincularNotasDaRota, moverNotasParaRota, definirVeiculoDaRota } from '@/lib/webhooks'
 import { gerarLinkMapsUrl } from '@/lib/maps'
 import { derivarCond } from '@/lib/siat'
 import { listarCapacidades, type CapacidadeVeiculo } from '@/lib/frota'
@@ -476,15 +476,15 @@ function RouteCard({ rota, onUpdateStatus, onAskConfirm, enderecoOrigem }: {
             <>
               <button
                 onClick={() => onAskConfirm({
-                  title: `Rejeitar rota ${rota.codigoRota}`,
-                  description: 'A rota será marcada como rejeitada e não poderá mais ser enviada.',
+                  title: `Excluir rota ${rota.codigoRota}`,
+                  description: 'A rota é apagada de vez — nada fica salvo no banco. As NFs, a rota de entrega e o veículo voltam a ficar livres para nova montagem.',
                   details: detalhes,
-                  confirmLabel: 'Rejeitar rota',
+                  confirmLabel: 'Excluir rota',
                   confirmVariant: 'danger-soft',
                 }, () => onUpdateStatus(rota.id, 'rejeitada'))}
                 className="px-3 py-[5px] text-[11px] text-muted hover:text-danger transition-colors cursor-pointer bg-transparent border-none"
               >
-                Rejeitar
+                Excluir
               </button>
               <Btn size="sm" variant="success" onClick={() => onAskConfirm({
                 title: `Aprovar rota ${rota.codigoRota}`,
@@ -1038,13 +1038,14 @@ export default function RotasPage() {
   async function updateRouteStatus(id: string, status: RouteStatus) {
     const rota = routes.find(r => r.id === id)
     try {
-      // RPC transacional: rejeitar libera NFs, rotas de entrega e veículo no banco.
-      await atualizarStatusRota(id, status, undefined, usuario?.email ?? undefined)
+      // 'rejeitada' em rota não aprovada = excluir de vez (nada fica salvo).
+      if (status === 'rejeitada') await excluirRota(id, usuario?.email ?? undefined)
+      else await atualizarStatusRota(id, status, undefined, usuario?.email ?? undefined)
     } catch (err) {
       showToast(`Falha ao mudar status: ${err instanceof Error ? err.message : 'erro'}`)
       return
     }
-    setRoutes(prev => prev.map(r => r.id === id ? { ...r, status } : r))
+    setRoutes(prev => status === 'rejeitada' ? prev.filter(r => r.id !== id) : prev.map(r => r.id === id ? { ...r, status } : r))
     refresh().catch(() => {})
     // O disparo automático de WhatsApp para o motorista foi removido: o webhook
     // `enviar-motorista` não existe no n8n e essa etapa do processo ainda não
@@ -1052,7 +1053,7 @@ export default function RotasPage() {
     if (rota) {
       const msgs: Partial<Record<RouteStatus, string>> = {
         aprovada:  `✓ Rota ${rota.codigoRota} aprovada`,
-        rejeitada: `Rota ${rota.codigoRota} rejeitada`,
+        rejeitada: `Rota ${rota.codigoRota} excluída`,
         enviada:   `✓ Rota ${rota.codigoRota} marcada como enviada`,
       }
       showToast(msgs[status] || '')
@@ -1060,7 +1061,7 @@ export default function RotasPage() {
       if (status === 'aprovada')
         addLog('aprovacao', rota.codigoRota, `Rota aprovada · ${rota.motorista?.nome} · ${formatPeso(rota.pesoTotal)}`)
       else if (status === 'rejeitada')
-        addLog('rejeicao', rota.codigoRota, 'Rota rejeitada')
+        addLog('rejeicao', rota.codigoRota, 'Rota excluída (nada salvo)')
       else if (status === 'enviada')
         addLog('envio', rota.codigoRota, `Enviado para ${rota.motorista?.nome} · ${rota.motorista?.telefone}`)
     }

@@ -289,7 +289,17 @@ export async function consolidarRotas(rotaIds: string[], veiculoId: string, codi
   return data as string
 }
 
-/** Aprovar / enviar / rejeitar. Rejeitar libera NFs, rotas de entrega e veículo (trigger). */
+/**
+ * Exclui de vez uma rota rascunho/aguardando (Raphael, 16/09): rota, NFs copiadas,
+ * histórico e reservas somem do banco — nada fica salvo. Aprovadas/enviadas não
+ * podem ser excluídas (o banco recusa).
+ */
+export async function excluirRota(id: string, usuario?: string): Promise<void> {
+  const { error } = await sb().rpc('rota_excluir', { p_rota_id: id, p_usuario: usuario ?? null })
+  if (error) throw new Error(error.message)
+}
+
+/** Aprovar / enviar / rejeitar. Rejeitar uma rota não aprovada = excluir (nada fica salvo). */
 export async function atualizarStatusRota(id: string, status: RouteStatus, observacao?: string, usuario?: string): Promise<void> {
   const { error } = await sb().rpc('rota_mudar_status', {
     p_rota_id: id, p_status: status, p_usuario: usuario ?? null, p_obs: observacao ?? null,
@@ -614,7 +624,5 @@ export async function limparRascunhosDoDia(data: string): Promise<void> {
     .eq('status', 'rascunho')
 
   const ids = ((rotasDia ?? []) as { id: string }[]).map(r => r.id)
-  for (const id of ids) {
-    await atualizarStatusRota(id, 'rejeitada', 'Rascunho descartado na re-importação')
-  }
+  for (const id of ids) await excluirRota(id)
 }
