@@ -173,3 +173,22 @@ html.dark ::selection { background: rgba(245,166,35,.40); color: #fff; }
 .animate-slide-down     { animation: slideDown 0.18s ease; }
 .animate-pulse-subtle   { animation: pulse-subtle 1.5s ease-in-out infinite; }
 .animate-slide-in-right { animation: slideInRight 0.22s cubic-bezier(0.16,1,0.3,1); }
+
+/* ── Linhas da grade de NFs: cores NEON sólidas, sem opacidade (Raphael, 16/09) ──
+   Vermelho = reentrega / agendamento vencido · Laranja = SAC ou agenda futura ·
+   Verde = mesmo destinatário. O texto de toda a linha vira escuro/claro para
+   continuar legível em cima do neon, sobrepondo as cores de célula. */
+tr.nf-neon-vermelho { background: #ff1744 !important; }
+tr.nf-neon-laranja  { background: #ffa000 !important; }
+tr.nf-neon-verde    { background: #00e676 !important; }
+tr.nf-neon-vermelho:hover { background: #ff4569 !important; }
+tr.nf-neon-laranja:hover  { background: #ffb733 !important; }
+tr.nf-neon-verde:hover    { background: #33eb91 !important; }
+tr.nf-neon-vermelho td, tr.nf-neon-vermelho td * { color: #ffffff !important; border-color: rgba(255,255,255,.25); }
+tr.nf-neon-laranja  td, tr.nf-neon-laranja  td * { color: #1a1200 !important; border-color: rgba(0,0,0,.2); }
+tr.nf-neon-verde    td, tr.nf-neon-verde    td * { color: #002d14 !important; border-color: rgba(0,0,0,.2); }
+/* badge de "N NFs para o mesmo destinatário" e botão de observação continuam visíveis */
+tr.nf-neon-verde td .bg-success { background: #002d14 !important; color: #00e676 !important; }
+tr.nf-neon-vermelho td .bg-success { background: #ffffff !important; color: #ff1744 !important; }
+tr.nf-neon-laranja td .bg-success { background: #1a1200 !important; color: #ffa000 !important; }
+tr[class*="nf-neon-"] td input[type="checkbox"] { accent-color: #111; }

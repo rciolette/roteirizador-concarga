@@ -660,12 +660,13 @@ export function NotasTable({ fonte = 'livres' }: { fonte?: FonteNotas }) {
                     // Cor na LINHA (Marcelo 21/08, coluna Cond. eliminada):
                     // reentrega/COND vermelho → linha vermelha; COND laranja →
                     // linha laranja; destinatário repetido → verde; senão zebra.
+                    // Cores NEON sólidas, sem opacidade (Raphael, 16/09) — ver .nf-neon-* em globals.css
                     row.ind_ree || row.cond === 'vermelho'
-                      ? 'bg-danger-bg'
+                      ? 'nf-neon-vermelho'
                       : row.cond === 'laranja'
-                        ? 'bg-warn-bg'
-                        : row.mesmoDestAnterior
-                          ? 'bg-success-bg'
+                        ? 'nf-neon-laranja'
+                        : row.qtdMesmoDest > 1
+                          ? 'nf-neon-verde'
                           : (i % 2 === 0 ? 'bg-surface' : 'bg-cream/30 dark:bg-[#1A1918]/40'),
                   )}
                 >
