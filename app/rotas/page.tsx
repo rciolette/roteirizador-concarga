@@ -875,20 +875,71 @@ function ExportMenuRotas({ rotas, onErro }: { rotas: import('@/types').Rota[]; o
 }
 
 // ── Carga por Veículo Panel (c2) ──────────────────────────────────────────────
-function CargaPorVeiculoPanel({ rotas }: { rotas: Rota[] }) {
+const CARGA_ABERTA_KEY = 'concarga:cargaporveiculo:aberto'
+
+/** Códigos das ROTAS DE ENTREGA que compõem a carga (Marcelo, 02/10): a lista
+ *  mostrava só "MONTADA 15:55" e não dava para saber o que tem dentro. */
+function codigosDeEntrega(rota: Rota): string[] {
+  return [...new Set(
+    rota.notasFiscais
+      .map(n => (n.rota ?? '').trim())
+      .filter(r => r && r !== '—'),
+  )].sort((a, b) => a.localeCompare(b, 'pt-BR', { numeric: true }))
+}
+
+function CargaPorVeiculoPanel({ rotas, onExcluir, onAprovarTodas }: {
+  rotas:          Rota[]
+  onExcluir?:     (rota: Rota) => void
+  onAprovarTodas?: () => void
+}) {
+  // Lista recolhível (Marcelo, 02/10): cresce uma linha por rota gerada e
+  // empurrava a segmentação para baixo. A escolha fica salva no navegador.
+  const [aberto, setAberto] = useState(true)
+  useEffect(() => {
+    try { if (localStorage.getItem(CARGA_ABERTA_KEY) === '0') setAberto(false) } catch { /* sem storage */ }
+  }, [])
+  function alternar() {
+    setAberto(v => {
+      const next = !v
+      try { localStorage.setItem(CARGA_ABERTA_KEY, next ? '1' : '0') } catch { /* sem storage */ }
+      return next
+    })
+  }
+
   // Rejeitada liberou o veículo — não conta como carga.
   const linhas = rotas.filter(r => r.veiculo && r.status !== 'rejeitada')
+  const aguardando = linhas.filter(r => r.status === 'aguardando').length
   if (linhas.length === 0) return null
   return (
     <Card>
       <CardHeader>
-        <span className="text-xs font-medium text-base">Carga por veículo</span>
+        <button
+          onClick={alternar}
+          title={aberto ? 'Recolher a lista' : 'Expandir a lista'}
+          className="flex items-center gap-1.5 bg-transparent border-none cursor-pointer p-0 text-left"
+        >
+          <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"
+            className={cn('text-muted transition-transform duration-150', aberto ? '' : '-rotate-90')}>
+            <path d="M3 6l5 5 5-5"/>
+          </svg>
+          <span className="text-xs font-medium text-base">Carga por veículo</span>
+          <span className="text-[10px] text-muted">{linhas.length} carga{linhas.length > 1 ? 's' : ''}</span>
+        </button>
+        {aguardando > 0 && onAprovarTodas && (
+          <Btn size="sm" variant="success" onClick={onAprovarTodas}>
+            <svg className="w-[11px] h-[11px]" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M3 8l3.5 3.5L13 5"/>
+            </svg>
+            <span className="font-semibold">Aprovar todas ({aguardando})</span>
+          </Btn>
+        )}
       </CardHeader>
+      {aberto && (
       <div className="overflow-x-auto">
         <table className="w-full">
           <thead>
             <tr className="border-b border-[0.5px] border-[var(--border-subtle)]">
-              {['Rota', 'Motorista', 'Placa | Sigla | Tipo', 'Peso (kg)', 'Cap. (kg)', '% Ocup.'].map(h => (
+              {['Rotas de entrega', 'Motorista', 'Placa | Sigla | Tipo', 'Peso (kg)', 'Cap. (kg)', '% Ocup.', ''].map(h => (
                 <th key={h} className="text-left px-4 py-2 text-[11px] text-muted font-medium whitespace-nowrap">{h}</th>
               ))}
             </tr>
@@ -905,7 +956,21 @@ function CargaPorVeiculoPanel({ rotas }: { rotas: Rota[] }) {
                   'border-b border-[0.5px] border-[var(--border-faint)]',
                   alerta ? 'bg-danger-bg/40' : i % 2 !== 0 ? 'bg-cream/40' : '',
                 )}>
-                  <td className="px-4 py-2 text-xs font-mono font-medium text-base">{rota.codigoRota}</td>
+                  <td className="px-4 py-2 text-xs font-mono font-medium text-base">
+                    {(() => {
+                      const codigos = codigosDeEntrega(rota)
+                      return (
+                        <>
+                          <div className="truncate max-w-[260px]" title={codigos.join(' · ') || rota.codigoRota}>
+                            {codigos.length ? codigos.join(' · ') : rota.codigoRota}
+                          </div>
+                          {codigos.length > 0 && (
+                            <div className="text-[10px] font-sans text-subtle">{rota.codigoRota}</div>
+                          )}
+                        </>
+                      )
+                    })()}
+                  </td>
                   <td className="px-4 py-2 text-xs text-muted">{rota.motorista?.nome ?? '—'}</td>
                   <td className="px-4 py-2 text-xs font-mono text-base">{rotuloVeiculo(v)}</td>
                   <td className="px-4 py-2 text-xs tabular-nums text-right text-muted">{rota.pesoTotal.toLocaleString('pt-BR')}</td>
@@ -921,13 +986,118 @@ function CargaPorVeiculoPanel({ rotas }: { rotas: Rota[] }) {
                       </span>
                     ) : '—'}
                   </td>
+                  {/* Excluir direto na lista (Marcelo, 02/10). Só rascunho/aguardando:
+                      aprovada/enviada o banco não deixa apagar. */}
+                  <td className="px-4 py-2 text-right whitespace-nowrap">
+                    {onExcluir && (rota.status === 'rascunho' || rota.status === 'aguardando') ? (
+                      <button
+                        onClick={() => onExcluir(rota)}
+                        className="text-[11px] text-muted hover:text-danger transition-colors cursor-pointer bg-transparent border-none"
+                      >
+                        Excluir
+                      </button>
+                    ) : (
+                      <span className="text-[10px] text-subtle" title={`Carga ${rota.status} — não pode ser excluída`}>
+                        {rota.status}
+                      </span>
+                    )}
+                  </td>
                 </tr>
               )
             })}
           </tbody>
         </table>
       </div>
+      )}
     </Card>
+  )
+}
+
+// ── Inconsistências da importação (Marcelo, 02/10) ───────────────────────────
+// "Se na importação das notas teve alguma alteração na rota, tem que gerar uma
+// inconsistência": compara o que o SIAT acabou de mandar com o que já está
+// dentro das cargas montadas. Duas situações pegam o operador de surpresa:
+// a rota de entrega da NF mudou, ou a NF sumiu da importação.
+interface Inconsistencia {
+  numnfs: string
+  carga:  string
+  tipo:   'rota-mudou' | 'sumiu'
+  antes:  string
+  depois: string
+}
+
+function InconsistenciasImportacao({ rotas, importadas }: {
+  rotas:      Rota[]
+  importadas: { numnfs: string; rota: string }[]
+}) {
+  const [aberto, setAberto] = useState(false)
+  const itens = useMemo<Inconsistencia[]>(() => {
+    if (importadas.length === 0) return []
+    const n = (s?: string) => (s ?? '').trim().toUpperCase()
+    const porNf = new Map(importadas.map(i => [i.numnfs, i]))
+    const out: Inconsistencia[] = []
+    for (const r of rotas) {
+      if (r.status === 'rejeitada') continue
+      for (const nf of r.notasFiscais) {
+        const atual = porNf.get(nf.numnfs)
+        if (!atual) {
+          out.push({ numnfs: nf.numnfs, carga: r.codigoRota, tipo: 'sumiu', antes: nf.rota || '—', depois: '—' })
+        } else if (n(atual.rota) !== n(nf.rota)) {
+          out.push({ numnfs: nf.numnfs, carga: r.codigoRota, tipo: 'rota-mudou', antes: nf.rota || '—', depois: atual.rota || '—' })
+        }
+      }
+    }
+    return out
+  }, [rotas, importadas])
+
+  if (itens.length === 0) return null
+  const mudou = itens.filter(i => i.tipo === 'rota-mudou').length
+  const sumiu = itens.length - mudou
+
+  return (
+    <div className="rounded-lg border border-[0.5px] border-warn-border bg-warn-bg px-4 py-2.5">
+      <button
+        onClick={() => setAberto(v => !v)}
+        className="flex items-center gap-2 w-full text-left bg-transparent border-none cursor-pointer p-0"
+      >
+        <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-cond-warn" />
+        <span className="text-xs font-medium text-warn flex-1">
+          {itens.length} inconsistência{itens.length > 1 ? 's' : ''} entre a importação e as cargas montadas
+          {mudou > 0 && ` · ${mudou} com rota de entrega alterada`}
+          {sumiu > 0 && ` · ${sumiu} fora da importação`}
+        </span>
+        <span className="text-[11px] text-warn-mid">{aberto ? 'ocultar' : 'ver detalhes'}</span>
+      </button>
+      {aberto && (
+        <div className="mt-2 overflow-x-auto">
+          <table className="w-full text-[11px]">
+            <thead>
+              <tr className="text-muted">
+                <th className="text-left font-medium py-1 pr-4 whitespace-nowrap">NF</th>
+                <th className="text-left font-medium py-1 pr-4 whitespace-nowrap">Carga</th>
+                <th className="text-left font-medium py-1 pr-4 whitespace-nowrap">Rota na carga</th>
+                <th className="text-left font-medium py-1 pr-4 whitespace-nowrap">Rota no SIAT agora</th>
+              </tr>
+            </thead>
+            <tbody>
+              {itens.map(i => (
+                <tr key={`${i.carga}-${i.numnfs}`} className="border-t border-[0.5px] border-[var(--border-faint)]">
+                  <td className="py-1 pr-4 font-mono whitespace-nowrap">{i.numnfs}</td>
+                  <td className="py-1 pr-4 font-mono whitespace-nowrap">{i.carga}</td>
+                  <td className="py-1 pr-4 whitespace-nowrap">{i.antes}</td>
+                  <td className="py-1 pr-4 whitespace-nowrap font-medium text-warn">
+                    {i.tipo === 'sumiu' ? 'não veio na importação' : i.depois}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="text-[10px] text-warn-mid mt-1.5">
+            Confira a carga antes de aprovar: a nota pode ter sido reagendada, cancelada ou trocada de rota no SIAT depois que a carga foi montada.
+          </p>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -1065,6 +1235,54 @@ export default function RotasPage() {
       else if (status === 'enviada')
         addLog('envio', rota.codigoRota, `Enviado para ${rota.motorista?.nome} · ${rota.motorista?.telefone}`)
     }
+  }
+
+  // Excluir carga direto na lista "Carga por veículo" (Marcelo, 02/10).
+  function pedirExclusaoCarga(rota: Rota) {
+    setPendingConfirm({
+      action: {
+        title: `Excluir carga ${rota.codigoRota}`,
+        description: 'A carga é apagada de vez — nada fica salvo no banco. As NFs, as rotas de entrega e o veículo voltam a ficar livres para nova montagem.',
+        details: [
+          { label: 'Rotas de entrega', value: codigosDeEntrega(rota).join(' · ') || '—' },
+          { label: 'Veículo',          value: rota.veiculo ? rotuloVeiculo(rota.veiculo) : '—' },
+          { label: 'Conteúdo',         value: `${rota.qtdNotas} NFs · ${formatPeso(rota.pesoTotal)}` },
+        ],
+        confirmLabel: 'Excluir carga',
+        confirmVariant: 'danger-soft',
+      },
+      execute: () => updateRouteStatus(rota.id, 'rejeitada'),
+    })
+  }
+
+  // Aprovar todas as cargas aguardando de uma vez (Marcelo, 02/10).
+  function pedirAprovarTodas() {
+    const alvo = routes.filter(r => r.status === 'aguardando')
+    if (alvo.length === 0) return
+    setPendingConfirm({
+      action: {
+        title: `Aprovar ${alvo.length} carga${alvo.length > 1 ? 's' : ''}`,
+        description: 'Todas as cargas aguardando aprovação passam para aprovada de uma vez.',
+        details: alvo.slice(0, 8).map(r => ({
+          label: r.codigoRota,
+          value: `${r.qtdNotas} NFs · ${formatPeso(r.pesoTotal)}${r.veiculo ? ` · ${rotuloVeiculo(r.veiculo)}` : ''}`,
+        })),
+        confirmLabel: 'Aprovar todas',
+        confirmVariant: 'success',
+      },
+      execute: async () => {
+        const res = await Promise.allSettled(alvo.map(r =>
+          atualizarStatusRota(r.id, 'aprovada', undefined, usuario?.email ?? undefined)))
+        const ok  = res.filter(r => r.status === 'fulfilled').length
+        const ids = new Set(alvo.filter((_, i) => res[i].status === 'fulfilled').map(r => r.id))
+        setRoutes(prev => prev.map(r => ids.has(r.id) ? { ...r, status: 'aprovada' as RouteStatus } : r))
+        refresh().catch(() => {})
+        showToast(ok === alvo.length
+          ? `✓ ${ok} carga${ok > 1 ? 's' : ''} aprovada${ok > 1 ? 's' : ''}`
+          : `${ok} de ${alvo.length} aprovadas — as demais falharam`)
+        addLog('aprovacao', `${ok} cargas`, 'Aprovação em lote')
+      },
+    })
   }
 
   async function handleConfirm(form: GerarRotasFormState, motoristasPayload: MotoristaPayload[], veiculosDisponiveis: VeiculoDisponivel[]) {
@@ -1300,7 +1518,15 @@ export default function RotasPage() {
           </div>
         )}
 
-        {routes.length > 0 && <CargaPorVeiculoPanel rotas={routes} />}
+        <InconsistenciasImportacao rotas={routes} importadas={nfsPendentes} />
+
+        {routes.length > 0 && (
+          <CargaPorVeiculoPanel
+            rotas={routes}
+            onExcluir={pedirExclusaoCarga}
+            onAprovarTodas={pedirAprovarTodas}
+          />
+        )}
 
         <div className="flex flex-col gap-2.5">
           {filtered.map(rota => (

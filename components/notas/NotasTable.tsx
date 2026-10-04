@@ -203,12 +203,17 @@ function BlocoPlaca({ veiculos, selecionado, onSelect, pesoKg, capacidades, load
   const [q, setQ] = useState('')
   const termo = q.trim().toLowerCase()
   const lista = termo ? veiculos.filter(v => v.rotulo.toLowerCase().includes(termo) || (v.motoristaNome ?? '').toLowerCase().includes(termo)) : veiculos
-  const grupos = TIPOS_ORDEM.map(t => ({ tipo: t, itens: lista.filter(v => v.tipo === t) })).filter(g => g.itens.length)
+  const gruposBase = TIPOS_ORDEM.map(t => ({ tipo: t, itens: lista.filter(v => v.tipo === t) })).filter(g => g.itens.length)
   // Sugestão: menor tipo cuja capacidade × limite comporta o peso E que tenha veículo livre.
   const sugerido = pesoKg > 0
     ? [...capacidades].sort((a, b) => a.capacidade_kg - b.capacidade_kg)
         .find(c => pesoKg <= c.capacidade_kg * (c.ocupacao_max_percent ?? 95) / 100 && veiculos.some(v => v.tipo === c.tipo))?.tipo ?? null
     : null
+  // O tipo SUGERIDO sobe para o topo da lista (Marcelo, 02/10) — era preciso
+  // rolar até achá-lo no meio dos outros tipos.
+  const grupos = sugerido
+    ? [...gruposBase].sort((a, b) => Number(b.tipo === sugerido) - Number(a.tipo === sugerido))
+    : gruposBase
   const sel = veiculos.find(v => v.id === selecionado)
   const ocup = sel && sel.capacidadeKg > 0 ? Math.round(pesoKg / sel.capacidadeKg * 100) : null
   return (
@@ -347,6 +352,9 @@ function ResumoRecorte({ notas }: { notas: NotaFiscal[] }) {
 function ResumoSelecao({ notas, desmarcadas, codigo }: { notas: NotaFiscal[]; desmarcadas: Set<string>; codigo: string }) {
   const sel    = notas.filter(n => !desmarcadas.has(n.numnfs))
   const pesoKg = sel.reduce((acc, n) => acc + n.peso, 0)
+  // Entregas = destinatários distintos (Marcelo, 02/10): é o número que conta
+  // para dimensionar a carga, mais do que a quantidade de notas.
+  const entregas = new Set(sel.map(n => (n.destinatario ?? '').trim().toUpperCase())).size
   return (
     <div className="w-full shrink-0 rounded-lg border border-[0.5px] border-[var(--border-subtle)] bg-primary text-white px-2.5 py-1.5 flex items-center justify-between gap-3">
       <div>
@@ -356,6 +364,10 @@ function ResumoSelecao({ notas, desmarcadas, codigo }: { notas: NotaFiscal[]; de
       <div className="text-right min-w-0">
         <div className="text-[9px] uppercase tracking-[0.08em] font-medium opacity-80">Rota</div>
         <div className="text-[11px] font-medium truncate max-w-[180px]" title={codigo}>{codigo}</div>
+      </div>
+      <div className="text-right">
+        <div className="text-[9px] uppercase tracking-[0.08em] font-medium opacity-80">Entregas</div>
+        <div className="text-[15px] font-semibold tabular-nums leading-tight" title="Destinatários distintos na seleção">{entregas}</div>
       </div>
       <div className="text-right">
         <div className="text-[9px] uppercase tracking-[0.08em] font-medium opacity-80">NFs</div>

@@ -98,7 +98,10 @@ export function Segmentador({
               )}
             >
               <span className="truncate flex-1">{o.valor}</span>
-              <span className={cn('tabular-nums shrink-0 text-[9px]', ativo ? 'text-white/80' : 'text-subtle')}>
+              <span
+                className={cn('tabular-nums shrink-0 text-[9px]', ativo ? 'text-white/80' : 'text-subtle')}
+                title={`${o.count} entrega${o.count === 1 ? '' : 's'} (destinatários distintos)`}
+              >
                 {o.count}
               </span>
             </button>

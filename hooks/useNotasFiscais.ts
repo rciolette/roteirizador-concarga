@@ -102,7 +102,8 @@ export interface NotasFiltros {
   regiao:       string[]
 }
 
-/** Opção de um segmentador, com quantas notas do recorte atual ela cobre. */
+/** Opção de um segmentador, com quantos DESTINATÁRIOS (entregas) ela cobre no
+ *  recorte atual — não notas fiscais (Marcelo, 02/10). */
 export interface OpcaoFiltro {
   valor: string
   count: number
@@ -159,7 +160,20 @@ interface UseNotasFiscaisResult {
 }
 
 function opcoesUnicas(valores: (string | undefined)[]): string[] {
-  return [...new Set(valores.filter((v): v is string => Boolean(v) && v !== '—'))]
+  // Dedupe por valor NORMALIZADO (Marcelo, 02/10): "Belo Horizonte" e
+  // "BELO HORIZONTE" vêm do SIAT como grafias diferentes do mesmo lugar e
+  // apareciam como duas opções. Exibe a variante mais legível (a que tem
+  // minúsculas) quando as duas existem.
+  const porChave = new Map<string, string>()
+  for (const v of valores) {
+    if (!v || v === '—') continue
+    const k = norm(v)
+    const atual = porChave.get(k)
+    const trocaPorMaisLegivel = atual !== undefined
+      && atual === atual.toUpperCase() && v !== v.toUpperCase()
+    if (atual === undefined || trocaPorMaisLegivel) porChave.set(k, v)
+  }
+  return [...porChave.values()]
     .sort((a, b) => a.localeCompare(b, 'pt-BR', { numeric: true, sensitivity: 'base' }))
 }
 
@@ -266,16 +280,23 @@ export function useNotasFiscais(defaultPageSize: PageSize = 25, fonte: FonteNota
       // operador não consegue mais alcançá-la (Marcelo, 03/09: em Solução SAC
       // todas as opções devem estar disponíveis).
       const universo = opcoesUnicas(base.map(valor[campo]))
-      const contagem = new Map<string, number>()
+      // Contador = DESTINATÁRIOS distintos, não notas (Marcelo, 02/10): o que
+      // importa para montar a carga é quantas ENTREGAS a opção representa.
+      const contagem = new Map<string, Set<string>>()
       for (const n of subset) {
         const v = valor[campo](n)
-        if (v) contagem.set(norm(v), (contagem.get(norm(v)) ?? 0) + 1)
+        if (!v) continue
+        const k = norm(v)
+        let destinos = contagem.get(k)
+        if (!destinos) { destinos = new Set<string>(); contagem.set(k, destinos) }
+        destinos.add(norm(n.destinatario))
       }
-      out[campo] = universo.map(v => ({ valor: v, count: contagem.get(norm(v)) ?? 0 }))
+      out[campo] = universo.map(v => ({ valor: v, count: contagem.get(norm(v))?.size ?? 0 }))
     }
     // "(Vazio)" sempre no topo do filtro de Solução SAC.
-    const semSac = base.filter(n =>
-      !n.solucaoSac && campos.filter(c => c !== 'solucaoSac').every(c => passa[c](n))).length
+    const semSac = new Set(base
+      .filter(n => !n.solucaoSac && campos.filter(c => c !== 'solucaoSac').every(c => passa[c](n)))
+      .map(n => norm(n.destinatario))).size
     out.solucaoSac = [{ valor: SAC_VAZIO, count: semSac }, ...out.solucaoSac]
     return out
   }, [base, passa])
