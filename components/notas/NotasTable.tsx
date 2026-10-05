@@ -9,7 +9,7 @@ import { useColunasRedimensionaveis, type ColunaDef } from '@/hooks/useColunasRe
 import { useAppData } from '@/components/providers/AppDataProvider'
 import { useAuth } from '@/components/providers/AuthProvider'
 import { salvarRotaManual, type VeiculoLivre } from '@/lib/webhooks'
-import { listarCapacidades, type CapacidadeVeiculo } from '@/lib/frota'
+import { listarCapacidades, listarPreferenciasVeiculos, type CapacidadeVeiculo, type PreferenciaVeiculo } from '@/lib/frota'
 import { formatPeso, formatarCep } from '@/lib/utils'
 import type { NotaFiscal } from '@/types'
 
@@ -191,7 +191,7 @@ const TIPOS_ORDEM = ['Fiorino', 'VUC', '3/4', 'Truck', 'Carreta'] as const
  * veículos livres hoje como `Placa | Sigla | Tipo`, agrupados por tipo.
  * Seleção única — é o veículo que recebe a rota ao salvar.
  */
-function BlocoPlaca({ veiculos, selecionado, onSelect, pesoKg, capacidades, loading, onRefresh }: {
+function BlocoPlaca({ veiculos, selecionado, onSelect, pesoKg, capacidades, loading, onRefresh, rotasDaCarga, prefs }: {
   veiculos:    VeiculoLivre[]
   selecionado: string | null
   onSelect:    (id: string | null) => void
@@ -199,6 +199,10 @@ function BlocoPlaca({ veiculos, selecionado, onSelect, pesoKg, capacidades, load
   capacidades: CapacidadeVeiculo[]
   loading:     boolean
   onRefresh:   () => void
+  /** Rotas de entrega da seleção atual — base da sugestão por cadastro. */
+  rotasDaCarga: string[]
+  /** Cadastro de rotas por veículo (Frota) — Marcelo, 02/10. */
+  prefs:        Map<string, { rotas_entrega: string[] }>
 }) {
   const [q, setQ] = useState('')
   const termo = q.trim().toLowerCase()
@@ -214,6 +218,16 @@ function BlocoPlaca({ veiculos, selecionado, onSelect, pesoKg, capacidades, load
   const grupos = sugerido
     ? [...gruposBase].sort((a, b) => Number(b.tipo === sugerido) - Number(a.tipo === sugerido))
     : gruposBase
+
+  // Sugestão POR CADASTRO (Marcelo, 02/10): veículos cujas rotas de entrega
+  // cadastradas na Frota batem com as rotas da carga que está sendo montada.
+  // Esses vêm antes de tudo — é o "sugerido no topo da lista das placas".
+  const nrm = (s: string) => s.trim().toUpperCase()
+  const rotasAlvo = new Set(rotasDaCarga.map(nrm))
+  const porCadastro = rotasAlvo.size > 0
+    ? lista.filter(v => (prefs.get(v.id)?.rotas_entrega ?? []).some(r => rotasAlvo.has(nrm(r))))
+    : []
+  const idsPorCadastro = new Set(porCadastro.map(v => v.id))
   const sel = veiculos.find(v => v.id === selecionado)
   const ocup = sel && sel.capacidadeKg > 0 ? Math.round(pesoKg / sel.capacidadeKg * 100) : null
   return (
@@ -229,24 +243,52 @@ function BlocoPlaca({ veiculos, selecionado, onSelect, pesoKg, capacidades, load
       <div className="flex flex-col overflow-y-auto max-h-[124px] p-1 gap-px">
         {loading ? <span className="text-[10px] text-subtle px-1 py-1">Carregando…</span>
           : grupos.length === 0 ? <span className="text-[10px] text-subtle px-1 py-1">{termo ? 'Nada encontrado' : 'Nenhum veículo livre hoje — marque a disponibilidade em Frota'}</span>
-          : grupos.map(g => (
-            <div key={g.tipo}>
-              <div className={cn('text-[9px] uppercase tracking-[0.06em] px-1.5 pt-1 pb-0.5 font-medium', sugerido === g.tipo ? 'text-primary' : 'text-subtle')}>
-                {g.tipo} · {g.itens.length}{sugerido === g.tipo ? ' · sugerido' : ''}
-              </div>
-              {g.itens.map(v => {
-                const ativo = v.id === selecionado
+          : (
+            <>
+              {/* Veículos cadastrados para as rotas desta carga vêm primeiro */}
+              {porCadastro.length > 0 && (
+                <div>
+                  <div className="text-[9px] uppercase tracking-[0.06em] px-1.5 pt-1 pb-0.5 font-medium text-primary">
+                    Sugerido para {rotasDaCarga.slice(0, 2).join(', ')}{rotasDaCarga.length > 2 ? '…' : ''} · {porCadastro.length}
+                  </div>
+                  {porCadastro.map(v => {
+                    const ativo = v.id === selecionado
+                    return (
+                      <button key={`sug-${v.id}`} onClick={() => onSelect(ativo ? null : v.id)}
+                        title={`${v.rotulo} · cadastrado para esta rota de entrega · ${formatPeso(v.capacidadeKg)}`}
+                        className={cn('flex items-center gap-1 px-1.5 py-[3px] rounded text-[10px] text-left transition-colors cursor-pointer w-full',
+                          ativo ? 'bg-primary text-white font-medium' : 'text-primary hover:bg-cream dark:hover:bg-hover')}>
+                        <span className="font-mono truncate flex-1">{v.rotulo}</span>
+                        <span className={cn('tabular-nums shrink-0 text-[9px]', ativo ? 'text-white/80' : 'text-subtle')}>{formatPeso(v.capacidadeKg)}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+              {grupos.map(g => {
+                const itens = g.itens.filter(v => !idsPorCadastro.has(v.id))
+                if (itens.length === 0) return null
                 return (
-                  <button key={v.id} onClick={() => onSelect(ativo ? null : v.id)} title={`${v.rotulo} · ${v.motoristaNome ?? ''} · ${formatPeso(v.capacidadeKg)}`}
-                    className={cn('flex items-center gap-1 px-1.5 py-[3px] rounded text-[10px] text-left transition-colors cursor-pointer w-full',
-                      ativo ? 'bg-primary text-white font-medium' : 'text-base hover:bg-cream dark:hover:bg-hover')}>
-                    <span className="font-mono truncate flex-1">{v.rotulo}</span>
-                    <span className={cn('tabular-nums shrink-0 text-[9px]', ativo ? 'text-white/80' : 'text-subtle')}>{formatPeso(v.capacidadeKg)}</span>
-                  </button>
+                  <div key={g.tipo}>
+                    <div className={cn('text-[9px] uppercase tracking-[0.06em] px-1.5 pt-1 pb-0.5 font-medium', sugerido === g.tipo ? 'text-primary' : 'text-subtle')}>
+                      {g.tipo} · {itens.length}{sugerido === g.tipo ? ' · sugerido' : ''}
+                    </div>
+                    {itens.map(v => {
+                      const ativo = v.id === selecionado
+                      return (
+                        <button key={v.id} onClick={() => onSelect(ativo ? null : v.id)} title={`${v.rotulo} · ${v.motoristaNome ?? ''} · ${formatPeso(v.capacidadeKg)}`}
+                          className={cn('flex items-center gap-1 px-1.5 py-[3px] rounded text-[10px] text-left transition-colors cursor-pointer w-full',
+                            ativo ? 'bg-primary text-white font-medium' : 'text-base hover:bg-cream dark:hover:bg-hover')}>
+                          <span className="font-mono truncate flex-1">{v.rotulo}</span>
+                          <span className={cn('tabular-nums shrink-0 text-[9px]', ativo ? 'text-white/80' : 'text-subtle')}>{formatPeso(v.capacidadeKg)}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
                 )
               })}
-            </div>
-          ))}
+            </>
+          )}
       </div>
       <div className={cn('px-2 py-1 text-[9px] border-t border-[0.5px] border-[var(--border-faint)] truncate', ocup !== null && sel && ocup > (capacidades.find(c => c.tipo === sel.tipo)?.ocupacao_max_percent ?? 95) ? 'text-danger' : 'text-muted')}
         title={sel ? `${sel.rotulo} · ${formatPeso(pesoKg)} / ${formatPeso(sel.capacidadeKg)}` : undefined}>
@@ -396,11 +438,18 @@ export function NotasTable({ fonte = 'livres' }: { fonte?: FonteNotas }) {
   const [veiculoSel, setVeiculoSel] = useState<string | null>(null)
   const [capacidades, setCapacidades] = useState<CapacidadeVeiculo[]>([])
   useEffect(() => { listarCapacidades().then(setCapacidades).catch(() => {}) }, [])
+  // Cadastro de rotas por veículo (Frota) — base da sugestão de placa (Marcelo, 02/10).
+  const [prefsVeiculo, setPrefsVeiculo] = useState<Map<string, PreferenciaVeiculo>>(new Map())
+  useEffect(() => { listarPreferenciasVeiculos().then(setPrefsVeiculo).catch(() => {}) }, [])
   // Se outra sessão reservou o veículo escolhido, ele some da lista de livres e a escolha cai.
   const veiculoSelValido = veiculoSel && veiculosLivres.some(v => v.id === veiculoSel) ? veiculoSel : null
 
   const selecionadas = useMemo(() => notasFiltradas.filter(n => !desmarcadas.has(n.numnfs)), [notasFiltradas, desmarcadas])
   const pesoSel = selecionadas.reduce((acc, n) => acc + n.peso, 0)
+  const rotasDaCarga = useMemo(
+    () => [...new Set(selecionadas.map(n => (n.rota ?? '').trim()).filter(r => r && r !== '—'))],
+    [selecionadas],
+  )
   const codigoRota = useMemo(() => {
     if (filtros.rota.length === 1) return filtros.rota[0]
     const rotas = [...new Set(selecionadas.map(n => n.rota).filter(r => r && r !== '—'))]
@@ -512,6 +561,8 @@ export function NotasTable({ fonte = 'livres' }: { fonte?: FonteNotas }) {
                     capacidades={capacidades}
                     loading={loadingVeiculosLivres}
                     onRefresh={refreshVeiculosLivres}
+                    rotasDaCarga={rotasDaCarga}
+                    prefs={prefsVeiculo}
                   />
                 </div>
               )}

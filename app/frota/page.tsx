@@ -12,7 +12,8 @@ import {
   atualizarDisponivelHoje, resetarDisponivelHoje,
   marcarDisponiveisHoje, desmarcarDisponiveisHoje,
   atualizarAtivoBulkVeiculos,
-  type VeiculoDaFrota,
+  listarPreferenciasVeiculos, salvarPreferenciaVeiculo,
+  type VeiculoDaFrota, type PreferenciaVeiculo,
 } from '@/lib/frota'
 import { importarDisponibilidade } from '@/lib/webhooks'
 
@@ -24,6 +25,60 @@ import { importarDisponibilidade } from '@/lib/webhooks'
 const PAGE_SIZE_DEFAULT = 100
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100, 200]
 
+
+/** Cadastro de rotas de entrega por veículo (Marcelo, 02/10): "faltou cadastro
+ *  de Rotas para definir sugestão das placas". O que for cadastrado aqui é o que
+ *  faz a placa aparecer como SUGERIDA ao montar a carga daquela rota. */
+function CelulaRotasVeiculo({ rotas, onSalvar }: {
+  rotas:    string[]
+  onSalvar: (rotas: string[]) => Promise<void>
+}) {
+  const [editando, setEditando] = useState(false)
+  const [texto, setTexto]       = useState('')
+  const [salvando, setSalvando] = useState(false)
+
+  async function confirmar() {
+    const lista = [...new Set(
+      texto.split(/[,;]/).map(s => s.trim().toUpperCase()).filter(Boolean),
+    )]
+    setSalvando(true)
+    try { await onSalvar(lista); setEditando(false) } finally { setSalvando(false) }
+  }
+
+  if (!editando) {
+    return (
+      <button
+        onClick={() => { setTexto(rotas.join(', ')); setEditando(true) }}
+        title="Rotas de entrega atendidas por este veículo — usadas na sugestão de placa"
+        className="text-[11px] text-left bg-transparent border-none cursor-pointer max-w-[170px] truncate hover:underline"
+      >
+        {rotas.length
+          ? <span className="text-base font-mono">{rotas.join(', ')}</span>
+          : <span className="text-subtle italic">definir rotas</span>}
+      </button>
+    )
+  }
+  return (
+    <div className="flex items-center gap-1">
+      <input
+        autoFocus
+        value={texto}
+        disabled={salvando}
+        onChange={e => setTexto(e.target.value)}
+        onKeyDown={e => {
+          if (e.key === 'Enter') confirmar()
+          if (e.key === 'Escape') setEditando(false)
+        }}
+        placeholder="ex.: 433 - MOC, 435 - PIRAPORA"
+        className="h-6 w-[180px] px-1.5 text-[11px] font-mono rounded border border-[0.5px] border-[var(--border-input)] bg-page outline-none focus:border-primary"
+      />
+      <button onClick={confirmar} disabled={salvando} className="text-[11px] text-primary cursor-pointer bg-transparent border-none">
+        {salvando ? '…' : 'ok'}
+      </button>
+      <button onClick={() => setEditando(false)} className="text-[11px] text-muted cursor-pointer bg-transparent border-none">×</button>
+    </div>
+  )
+}
 
 // ── Toggle ────────────────────────────────────────────────────────────────────
 function Toggle({ checked, onChange, color = 'primary', disabled = false }: {
@@ -186,6 +241,28 @@ export default function FrotaPage() {
   const [toastV,    setToastV]    = useState('')
   const [syncingM,  setSyncingM]  = useState(false)
   const [seedingV,  setSeedingV]  = useState(false)
+  // Preferências por veículo — hoje usamos as rotas de entrega (Marcelo, 02/10).
+  const [prefs, setPrefs] = useState<Map<string, PreferenciaVeiculo>>(new Map())
+  useEffect(() => { listarPreferenciasVeiculos().then(setPrefs).catch(() => {}) }, [])
+
+  async function salvarRotasDoVeiculo(veiculoId: string, rotas: string[]) {
+    const atual = prefs.get(veiculoId)
+    const nova: PreferenciaVeiculo = {
+      veiculo_id:     veiculoId,
+      regioes:        atual?.regioes ?? [],
+      rotas_entrega:  rotas,
+      intermunicipal: atual?.intermunicipal ?? false,
+      tipos_carga:    atual?.tipos_carga ?? [],
+      observacao:     atual?.observacao ?? null,
+    }
+    try {
+      await salvarPreferenciaVeiculo(nova)
+      setPrefs(prev => new Map(prev).set(veiculoId, nova))
+      showToastV(rotas.length ? `✓ ${rotas.length} rota(s) cadastrada(s)` : '✓ Rotas removidas')
+    } catch (err) {
+      showToastV(`Falha ao salvar: ${err instanceof Error ? err.message : 'erro'}`)
+    }
+  }
 
   // Filtros veiculos
   const [buscaV,          setBuscaV]         = useState('')
@@ -508,7 +585,7 @@ export default function FrotaPage() {
               ]}
             />
 
-            {loadingV ? <TableSkeleton cols={9} /> : veiculosFiltrados.length === 0 ? (
+            {loadingV ? <TableSkeleton cols={10} /> : veiculosFiltrados.length === 0 ? (
               <div className="py-10 text-center text-subtle text-[13px]">
                 {filtroSiat || filtroAtV !== 'ativos' || filtroDisp !== 'todos' || buscaV || filtroTipo || filtroCategoria || filtroCarroceria
                   ? 'Nenhum veículo com esses filtros.'
@@ -528,7 +605,7 @@ export default function FrotaPage() {
                           Vld.Seguro não existe no SIAT — omitida até definir a fonte. */}
                       <TH>Placa</TH><TH>Motorista</TH><TH>ANTT</TH><TH>CPF</TH>
                       <TH>Fornecedor</TH><TH>TAG</TH><TH>Tipo</TH><TH>Categoria</TH><TH>Carroceria</TH>
-                      <TH>Cap. (kg)</TH><TH>Situação</TH><TH>Disponível hoje</TH>
+                      <TH>Cap. (kg)</TH><TH>Rotas de entrega</TH><TH>Situação</TH><TH>Disponível hoje</TH>
                     </tr>
                   </thead>
                   <tbody>
@@ -565,6 +642,12 @@ export default function FrotaPage() {
                         <TD>{v.tipo_carroceria || '—'}</TD>
                         <td className="px-4 py-2.5 text-xs text-muted tabular-nums text-right">
                           {v.capacidade_kg ? v.capacidade_kg.toLocaleString('pt-BR') : '—'}
+                        </td>
+                        <td className="px-4 py-2.5" onClick={e => e.stopPropagation()}>
+                          <CelulaRotasVeiculo
+                            rotas={prefs.get(v.id)?.rotas_entrega ?? []}
+                            onSalvar={rotas => salvarRotasDoVeiculo(v.id, rotas)}
+                          />
                         </td>
                         <td className="px-4 py-2.5" onClick={e => e.stopPropagation()}>
                           <StatusVeiculoBadge ativo={v.ativo} situacaoSiat={v.situacao_siat} />
