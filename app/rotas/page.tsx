@@ -13,7 +13,7 @@ import { ImportarSIATButton } from '@/components/ui/ImportarSIATButton'
 import { SiatImportDialog } from '@/components/ui/SiatImportDialog'
 import { webhookGerarRotas, mapRetornoGerarRotas, salvarRotasSupabase, salvarNfsNaoAlocadas, atualizarStatusRota, excluirRota, carregarRotasSupabase, aguardarRotasGeradas, Prioridade, MotoristaPayload, VeiculoDisponivel, desvincularNotasDaRota, moverNotasParaRota, definirVeiculoDaRota, resetarDia } from '@/lib/webhooks'
 import { gerarLinkMapsUrl } from '@/lib/maps'
-import { abrirRelatorioSeparacao } from '@/lib/relatorio-separacao'
+import { baixarAcertoDeCanhoto } from '@/lib/acerto-canhoto'
 import { derivarCond } from '@/lib/siat'
 import { listarCapacidades, type CapacidadeVeiculo } from '@/lib/frota'
 import type { SiatRow } from '@/lib/siat'
@@ -958,10 +958,10 @@ function CargaPorVeiculoPanel({ rotas, onExcluir, onReabrir, onAprovarTodas, onR
           {onSepararNotas && (
             <button
               onClick={onSepararNotas}
-              title="Relatório para separação das notas físicas — uma página por carga"
+              title="Planilha de acerto de canhoto para separação das notas físicas — uma aba por carga"
               className="text-[11px] text-primary hover:underline cursor-pointer bg-transparent border-none"
             >
-              🖨 Separação das notas
+              ⤓ Acerto de canhoto (xlsx)
             </button>
           )}
           {onResetarDia && (
@@ -1335,14 +1335,18 @@ export default function RotasPage() {
     })
   }
 
-  // Relatório de separação das notas físicas (Marcelo, 02/10): uma página por
-  // carga gerada, pronto para imprimir ou salvar em PDF.
-  function abrirSeparacao() {
+  // ACERTO DE CANHOTO (Marcelo, 02/10): planilha para separação das notas
+  // físicas, no formato do modelo dele — uma aba por carga gerada.
+  async function abrirSeparacao() {
     const alvo = routes.filter(r => r.status !== 'rejeitada')
     if (alvo.length === 0) { showToast('Nenhuma carga montada hoje para separar'); return }
-    const ok = abrirRelatorioSeparacao(alvo)
-    if (!ok) showToast('O navegador bloqueou a janela — libere pop-ups para imprimir o relatório')
-    else addLog('aprovacao', 'separação', `Relatório de separação gerado (${alvo.length} carga(s))`)
+    try {
+      const n = await baixarAcertoDeCanhoto(alvo)
+      showToast(`✓ Acerto de canhoto gerado — ${n} aba(s), uma por carga`)
+      addLog('aprovacao', 'canhoto', `Acerto de canhoto gerado (${n} carga(s))`)
+    } catch (err) {
+      showToast(`Falha ao gerar a planilha: ${err instanceof Error ? err.message : 'erro'}`)
+    }
   }
 
   // Resetar o dia (Marcelo, 02/10): limpa as cargas que ainda não foram
