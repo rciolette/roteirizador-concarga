@@ -13,6 +13,7 @@ import { ImportarSIATButton } from '@/components/ui/ImportarSIATButton'
 import { SiatImportDialog } from '@/components/ui/SiatImportDialog'
 import { webhookGerarRotas, mapRetornoGerarRotas, salvarRotasSupabase, salvarNfsNaoAlocadas, atualizarStatusRota, excluirRota, carregarRotasSupabase, aguardarRotasGeradas, Prioridade, MotoristaPayload, VeiculoDisponivel, desvincularNotasDaRota, moverNotasParaRota, definirVeiculoDaRota, resetarDia } from '@/lib/webhooks'
 import { gerarLinkMapsUrl } from '@/lib/maps'
+import { abrirRelatorioSeparacao } from '@/lib/relatorio-separacao'
 import { derivarCond } from '@/lib/siat'
 import { listarCapacidades, type CapacidadeVeiculo } from '@/lib/frota'
 import type { SiatRow } from '@/lib/siat'
@@ -911,12 +912,13 @@ function codigosDeEntrega(rota: Rota): string[] {
   )].sort((a, b) => a.localeCompare(b, 'pt-BR', { numeric: true }))
 }
 
-function CargaPorVeiculoPanel({ rotas, onExcluir, onReabrir, onAprovarTodas, onResetarDia }: {
+function CargaPorVeiculoPanel({ rotas, onExcluir, onReabrir, onAprovarTodas, onResetarDia, onSepararNotas }: {
   rotas:          Rota[]
   onExcluir?:     (rota: Rota) => void
   onReabrir?:     (rota: Rota) => void
   onAprovarTodas?: () => void
   onResetarDia?:  () => void
+  onSepararNotas?: () => void
 }) {
   // Lista recolhível (Marcelo, 02/10): cresce uma linha por rota gerada e
   // empurrava a segmentação para baixo. A escolha fica salva no navegador.
@@ -953,6 +955,15 @@ function CargaPorVeiculoPanel({ rotas, onExcluir, onReabrir, onAprovarTodas, onR
           <span className="text-[10px] text-muted">{linhas.length} carga{linhas.length > 1 ? 's' : ''}</span>
         </button>
         <div className="flex items-center gap-2">
+          {onSepararNotas && (
+            <button
+              onClick={onSepararNotas}
+              title="Relatório para separação das notas físicas — uma página por carga"
+              className="text-[11px] text-primary hover:underline cursor-pointer bg-transparent border-none"
+            >
+              🖨 Separação das notas
+            </button>
+          )}
           {onResetarDia && (
             <button
               onClick={onResetarDia}
@@ -1324,6 +1335,16 @@ export default function RotasPage() {
     })
   }
 
+  // Relatório de separação das notas físicas (Marcelo, 02/10): uma página por
+  // carga gerada, pronto para imprimir ou salvar em PDF.
+  function abrirSeparacao() {
+    const alvo = routes.filter(r => r.status !== 'rejeitada')
+    if (alvo.length === 0) { showToast('Nenhuma carga montada hoje para separar'); return }
+    const ok = abrirRelatorioSeparacao(alvo)
+    if (!ok) showToast('O navegador bloqueou a janela — libere pop-ups para imprimir o relatório')
+    else addLog('aprovacao', 'separação', `Relatório de separação gerado (${alvo.length} carga(s))`)
+  }
+
   // Resetar o dia (Marcelo, 02/10): limpa as cargas que ainda não foram
   // aprovadas e devolve tudo para a roteirização. Aprovadas/enviadas são
   // mantidas de propósito — para apagá-las, reabra a carga antes.
@@ -1645,6 +1666,7 @@ export default function RotasPage() {
             onReabrir={pedirReaberturaCarga}
             onAprovarTodas={pedirAprovarTodas}
             onResetarDia={pedirResetDoDia}
+            onSepararNotas={abrirSeparacao}
           />
         )}
 
