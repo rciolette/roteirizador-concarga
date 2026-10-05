@@ -190,7 +190,8 @@ export interface SalvarRotaInput {
   data:       string
   codigo:     string
   regiao?:    string
-  veiculoId:  string
+  /** null = carga criada com "placa a definir" (Marcelo, 02/10). */
+  veiculoId:  string | null
   notas:      NotaFiscal[]
   usuario?:   string
 }
@@ -625,4 +626,16 @@ export async function limparRascunhosDoDia(data: string): Promise<void> {
 
   const ids = ((rotasDia ?? []) as { id: string }[]).map(r => r.id)
   for (const id of ids) await excluirRota(id)
+}
+
+/**
+ * Resetar o dia (Marcelo, 02/10): apaga de uma vez as cargas rascunho/aguardando
+ * da data e devolve NFs, rotas de entrega e veículos para a roteirização.
+ * Aprovadas/enviadas são preservadas — para apagá-las, reabra a carga antes.
+ * Devolve quantas cargas foram apagadas.
+ */
+export async function resetarDia(data: string, usuario?: string): Promise<number> {
+  const { data: n, error } = await sb().rpc('dia_resetar', { p_data: data, p_usuario: usuario ?? null })
+  if (error) throw new Error(error.message)
+  return (n as number) ?? 0
 }

@@ -413,7 +413,12 @@ export function NotasTable({ fonte = 'livres' }: { fonte?: FonteNotas }) {
   // única transação no banco (RPC rota_salvar). "Aprovar" é etapa posterior.
   async function handleGerarRota() {
     if (!selecionadas.length || gerandoRota) return
-    if (!veiculoSelValido) { setMsgRota('Erro: escolha o veículo no bloco Placa (Placa | Sigla | Tipo)'); return }
+    // Placa a definir (Marcelo, 02/10): a carga pode ser salva sem veículo e
+    // recebe a placa depois — só não pode ser aprovada assim.
+    if (!veiculoSelValido && !window.confirm(
+      'Nenhuma placa escolhida. Salvar a carga com "placa a definir"? Ela só poderá ser aprovada depois que o veículo for definido.')) {
+      return
+    }
 
     const comAlerta = selecionadas.filter(n =>
       n.solucaoSac && !n.indRee && n.solucaoSac.trim().toUpperCase() !== 'REENTREGA')
@@ -433,7 +438,9 @@ export function NotasTable({ fonte = 'livres' }: { fonte?: FonteNotas }) {
       setNfsDesmarcadasBulk(selecionadas.map(n => n.numnfs), false)
       setVeiculoSel(null)
       await refresh()
-      setMsgRota(`✓ Rota "${codigo}" salva (${selecionadas.length} NFs) — aguardando aprovação`)
+      setMsgRota(veiculoSelValido
+        ? `✓ Rota "${codigo}" salva (${selecionadas.length} NFs) — aguardando aprovação`
+        : `✓ Rota "${codigo}" salva (${selecionadas.length} NFs) — placa a definir antes de aprovar`)
     } catch (err) {
       setMsgRota(`Erro: ${err instanceof Error ? err.message : 'falha ao salvar a rota'}`)
       refresh().catch(() => {})
@@ -566,11 +573,20 @@ export function NotasTable({ fonte = 'livres' }: { fonte?: FonteNotas }) {
               {total > 0 && !emUso && (
                 <button
                   onClick={handleGerarRota}
-                  disabled={gerandoRota || totalFiltradasSelecionadas === 0 || !veiculoSelValido}
-                  className="text-[11px] px-3 py-1.5 rounded-md bg-primary text-white font-medium disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-                  title={veiculoSelValido ? 'Salva a rota em "aguardando" e reserva NFs, rotas de entrega e veículo' : 'Escolha o veículo no bloco Placa para salvar'}
+                  disabled={gerandoRota || totalFiltradasSelecionadas === 0}
+                  className={cn(
+                    'text-[11px] px-3 py-1.5 rounded-md font-medium disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer',
+                    veiculoSelValido ? 'bg-primary text-white' : 'bg-warn-bg text-warn-mid border border-[0.5px] border-warn-border',
+                  )}
+                  title={veiculoSelValido
+                    ? 'Salva a rota em "aguardando" e reserva NFs, rotas de entrega e veículo'
+                    : 'Salva a carga sem veículo — a placa pode ser definida depois, antes de aprovar'}
                 >
-                  {gerandoRota ? 'Salvando rota…' : `💾 Salvar rota (${totalFiltradasSelecionadas} NFs)`}
+                  {gerandoRota
+                    ? 'Salvando rota…'
+                    : veiculoSelValido
+                      ? `💾 Salvar rota (${totalFiltradasSelecionadas} NFs)`
+                      : `💾 Salvar com placa a definir (${totalFiltradasSelecionadas} NFs)`}
                 </button>
               )}
               <span className="text-[11px] text-muted flex items-center gap-2">

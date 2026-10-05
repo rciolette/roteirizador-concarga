@@ -11,7 +11,7 @@ import { AgendadosHojeTable } from '@/components/ui/AgendadosHojeTable'
 import { MapaRota } from '@/components/ui/MapaRota'
 import { ImportarSIATButton } from '@/components/ui/ImportarSIATButton'
 import { SiatImportDialog } from '@/components/ui/SiatImportDialog'
-import { webhookGerarRotas, mapRetornoGerarRotas, salvarRotasSupabase, salvarNfsNaoAlocadas, atualizarStatusRota, excluirRota, carregarRotasSupabase, aguardarRotasGeradas, Prioridade, MotoristaPayload, VeiculoDisponivel, desvincularNotasDaRota, moverNotasParaRota, definirVeiculoDaRota } from '@/lib/webhooks'
+import { webhookGerarRotas, mapRetornoGerarRotas, salvarRotasSupabase, salvarNfsNaoAlocadas, atualizarStatusRota, excluirRota, carregarRotasSupabase, aguardarRotasGeradas, Prioridade, MotoristaPayload, VeiculoDisponivel, desvincularNotasDaRota, moverNotasParaRota, definirVeiculoDaRota, resetarDia } from '@/lib/webhooks'
 import { gerarLinkMapsUrl } from '@/lib/maps'
 import { derivarCond } from '@/lib/siat'
 import { listarCapacidades, type CapacidadeVeiculo } from '@/lib/frota'
@@ -486,18 +486,22 @@ function RouteCard({ rota, onUpdateStatus, onAskConfirm, enderecoOrigem }: {
               >
                 Excluir
               </button>
-              <Btn size="sm" variant="success" onClick={() => onAskConfirm({
-                title: `Aprovar rota ${rota.codigoRota}`,
-                description: 'A rota será aprovada e ficará pronta para envio ao motorista.',
-                details: detalhes,
-                confirmLabel: 'Aprovar rota',
-                confirmVariant: 'success',
-              }, () => onUpdateStatus(rota.id, 'aprovada'))}>
-                <svg className="w-[11px] h-[11px]" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M3 8l3.5 3.5L13 5"/>
-                </svg>
-                <span className="font-semibold">Aprovar</span>
-              </Btn>
+              <span title={rota.veiculo ? undefined : 'Defina a placa da carga antes de aprovar'}>
+                <Btn size="sm" variant="success"
+                  disabled={!rota.veiculo}
+                  onClick={() => onAskConfirm({
+                  title: `Aprovar rota ${rota.codigoRota}`,
+                  description: 'A rota será aprovada e ficará pronta para envio ao motorista.',
+                  details: detalhes,
+                  confirmLabel: 'Aprovar rota',
+                  confirmVariant: 'success',
+                }, () => onUpdateStatus(rota.id, 'aprovada'))}>
+                  <svg className="w-[11px] h-[11px]" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M3 8l3.5 3.5L13 5"/>
+                  </svg>
+                  <span className="font-semibold">Aprovar</span>
+                </Btn>
+              </span>
             </>
           )}
           {/* Reabrir carga (Raphael, 04/10): aprovada/enviada volta para
@@ -907,11 +911,12 @@ function codigosDeEntrega(rota: Rota): string[] {
   )].sort((a, b) => a.localeCompare(b, 'pt-BR', { numeric: true }))
 }
 
-function CargaPorVeiculoPanel({ rotas, onExcluir, onReabrir, onAprovarTodas }: {
+function CargaPorVeiculoPanel({ rotas, onExcluir, onReabrir, onAprovarTodas, onResetarDia }: {
   rotas:          Rota[]
   onExcluir?:     (rota: Rota) => void
   onReabrir?:     (rota: Rota) => void
   onAprovarTodas?: () => void
+  onResetarDia?:  () => void
 }) {
   // Lista recolhível (Marcelo, 02/10): cresce uma linha por rota gerada e
   // empurrava a segmentação para baixo. A escolha fica salva no navegador.
@@ -927,8 +932,9 @@ function CargaPorVeiculoPanel({ rotas, onExcluir, onReabrir, onAprovarTodas }: {
     })
   }
 
-  // Rejeitada liberou o veículo — não conta como carga.
-  const linhas = rotas.filter(r => r.veiculo && r.status !== 'rejeitada')
+  // Rejeitada liberou o veículo — não conta como carga. Cargas com "placa a
+  // definir" (sem veículo) entram na lista para não ficarem invisíveis.
+  const linhas = rotas.filter(r => r.status !== 'rejeitada')
   const aguardando = linhas.filter(r => r.status === 'aguardando').length
   if (linhas.length === 0) return null
   return (
@@ -946,14 +952,25 @@ function CargaPorVeiculoPanel({ rotas, onExcluir, onReabrir, onAprovarTodas }: {
           <span className="text-xs font-medium text-base">Carga por veículo</span>
           <span className="text-[10px] text-muted">{linhas.length} carga{linhas.length > 1 ? 's' : ''}</span>
         </button>
-        {aguardando > 0 && onAprovarTodas && (
-          <Btn size="sm" variant="success" onClick={onAprovarTodas}>
-            <svg className="w-[11px] h-[11px]" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M3 8l3.5 3.5L13 5"/>
-            </svg>
-            <span className="font-semibold">Aprovar todas ({aguardando})</span>
-          </Btn>
-        )}
+        <div className="flex items-center gap-2">
+          {onResetarDia && (
+            <button
+              onClick={onResetarDia}
+              title="Apaga as cargas ainda não aprovadas e devolve as NFs para a roteirização"
+              className="text-[11px] text-muted hover:text-danger transition-colors cursor-pointer bg-transparent border-none"
+            >
+              Resetar o dia
+            </button>
+          )}
+          {aguardando > 0 && onAprovarTodas && (
+            <Btn size="sm" variant="success" onClick={onAprovarTodas}>
+              <svg className="w-[11px] h-[11px]" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M3 8l3.5 3.5L13 5"/>
+              </svg>
+              <span className="font-semibold">Aprovar todas ({aguardando})</span>
+            </Btn>
+          )}
+        </div>
       </CardHeader>
       {aberto && (
       <div className="overflow-x-auto">
@@ -967,8 +984,8 @@ function CargaPorVeiculoPanel({ rotas, onExcluir, onReabrir, onAprovarTodas }: {
           </thead>
           <tbody>
             {linhas.map((rota, i) => {
-              const v    = rota.veiculo!
-              const cap  = v.capacidadeKg || 0
+              const v    = rota.veiculo
+              const cap  = v?.capacidadeKg || 0
               const pct  = cap > 0 ? Math.min(100, Math.round((rota.pesoTotal / cap) * 100)) : null
               const alerta = pct !== null && pct >= 95
               const aviso  = pct !== null && pct >= 80 && !alerta
@@ -993,7 +1010,9 @@ function CargaPorVeiculoPanel({ rotas, onExcluir, onReabrir, onAprovarTodas }: {
                     })()}
                   </td>
                   <td className="px-4 py-2 text-xs text-muted">{rota.motorista?.nome ?? '—'}</td>
-                  <td className="px-4 py-2 text-xs font-mono text-base">{rotuloVeiculo(v)}</td>
+                  <td className={cn('px-4 py-2 text-xs font-mono', v ? 'text-base' : 'text-warn-mid font-sans')}>
+                    {v ? rotuloVeiculo(v) : 'placa a definir'}
+                  </td>
                   <td className="px-4 py-2 text-xs tabular-nums text-right text-muted">{rota.pesoTotal.toLocaleString('pt-BR')}</td>
                   <td className="px-4 py-2 text-xs tabular-nums text-right text-muted">{cap ? cap.toLocaleString('pt-BR') : '—'}</td>
                   <td className="px-4 py-2">
@@ -1305,14 +1324,63 @@ export default function RotasPage() {
     })
   }
 
+  // Resetar o dia (Marcelo, 02/10): limpa as cargas que ainda não foram
+  // aprovadas e devolve tudo para a roteirização. Aprovadas/enviadas são
+  // mantidas de propósito — para apagá-las, reabra a carga antes.
+  function pedirResetDoDia() {
+    const apagaveis = routes.filter(r => r.status === 'rascunho' || r.status === 'aguardando')
+    const mantidas  = routes.filter(r => r.status === 'aprovada' || r.status === 'enviada')
+    if (apagaveis.length === 0) {
+      showToast(mantidas.length > 0
+        ? 'Só há cargas aprovadas/enviadas hoje — reabra a carga para poder apagá-la'
+        : 'Não há cargas para apagar hoje')
+      return
+    }
+    const nfs = apagaveis.reduce((acc, r) => acc + r.qtdNotas, 0)
+    setPendingConfirm({
+      action: {
+        title: 'Resetar o dia',
+        description: `${apagaveis.length} carga(s) rascunho/aguardando serão apagadas e ${nfs} NFs voltam para a roteirização, junto com as rotas de entrega e os veículos.`,
+        details: [
+          { label: 'Cargas apagadas',  value: apagaveis.map(r => r.codigoRota).join(' · ') },
+          { label: 'Cargas mantidas',  value: mantidas.length > 0 ? `${mantidas.length} aprovada(s)/enviada(s) — reabra antes se quiser apagar` : 'nenhuma' },
+        ],
+        warning: 'Não dá para desfazer: as cargas apagadas não ficam salvas em lugar nenhum.',
+        confirmLabel: 'Resetar o dia',
+        confirmVariant: 'danger-soft',
+      },
+      execute: async () => {
+        try {
+          const hoje = new Date().toISOString().slice(0, 10)
+          const n = await resetarDia(hoje, usuario?.email ?? undefined)
+          setRoutes(prev => prev.filter(r => r.status === 'aprovada' || r.status === 'enviada'))
+          await refresh()
+          showToast(`✓ Dia resetado — ${n} carga(s) apagada(s)`)
+          addLog('rejeicao', 'dia', `Reset do dia: ${n} carga(s) apagada(s), ${nfs} NFs devolvidas`)
+        } catch (err) {
+          showToast(`Falha ao resetar: ${err instanceof Error ? err.message : 'erro'}`)
+        }
+      },
+    })
+  }
+
   // Aprovar todas as cargas aguardando de uma vez (Marcelo, 02/10).
   function pedirAprovarTodas() {
-    const alvo = routes.filter(r => r.status === 'aguardando')
-    if (alvo.length === 0) return
+    // Carga com "placa a definir" não pode ser aprovada — fica de fora do lote.
+    const semPlaca = routes.filter(r => r.status === 'aguardando' && !r.veiculo).length
+    const alvo = routes.filter(r => r.status === 'aguardando' && r.veiculo)
+    if (alvo.length === 0) {
+      showToast(semPlaca > 0
+        ? `${semPlaca} carga(s) aguardando estão sem placa — defina o veículo antes de aprovar`
+        : 'Nenhuma carga aguardando aprovação')
+      return
+    }
     setPendingConfirm({
       action: {
         title: `Aprovar ${alvo.length} carga${alvo.length > 1 ? 's' : ''}`,
-        description: 'Todas as cargas aguardando aprovação passam para aprovada de uma vez.',
+        description: semPlaca > 0
+          ? `Todas as cargas aguardando com veículo definido passam para aprovada. ${semPlaca} carga(s) com "placa a definir" ficam de fora.`
+          : 'Todas as cargas aguardando aprovação passam para aprovada de uma vez.',
         details: alvo.slice(0, 8).map(r => ({
           label: r.codigoRota,
           value: `${r.qtdNotas} NFs · ${formatPeso(r.pesoTotal)}${r.veiculo ? ` · ${rotuloVeiculo(r.veiculo)}` : ''}`,
@@ -1576,6 +1644,7 @@ export default function RotasPage() {
             onExcluir={pedirExclusaoCarga}
             onReabrir={pedirReaberturaCarga}
             onAprovarTodas={pedirAprovarTodas}
+            onResetarDia={pedirResetDoDia}
           />
         )}
 
