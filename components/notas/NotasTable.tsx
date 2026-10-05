@@ -9,7 +9,8 @@ import { useColunasRedimensionaveis, type ColunaDef } from '@/hooks/useColunasRe
 import { useAppData } from '@/components/providers/AppDataProvider'
 import { useAuth } from '@/components/providers/AuthProvider'
 import { salvarRotaManual, type VeiculoLivre } from '@/lib/webhooks'
-import { listarCapacidades, listarPreferenciasVeiculos, type CapacidadeVeiculo, type PreferenciaVeiculo } from '@/lib/frota'
+import { listarCapacidades, listarPreferenciasVeiculos, listarSugestoesHistorico,
+  type CapacidadeVeiculo, type PreferenciaVeiculo, type SugestaoHistorico } from '@/lib/frota'
 import { formatPeso, formatarCep } from '@/lib/utils'
 import type { NotaFiscal } from '@/types'
 
@@ -191,7 +192,7 @@ const TIPOS_ORDEM = ['Fiorino', 'VUC', '3/4', 'Truck', 'Carreta'] as const
  * veículos livres hoje como `Placa | Sigla | Tipo`, agrupados por tipo.
  * Seleção única — é o veículo que recebe a rota ao salvar.
  */
-function BlocoPlaca({ veiculos, selecionado, onSelect, pesoKg, capacidades, loading, onRefresh, rotasDaCarga, prefs }: {
+function BlocoPlaca({ veiculos, selecionado, onSelect, pesoKg, capacidades, loading, onRefresh, rotasDaCarga, prefs, historico }: {
   veiculos:    VeiculoLivre[]
   selecionado: string | null
   onSelect:    (id: string | null) => void
@@ -203,6 +204,8 @@ function BlocoPlaca({ veiculos, selecionado, onSelect, pesoKg, capacidades, load
   rotasDaCarga: string[]
   /** Cadastro de rotas por veículo (Frota) — Marcelo, 02/10. */
   prefs:        Map<string, { rotas_entrega: string[] }>
+  /** Sugestão aprendida com as cargas já montadas — Raphael, 05/10. */
+  historico:    { rotaEntrega: string; veiculoId: string; cargas: number }[]
 }) {
   const [q, setQ] = useState('')
   const termo = q.trim().toLowerCase()
@@ -224,9 +227,21 @@ function BlocoPlaca({ veiculos, selecionado, onSelect, pesoKg, capacidades, load
   // Esses vêm antes de tudo — é o "sugerido no topo da lista das placas".
   const nrm = (s: string) => s.trim().toUpperCase()
   const rotasAlvo = new Set(rotasDaCarga.map(nrm))
-  const porCadastro = rotasAlvo.size > 0
-    ? lista.filter(v => (prefs.get(v.id)?.rotas_entrega ?? []).some(r => rotasAlvo.has(nrm(r))))
-    : []
+  // Quem já levou essas rotas antes (cargas montadas) — complementa o cadastro.
+  const cargasPorVeiculo = new Map<string, number>()
+  if (rotasAlvo.size > 0) {
+    for (const h of historico) {
+      if (!rotasAlvo.has(nrm(h.rotaEntrega))) continue
+      cargasPorVeiculo.set(h.veiculoId, (cargasPorVeiculo.get(h.veiculoId) ?? 0) + h.cargas)
+    }
+  }
+  const motivo = (v: VeiculoLivre): string | null => {
+    const cadastrado = (prefs.get(v.id)?.rotas_entrega ?? []).some(r => rotasAlvo.has(nrm(r)))
+    if (cadastrado) return 'cadastrado'
+    const cargas = cargasPorVeiculo.get(v.id)
+    return cargas ? `já levou ${cargas}x` : null
+  }
+  const porCadastro = rotasAlvo.size > 0 ? lista.filter(v => motivo(v) !== null) : []
   const idsPorCadastro = new Set(porCadastro.map(v => v.id))
   const sel = veiculos.find(v => v.id === selecionado)
   const ocup = sel && sel.capacidadeKg > 0 ? Math.round(pesoKg / sel.capacidadeKg * 100) : null
@@ -255,10 +270,11 @@ function BlocoPlaca({ veiculos, selecionado, onSelect, pesoKg, capacidades, load
                     const ativo = v.id === selecionado
                     return (
                       <button key={`sug-${v.id}`} onClick={() => onSelect(ativo ? null : v.id)}
-                        title={`${v.rotulo} · cadastrado para esta rota de entrega · ${formatPeso(v.capacidadeKg)}`}
+                        title={`${v.rotulo} · ${motivo(v) === 'cadastrado' ? 'cadastrado para esta rota de entrega' : `já levou esta rota ${cargasPorVeiculo.get(v.id)}x`} · ${formatPeso(v.capacidadeKg)}`}
                         className={cn('flex items-center gap-1 px-1.5 py-[3px] rounded text-[10px] text-left transition-colors cursor-pointer w-full',
                           ativo ? 'bg-primary text-white font-medium' : 'text-primary hover:bg-cream dark:hover:bg-hover')}>
                         <span className="font-mono truncate flex-1">{v.rotulo}</span>
+                        <span className={cn('shrink-0 text-[8px] uppercase tracking-wide', ativo ? 'text-white/70' : 'text-subtle')}>{motivo(v)}</span>
                         <span className={cn('tabular-nums shrink-0 text-[9px]', ativo ? 'text-white/80' : 'text-subtle')}>{formatPeso(v.capacidadeKg)}</span>
                       </button>
                     )
@@ -441,6 +457,9 @@ export function NotasTable({ fonte = 'livres' }: { fonte?: FonteNotas }) {
   // Cadastro de rotas por veículo (Frota) — base da sugestão de placa (Marcelo, 02/10).
   const [prefsVeiculo, setPrefsVeiculo] = useState<Map<string, PreferenciaVeiculo>>(new Map())
   useEffect(() => { listarPreferenciasVeiculos().then(setPrefsVeiculo).catch(() => {}) }, [])
+  // Sugestão aprendida com as cargas já montadas (Raphael, 05/10).
+  const [histVeiculo, setHistVeiculo] = useState<SugestaoHistorico[]>([])
+  useEffect(() => { listarSugestoesHistorico().then(setHistVeiculo).catch(() => {}) }, [])
   // Se outra sessão reservou o veículo escolhido, ele some da lista de livres e a escolha cai.
   const veiculoSelValido = veiculoSel && veiculosLivres.some(v => v.id === veiculoSel) ? veiculoSel : null
 
@@ -563,6 +582,7 @@ export function NotasTable({ fonte = 'livres' }: { fonte?: FonteNotas }) {
                     onRefresh={refreshVeiculosLivres}
                     rotasDaCarga={rotasDaCarga}
                     prefs={prefsVeiculo}
+                    historico={histVeiculo}
                   />
                 </div>
               )}

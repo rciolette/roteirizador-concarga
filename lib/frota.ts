@@ -372,6 +372,34 @@ export async function listarPreferenciasVeiculos(): Promise<Map<string, Preferen
   return m
 }
 
+/**
+ * Sugestão aprendida com o histórico (Raphael, 05/10): qual veículo costuma
+ * levar cada rota de entrega, contado nas cargas já montadas. Complementa o
+ * cadastro manual de `veiculo_preferencias` — o cadastro sempre tem prioridade.
+ */
+export interface SugestaoHistorico {
+  rotaEntrega: string
+  veiculoId:   string
+  placa:       string | null
+  cargas:      number
+  nfs:         number
+  ultima:      string | null
+}
+
+export async function listarSugestoesHistorico(desde?: string): Promise<SugestaoHistorico[]> {
+  const { data, error } = await getSupabaseBrowser()
+    .rpc('rota_veiculo_sugestoes', { p_desde: desde ?? null })
+  if (error) throw error
+  return ((data ?? []) as Record<string, unknown>[]).map(r => ({
+    rotaEntrega: String(r.rota_entrega ?? ''),
+    veiculoId:   String(r.veiculo_id ?? ''),
+    placa:       (r.placa as string | null) ?? null,
+    cargas:      Number(r.cargas ?? 0),
+    nfs:         Number(r.nfs ?? 0),
+    ultima:      (r.ultima as string | null) ?? null,
+  }))
+}
+
 export async function salvarPreferenciaVeiculo(p: PreferenciaVeiculo): Promise<void> {
   const { error } = await getSupabaseBrowser().from('veiculo_preferencias').upsert({
     veiculo_id: p.veiculo_id, regioes: p.regioes, rotas_entrega: p.rotas_entrega,
