@@ -470,7 +470,7 @@ function RouteCard({ rota, onUpdateStatus, onAskConfirm, enderecoOrigem }: {
       </div>
 
       {/* 4. BOTÕES */}
-      {(isActionable || rota.status === 'aprovada') && (
+      {(isActionable || rota.status === 'aprovada' || rota.status === 'enviada') && (
         <div className="px-3.5 pb-2.5 pt-2 flex gap-1.5 justify-end border-t border-[0.5px] border-[var(--border-faint)]">
           {isActionable && (
             <>
@@ -499,6 +499,26 @@ function RouteCard({ rota, onUpdateStatus, onAskConfirm, enderecoOrigem }: {
                 <span className="font-semibold">Aprovar</span>
               </Btn>
             </>
+          )}
+          {/* Reabrir carga (Raphael, 04/10): aprovada/enviada volta para
+              aguardando, que é o único estado em que ela pode ser editada ou
+              excluída. As reservas de NF, rota de entrega e veículo continuam
+              valendo enquanto a carga estiver aberta. */}
+          {(rota.status === 'aprovada' || rota.status === 'enviada') && (
+            <button
+              onClick={() => onAskConfirm({
+                title: `Reabrir carga ${rota.codigoRota}`,
+                description: rota.status === 'enviada'
+                  ? 'A carga volta para "aguardando" para ser editada. Ela já tinha sido marcada como enviada — avise o motorista se a rota mudar.'
+                  : 'A carga volta para "aguardando", onde você pode trocar o veículo, remover ou mover notas, e excluí-la se precisar.',
+                details: detalhes,
+                confirmLabel: 'Reabrir carga',
+                confirmVariant: 'warn-soft',
+              }, () => onUpdateStatus(rota.id, 'aguardando'))}
+              className="px-3 py-[5px] text-[11px] text-muted hover:text-warn transition-colors cursor-pointer bg-transparent border-none"
+            >
+              Reabrir
+            </button>
           )}
           {rota.status === 'aprovada' && (
             <Btn size="sm" variant="primary" onClick={() => onAskConfirm({
@@ -887,9 +907,10 @@ function codigosDeEntrega(rota: Rota): string[] {
   )].sort((a, b) => a.localeCompare(b, 'pt-BR', { numeric: true }))
 }
 
-function CargaPorVeiculoPanel({ rotas, onExcluir, onAprovarTodas }: {
+function CargaPorVeiculoPanel({ rotas, onExcluir, onReabrir, onAprovarTodas }: {
   rotas:          Rota[]
   onExcluir?:     (rota: Rota) => void
+  onReabrir?:     (rota: Rota) => void
   onAprovarTodas?: () => void
 }) {
   // Lista recolhível (Marcelo, 02/10): cresce uma linha por rota gerada e
@@ -996,10 +1017,16 @@ function CargaPorVeiculoPanel({ rotas, onExcluir, onAprovarTodas }: {
                       >
                         Excluir
                       </button>
+                    ) : onReabrir && (rota.status === 'aprovada' || rota.status === 'enviada') ? (
+                      <button
+                        onClick={() => onReabrir(rota)}
+                        title={`Carga ${rota.status} — reabra para editar ou excluir`}
+                        className="text-[11px] text-muted hover:text-warn transition-colors cursor-pointer bg-transparent border-none"
+                      >
+                        Reabrir
+                      </button>
                     ) : (
-                      <span className="text-[10px] text-subtle" title={`Carga ${rota.status} — não pode ser excluída`}>
-                        {rota.status}
-                      </span>
+                      <span className="text-[10px] text-subtle">{rota.status}</span>
                     )}
                   </td>
                 </tr>
@@ -1222,13 +1249,16 @@ export default function RotasPage() {
     // está definida. "Enviada" segue como marcação manual do operador.
     if (rota) {
       const msgs: Partial<Record<RouteStatus, string>> = {
-        aprovada:  `✓ Rota ${rota.codigoRota} aprovada`,
-        rejeitada: `Rota ${rota.codigoRota} excluída`,
-        enviada:   `✓ Rota ${rota.codigoRota} marcada como enviada`,
+        aprovada:   `✓ Rota ${rota.codigoRota} aprovada`,
+        rejeitada:  `Rota ${rota.codigoRota} excluída`,
+        enviada:    `✓ Rota ${rota.codigoRota} marcada como enviada`,
+        aguardando: `Carga ${rota.codigoRota} reaberta para edição`,
       }
       showToast(msgs[status] || '')
 
-      if (status === 'aprovada')
+      if (status === 'aguardando')
+        addLog('aprovacao', rota.codigoRota, `Carga reaberta para edição (estava ${rota.status})`)
+      else if (status === 'aprovada')
         addLog('aprovacao', rota.codigoRota, `Rota aprovada · ${rota.motorista?.nome} · ${formatPeso(rota.pesoTotal)}`)
       else if (status === 'rejeitada')
         addLog('rejeicao', rota.codigoRota, 'Rota excluída (nada salvo)')
@@ -1252,6 +1282,26 @@ export default function RotasPage() {
         confirmVariant: 'danger-soft',
       },
       execute: () => updateRouteStatus(rota.id, 'rejeitada'),
+    })
+  }
+
+  // Reabrir carga aprovada/enviada para edição (Raphael, 04/10).
+  function pedirReaberturaCarga(rota: Rota) {
+    setPendingConfirm({
+      action: {
+        title: `Reabrir carga ${rota.codigoRota}`,
+        description: rota.status === 'enviada'
+          ? 'A carga volta para "aguardando" para ser editada. Ela já tinha sido marcada como enviada — avise o motorista se a rota mudar.'
+          : 'A carga volta para "aguardando", onde você pode trocar o veículo, remover ou mover notas, e excluí-la se precisar.',
+        details: [
+          { label: 'Rotas de entrega', value: codigosDeEntrega(rota).join(' · ') || '—' },
+          { label: 'Veículo',          value: rota.veiculo ? rotuloVeiculo(rota.veiculo) : '—' },
+          { label: 'Conteúdo',         value: `${rota.qtdNotas} NFs · ${formatPeso(rota.pesoTotal)}` },
+        ],
+        confirmLabel: 'Reabrir carga',
+        confirmVariant: 'warn-soft',
+      },
+      execute: () => updateRouteStatus(rota.id, 'aguardando'),
     })
   }
 
@@ -1524,6 +1574,7 @@ export default function RotasPage() {
           <CargaPorVeiculoPanel
             rotas={routes}
             onExcluir={pedirExclusaoCarga}
+            onReabrir={pedirReaberturaCarga}
             onAprovarTodas={pedirAprovarTodas}
           />
         )}

@@ -204,7 +204,15 @@ export function useNotasFiscais(defaultPageSize: PageSize = 25, fonte: FonteNota
     const usoPorNf = new Map<string, { rotulo: string; motivo: string }>()
     for (const n of nfsPendentes) {
       const porNf = reservas.nfs.get(n.numnfs)
-      const porRe = rotaEntregaReservavel(n.rota) ? reservas.rotasEntrega.get(n.rota.trim().toUpperCase()) : undefined
+      // Regra do Raphael (04/10): a reserva da ROTA DE ENTREGA continua puxando
+      // as notas que ficaram de fora da carga — menos as que foram deixadas de
+      // fora DE PROPÓSITO. Nota desmarcada pelo operador ou barrada por regra
+      // (Solução SAC pendente ≠ reentrega) segue disponível em Pendentes para
+      // tratamento separado, em vez de ficar presa em "Em uso".
+      const deixadaDeFora = nfsDesmarcadas.has(n.numnfs) || temAlertaSac(n)
+      const porRe = !porNf && !deixadaDeFora && rotaEntregaReservavel(n.rota)
+        ? reservas.rotasEntrega.get(n.rota.trim().toUpperCase())
+        : undefined
       const r = porNf ?? porRe
       if (r) {
         emUso.push(n)
@@ -217,7 +225,7 @@ export function useNotasFiscais(defaultPageSize: PageSize = 25, fonte: FonteNota
       }
     }
     return { livres, emUso, usoPorNf }
-  }, [nfsPendentes, reservas])
+  }, [nfsPendentes, reservas, nfsDesmarcadas])
   const origem = fonte === 'livres' ? livres : emUso
   const [page, setPage] = useState(0)
   const [pageSize, setPageSizeState] = useState<PageSize>(defaultPageSize)
