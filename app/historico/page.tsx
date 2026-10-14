@@ -6,7 +6,7 @@ import { MapaRota } from '@/components/ui/MapaRota'
 import { cn, formatPeso } from '@/lib/utils'
 import { useCopyToClipboard } from '@/lib/hooks'
 import { useAppData } from '@/components/providers/AppDataProvider'
-import { carregarRotasPorPeriodo } from '@/lib/webhooks'
+import { carregarRotasPorPeriodo, listarCargasExcluidas, type CargaExcluida } from '@/lib/webhooks'
 import { gerarLinkMapsUrl } from '@/lib/maps'
 import { exportarCSV, exportarXLSX, rotasParaLinhas } from '@/lib/export'
 import type { Rota, RouteStatus } from '@/types'
@@ -169,6 +169,7 @@ export default function HistoricoPage() {
   const [rotasPeriodo,    setRotasPeriodo]    = useState<Rota[]>([])
   const [loading,         setLoading]         = useState(false)
   const [visibleCount,    setVisibleCount]    = useState(25)
+  const [excluidas,       setExcluidas]       = useState<CargaExcluida[]>([])
   const { rotas: rotasHoje } = useAppData()
 
   // Carrega o período sempre que as datas mudarem (debounce 400ms)
@@ -184,6 +185,8 @@ export default function HistoricoPage() {
     } finally {
       setLoading(false)
     }
+    // Trilha das cargas excluídas: elas somem de `rotas`, mas o registro fica.
+    try { setExcluidas(await listarCargasExcluidas(inicio, fim)) } catch { setExcluidas([]) }
   }, [])
 
   useEffect(() => {
@@ -406,6 +409,45 @@ export default function HistoricoPage() {
             </div>
           )}
         </Card>
+
+        {/* Cargas excluídas: saem de "Rotas", mas o registro fica (Raphael,
+            14/10 — "não apague tudo do histórico"). */}
+        {excluidas.length > 0 && (
+          <Card className="mt-3">
+            <div className="px-4 py-2.5 border-b border-[0.5px] border-[var(--border-faint)] flex items-center gap-2">
+              <span className="text-xs font-medium text-base">Cargas excluídas no período</span>
+              <span className="text-[10px] text-muted">{excluidas.length}</span>
+            </div>
+            <table className="w-full border-collapse text-[11px]">
+              <thead>
+                <tr className="text-left text-muted">
+                  <th className="px-3 py-2 font-medium">Data</th>
+                  <th className="px-3 py-2 font-medium">Carga</th>
+                  <th className="px-3 py-2 font-medium">Placa</th>
+                  <th className="px-3 py-2 font-medium">NFs</th>
+                  <th className="px-3 py-2 font-medium">Estava em</th>
+                  <th className="px-3 py-2 font-medium">Excluída em</th>
+                  <th className="px-3 py-2 font-medium">Por</th>
+                </tr>
+              </thead>
+              <tbody>
+                {excluidas.map(e => (
+                  <tr key={e.id} className="border-t border-[0.5px] border-[var(--border-faint)]">
+                    <td className="px-3 py-[7px] text-muted tabular-nums whitespace-nowrap">{e.data ?? '—'}</td>
+                    <td className="px-3 py-[7px] font-mono">{e.codigo ?? '—'}</td>
+                    <td className="px-3 py-[7px] text-muted">{e.placa ?? 'placa a definir'}</td>
+                    <td className="px-3 py-[7px] tabular-nums">{e.qtdNotas ?? '—'}</td>
+                    <td className="px-3 py-[7px] text-muted">{e.statusDe ?? '—'}</td>
+                    <td className="px-3 py-[7px] text-muted whitespace-nowrap">
+                      {new Date(e.excluidaEm).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                    </td>
+                    <td className="px-3 py-[7px] text-muted">{e.usuario ?? '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Card>
+        )}
       </div>
 
       {rotaSelecionada && (

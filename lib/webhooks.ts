@@ -138,6 +138,43 @@ export async function carregarRotasPorPeriodo(dataInicio: string, dataFim: strin
   return ((rows ?? []) as unknown as Record<string, unknown>[]).map(mapRota)
 }
 
+// ── Cargas excluídas no período ───────────────────────────────────────────────
+// O histórico sobrevive à exclusão (Raphael, 14/10): rota_excluir grava uma
+// linha 'excluida' em historico_rotas com código/data/placa/qtd congelados, e
+// a FK vira NULL quando a rota some. Isto lê essa trilha.
+
+export interface CargaExcluida {
+  id:        string
+  codigo:    string | null
+  data:      string | null
+  placa:     string | null
+  qtdNotas:  number | null
+  statusDe:  string | null
+  usuario:   string | null
+  excluidaEm: string
+}
+
+export async function listarCargasExcluidas(dataInicio: string, dataFim: string): Promise<CargaExcluida[]> {
+  const { data: rows, error } = await sb()
+    .from('historico_rotas')
+    .select('id, codigo_rota, data, veiculo_placa, qtd_notas, status_de, usuario, criado_em')
+    .eq('status_para', 'excluida')
+    .gte('data', dataInicio)
+    .lte('data', dataFim)
+    .order('criado_em', { ascending: false })
+  if (error) throw error
+  return ((rows ?? []) as Record<string, unknown>[]).map(r => ({
+    id:         String(r.id),
+    codigo:     (r.codigo_rota as string) ?? null,
+    data:       (r.data as string) ?? null,
+    placa:      (r.veiculo_placa as string) ?? null,
+    qtdNotas:   (r.qtd_notas as number) ?? null,
+    statusDe:   (r.status_de as string) ?? null,
+    usuario:    (r.usuario as string) ?? null,
+    excluidaEm: String(r.criado_em),
+  }))
+}
+
 // ── Veículos livres do dia (RPC veiculos_livres) ──────────────────────────────
 // Só veículos ativos, disponíveis na data, com motorista e SEM rota ativa.
 // O banco é a fonte: a lista já reflete reservas feitas por outras sessões.
