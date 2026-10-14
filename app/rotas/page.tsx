@@ -49,7 +49,13 @@ const TIPO_PILL: Record<LogEntry['tipo'], string> = {
   geracao:   'bg-purple-bg text-purple',
 }
 
-const STATUS_FILTERS: { label: string; value: RouteStatus | 'todos' }[] = [
+// "Em aberto" é o filtro padrão (Raphael, 14/10): a página principal mostra só
+// o que ainda está em cima da mesa. Aprovada/enviada saem da vista mas NÃO são
+// apagadas — ficam no banco e a um clique de distância no contador abaixo.
+type StatusFiltro = RouteStatus | 'todos' | 'abertas'
+
+const STATUS_FILTERS: { label: string; value: StatusFiltro }[] = [
+  { label: 'Em aberto',  value: 'abertas' },
   { label: 'Todas',      value: 'todos' },
   { label: 'Rascunho',   value: 'rascunho' },
   { label: 'Aguardando', value: 'aguardando' },
@@ -57,6 +63,8 @@ const STATUS_FILTERS: { label: string; value: RouteStatus | 'todos' }[] = [
   { label: 'Enviadas',   value: 'enviada' },
   { label: 'Rejeitadas', value: 'rejeitada' },
 ]
+
+const EM_ABERTO: RouteStatus[] = ['rascunho', 'aguardando']
 
 // ── Gerar Rotas Dialog ────────────────────────────────────────────────────────
 type GerarRotasFormState = {
@@ -1171,7 +1179,7 @@ export default function RotasPage() {
       : nfRows.filter(r => !nfsDesmarcadas.has(String(r.NUMNFS ?? ''))),
     [nfRows, nfsDesmarcadas],
   )
-  const [filter,         setFilter]         = useState<RouteStatus | 'todos'>('todos')
+  const [filter,         setFilter]         = useState<StatusFiltro>('abertas')
   const [busca,          setBusca]          = useState('')
   const [ordenar,        setOrdenar]        = useState('')
   const [tabPendentes,   setTabPendentes]   = useState<'pendentes' | 'srota' | 'agendados' | 'em_uso'>('pendentes')
@@ -1228,7 +1236,10 @@ export default function RotasPage() {
     : undefined
 
   const filtered = useMemo(() => {
-    let result = filter === 'todos' ? routes : routes.filter(r => r.status === filter)
+    let result =
+      filter === 'todos'   ? routes
+      : filter === 'abertas' ? routes.filter(r => EM_ABERTO.includes(r.status))
+      : routes.filter(r => r.status === filter)
     if (busca) {
       const q = busca.toLowerCase()
       result = result.filter(r =>
@@ -1245,9 +1256,15 @@ export default function RotasPage() {
     return result
   }, [routes, filter, busca, ordenar])
 
-  function countByStatus(s: RouteStatus | 'todos') {
-    return s === 'todos' ? routes.length : routes.filter(r => r.status === s).length
+  function countByStatus(s: StatusFiltro) {
+    if (s === 'todos')   return routes.length
+    if (s === 'abertas') return routes.filter(r => EM_ABERTO.includes(r.status)).length
+    return routes.filter(r => r.status === s).length
   }
+
+  // Contador discreto do que saiu da vista por já estar aprovado/enviado.
+  const qtdAprovadas = routes.filter(r => r.status === 'aprovada').length
+  const qtdEnviadas  = routes.filter(r => r.status === 'enviada').length
 
   function addLog(tipo: LogEntry['tipo'], rota: string, descricao: string) {
     setLog(prev => [{
@@ -1630,6 +1647,22 @@ export default function RotasPage() {
             </button>
           )}
         </div>
+        {/* Linha discreta: o que saiu da vista por já estar aprovado/enviado
+            continua no banco e no histórico — um clique traz de volta. */}
+        {filter === 'abertas' && (qtdAprovadas + qtdEnviadas) > 0 && (
+          <div className="basis-full text-[11px] text-muted">
+            {[
+              qtdAprovadas > 0 ? `${qtdAprovadas} aprovada${qtdAprovadas > 1 ? 's' : ''}` : null,
+              qtdEnviadas  > 0 ? `${qtdEnviadas} enviada${qtdEnviadas > 1 ? 's' : ''}`   : null,
+            ].filter(Boolean).join(' · ')} hoje — fora desta lista.{' '}
+            <button
+              onClick={() => setFilter('todos')}
+              className="underline cursor-pointer bg-transparent border-none text-primary p-0 text-[11px]"
+            >
+              ver todas
+            </button>
+          </div>
+        )}
       </div>
       )}
 

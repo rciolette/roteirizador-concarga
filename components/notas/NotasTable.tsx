@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import dynamic from 'next/dynamic'
 import { cn } from '@/lib/utils'
 import { useNotasFiscais, filtrosPadrao, type PageSize, type NotasFiltros, type FonteNotas } from '@/hooks/useNotasFiscais'
@@ -76,25 +77,50 @@ function fmtData(iso: string | null): string {
  * inteira (Marcelo/Raphael, 03/09).
  */
 function ObservacaoCelula({ texto }: { texto: string | null }) {
-  const [aberto, setAberto] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const balaoRef = useRef<HTMLDivElement>(null)
+  const aberto = pos !== null
 
+  // O balão vai num PORTAL com position:fixed. Dentro da célula ele era
+  // cortado pelo `overflow-hidden` do <td> e pelo scroll da tabela — por isso
+  // "não abria" nada ao clicar (Raphael, 14/10).
   useEffect(() => {
     if (!aberto) return
     function fecha(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setAberto(false)
+      const alvo = e.target as Node
+      if (btnRef.current?.contains(alvo) || balaoRef.current?.contains(alvo)) return
+      setPos(null)
     }
+    function esc(e: KeyboardEvent) { if (e.key === 'Escape') setPos(null) }
     document.addEventListener('mousedown', fecha)
-    return () => document.removeEventListener('mousedown', fecha)
+    document.addEventListener('keydown', esc)
+    window.addEventListener('scroll', () => setPos(null), true)
+    window.addEventListener('resize', () => setPos(null))
+    return () => {
+      document.removeEventListener('mousedown', fecha)
+      document.removeEventListener('keydown', esc)
+    }
   }, [aberto])
 
   if (!texto || texto === '—') return <span className="text-subtle">—</span>
 
+  function abrir() {
+    if (aberto) { setPos(null); return }
+    const r = btnRef.current?.getBoundingClientRect()
+    if (!r) return
+    const LARGURA = 340
+    const left = Math.min(Math.max(8, r.left), window.innerWidth - LARGURA - 8)
+    const abaixo = window.innerHeight - r.bottom > 240
+    setPos({ top: abaixo ? r.bottom + 6 : Math.max(8, r.top - 246), left })
+  }
+
   return (
-    <div className="relative flex items-center gap-1 min-w-0" ref={ref}>
+    <div className="flex items-center gap-1 min-w-0">
       {/* Botão sempre visível quando há texto (espec, item 1): o balão mostra o conteúdo integral. */}
       <button
-        onClick={() => setAberto(v => !v)}
+        ref={btnRef}
+        onClick={abrir}
         title="Ver observação completa"
         className={cn(
           'shrink-0 text-[9px] px-1 rounded border border-[0.5px] cursor-pointer font-medium',
@@ -103,12 +129,20 @@ function ObservacaoCelula({ texto }: { texto: string | null }) {
       >
         ⤢
       </button>
-      <span className="truncate whitespace-nowrap">{texto}</span>
-      {aberto && (
-        <div className="absolute z-40 top-full right-0 mt-1 w-[320px] max-h-[220px] overflow-y-auto bg-surface border border-[0.5px] border-[var(--border-light)] rounded-lg shadow-lg p-2.5">
-          <div className="text-[10px] text-muted mb-1 font-medium">Observação</div>
+      <span className="truncate whitespace-nowrap" title={texto}>{texto}</span>
+      {pos && typeof document !== 'undefined' && createPortal(
+        <div
+          ref={balaoRef}
+          style={{ top: pos.top, left: pos.left, width: 340 }}
+          className="fixed z-[200] max-h-[240px] overflow-y-auto bg-surface border border-[0.5px] border-[var(--border-light)] rounded-lg shadow-xl p-2.5"
+        >
+          <div className="flex items-center justify-between mb-1">
+            <div className="text-[10px] text-muted font-medium">Observação</div>
+            <button onClick={() => setPos(null)} className="text-[11px] text-muted hover:text-base cursor-pointer leading-none">✕</button>
+          </div>
           <div className="text-[11px] text-base whitespace-pre-wrap break-words">{texto}</div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   )
