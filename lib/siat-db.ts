@@ -10,17 +10,41 @@ const config: sql.config = {
   options: {
     encrypt:                false,
     trustServerCertificate: true,
-    connectTimeout:         15_000,
-    requestTimeout:         60_000,
+    // 15s era curto demais: a primeira conexão a partir da Vercel esbarrava no
+    // limite e o operador via "Failed to connect ... in 15000ms" (14/10).
+    connectTimeout:         30_000,
+    requestTimeout:         120_000,
   },
+  pool: { max: 4, min: 0, idleTimeoutMillis: 30_000 },
 }
 
 let pool: sql.ConnectionPool | null = null
 
+/** Conecta ao SIAT com uma segunda tentativa: a falha costuma ser transitória. */
 export async function getSiatPool(): Promise<sql.ConnectionPool> {
   if (pool && pool.connected) return pool
-  pool = await new sql.ConnectionPool(config).connect()
-  return pool
+  if (pool) { try { await pool.close() } catch { /* já caiu */ } pool = null }
+
+  let ultimoErro: unknown
+  for (let tentativa = 1; tentativa <= 2; tentativa++) {
+    try {
+      const novo = new sql.ConnectionPool(config)
+      // Sem este handler, uma queda da conexão derruba o processo inteiro.
+      novo.on('error', () => { pool = null })
+      pool = await novo.connect()
+      return pool
+    } catch (err) {
+      ultimoErro = err
+      pool = null
+      if (tentativa === 1) await new Promise(r => setTimeout(r, 1_500))
+    }
+  }
+
+  const detalhe = ultimoErro instanceof Error ? ultimoErro.message : String(ultimoErro)
+  throw new Error(
+    `Não consegui falar com o SIAT (${config.server}:${config.port}). ` +
+    `Verifique se o servidor está no ar e se o IP do app está liberado no firewall. Detalhe: ${detalhe}`,
+  )
 }
 
 export async function queryNFsPendentes(): Promise<SiatRow[]> {

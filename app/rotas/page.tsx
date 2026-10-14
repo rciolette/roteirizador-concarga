@@ -10,7 +10,6 @@ import { NotasTable } from '@/components/notas/NotasTable'
 import { AgendadosHojeTable } from '@/components/ui/AgendadosHojeTable'
 import { MapaRota } from '@/components/ui/MapaRota'
 import { ImportarSIATButton } from '@/components/ui/ImportarSIATButton'
-import { SiatImportDialog } from '@/components/ui/SiatImportDialog'
 import { webhookGerarRotas, mapRetornoGerarRotas, salvarRotasSupabase, salvarNfsNaoAlocadas, atualizarStatusRota, excluirRota, carregarRotasSupabase, aguardarRotasGeradas, Prioridade, MotoristaPayload, VeiculoDisponivel, desvincularNotasDaRota, moverNotasParaRota, definirVeiculoDaRota, resetarDia } from '@/lib/webhooks'
 import { gerarLinkMapsUrl } from '@/lib/maps'
 import { baixarAcertoDeCanhoto } from '@/lib/acerto-canhoto'
@@ -1198,7 +1197,7 @@ export default function RotasPage() {
   // devolve lista vazia e sobrescreve o que o AppDataProvider já carregou.
   // Pedido do Marcelo (11/08/26, item 4): as notas NÃO são mais importadas
   // automaticamente ao entrar em "Rotas do dia" — só via botão manual
-  // "Importar NFs" (ImportarSIATButton / SiatImportDialog).
+  // "Importar NFs" (ImportarSIATButton), que importa tudo de uma vez.
   useEffect(() => {
     if (!usuario) return
     refreshVeiculos()
@@ -1209,7 +1208,6 @@ export default function RotasPage() {
   const [toast,          setToast]          = useState('')
   const [log,            setLog]            = useState<LogEntry[]>([])
   const [pendingConfirm, setPendingConfirm] = useState<{ action: ConfirmAction; execute: () => void } | null>(null)
-  const [importDialog,   setImportDialog]   = useState(false)
   const [enderecoOrigem, setEnderecoOrigem] = useState<string | null>(null)
   const [capacidades,    setCapacidades]    = useState<CapacidadeVeiculo[]>([])
   const [showPrevisao,   setShowPrevisao]   = useState(false)
@@ -1576,7 +1574,8 @@ export default function RotasPage() {
             : `Importe o SIAT para carregar as rotas de hoje · ${new Date().toLocaleDateString('pt-BR')}`}
         >
           <ExportMenuRotas rotas={routes} onErro={showToast} />
-          <ImportarSIATButton onClick={() => setImportDialog(true)} running={nfImportState.running} label="Importar NFs" loadingLabel="Importando..." />
+          {/* Sem popup e sem filtro (Raphael, 14/10): importa todas as pendentes. */}
+          <ImportarSIATButton onClick={() => importarNFs()} running={nfImportState.running} label="Importar NFs" loadingLabel="Importando..." />
 
           {generating ? (
             <Btn variant="primary" disabled>
@@ -1868,13 +1867,6 @@ export default function RotasPage() {
       </div>
 
       {showDialog && <GerarRotasDialog onClose={() => setShowDialog(false)} onConfirm={handleConfirm} veiculos={veiculos} atividade={motoristasAtividade} />}
-
-      {importDialog && (
-        <SiatImportDialog
-          onClose={() => setImportDialog(false)}
-          onConfirm={f => { setImportDialog(false); importarNFs(f) }}
-        />
-      )}
 
       {pendingConfirm && (
         <ConfirmDialog

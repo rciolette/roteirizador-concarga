@@ -3,7 +3,6 @@ import { useMemo, useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
 import { Topbar, MetricCard, Card, CardHeader, Btn, ImportBar } from '@/components/ui'
 import { ImportarSIATButton } from '@/components/ui/ImportarSIATButton'
-import { SiatImportDialog } from '@/components/ui/SiatImportDialog'
 import dynamic from 'next/dynamic'
 
 const MapaDashboard = dynamic(
@@ -21,7 +20,6 @@ import type { ClientType } from '@/types'
 
 export default function Page() {
   const { nfImportState, importarNFs, dismissNFImport, rotas, veiculos, loadingRotas, nfsPendentes } = useAppData()
-  const [importDialog, setImportDialog] = useState(false)
 
   const summary = nfImportState.summary
   const importResult = summary
@@ -122,7 +120,9 @@ export default function Page() {
           title="Dashboard"
           sub={new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
         >
-          <ImportarSIATButton onClick={() => setImportDialog(true)} running={nfImportState.running} />
+          {/* Sem popup e sem filtro (Raphael, 14/10): o clique já importa todas
+              as NFs pendentes — a API ignorava os filtros do diálogo de qualquer forma. */}
+          <ImportarSIATButton onClick={() => importarNFs()} running={nfImportState.running} />
           <Link href="/rotas">
             <Btn variant="primary" size="sm">Montar rotas →</Btn>
           </Link>
@@ -363,12 +363,6 @@ export default function Page() {
         </Link>
       </div>
 
-      {importDialog && (
-        <SiatImportDialog
-          onClose={() => setImportDialog(false)}
-          onConfirm={f => { setImportDialog(false); importarNFs(f) }}
-        />
-      )}
     </div>
   )
 }

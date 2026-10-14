@@ -3,7 +3,6 @@ import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Topbar, Card, CardHeader, Btn, ImportBar, TextInput, TextArea } from '@/components/ui'
 import { ImportarSIATButton } from '@/components/ui/ImportarSIATButton'
-import { SiatImportDialog } from '@/components/ui/SiatImportDialog'
 import { DEFAULT_CONFIG } from '@/lib/data'
 import { AppConfig, InstrucaoRota } from '@/types'
 import { useAppData } from '@/components/providers/AppDataProvider'
@@ -84,7 +83,6 @@ export default function ConfiguracoesPage() {
   const [webhooks, setWebhooks] = useState<WebhookConfig>({ gerarRotasWebhookUrl: '' })
   const [saved, setSaved] = useState(false)
   const [hasChanges, setHasChanges] = useState(false)
-  const [importDialog, setImportDialog] = useState(false)
   const initialRender = useRef(true)
 
   // Acessos
@@ -253,7 +251,8 @@ export default function ConfiguracoesPage() {
     <div>
       <div className="sticky top-0 z-10">
         <Topbar title="Configurações" sub="Conexão, regras, frota e instruções da IA">
-          <ImportarSIATButton onClick={() => setImportDialog(true)} running={nfImportState.running} label="Importar NFs" loadingLabel="Importando..." />
+          {/* Sem popup e sem filtro (Raphael, 14/10): importa todas as pendentes. */}
+          <ImportarSIATButton onClick={() => importarNFs()} running={nfImportState.running} label="Importar NFs" loadingLabel="Importando..." />
           <Btn onClick={handleRestaurarPadrao}>Restaurar padrões</Btn>
           <Btn variant="primary" onClick={handleSave}>{saved ? '✓ Salvo!' : 'Salvar configurações'}</Btn>
         </Topbar>
@@ -634,9 +633,6 @@ export default function ConfiguracoesPage() {
         )}
       </div>
 
-      {importDialog && (
-        <SiatImportDialog onClose={() => setImportDialog(false)} onConfirm={f => { setImportDialog(false); importarNFs(f) }} />
-      )}
 
       {hasChanges && (
         <div className="fixed bottom-0 left-0 right-0 z-50 flex items-center justify-end gap-3 px-6 py-3 bg-surface border-t border-[0.5px] border-[var(--border-subtle)] shadow-lg">
