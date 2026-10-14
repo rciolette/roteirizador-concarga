@@ -8,6 +8,7 @@ import { SidebarProvider } from '@/components/providers/SidebarProvider'
 import { OnboardingProvider } from '@/components/providers/OnboardingProvider'
 import { WelcomeModal } from '@/components/onboarding/WelcomeModal'
 import { TourSpotlight } from '@/components/onboarding/TourSpotlight'
+import { SolicitarEdicoes } from '@/components/ui/SolicitarEdicoes'
 
 export const metadata: Metadata = {
   title: 'Concarga — Roteirizador',
@@ -33,6 +34,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   </div>
                   <WelcomeModal />
                   <TourSpotlight />
+                  {/* Canal privado Raphael ↔ Marcelo: o botão só aparece para
+                      os e-mails de lib/solicitacoes (14/10). */}
+                  <SolicitarEdicoes />
                 </SidebarProvider>
               </OnboardingProvider>
             </AppDataProvider>
