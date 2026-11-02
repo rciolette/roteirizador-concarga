@@ -1,6 +1,6 @@
 'use client'
 import { useCallback, useEffect, useState } from 'react'
-import { cn } from '@/lib/utils'
+import { cn, hojeISO } from '@/lib/utils'
 import { Btn, TextInput, TextArea, Select } from '@/components/ui'
 import { useAuth } from '@/components/providers/AuthProvider'
 import {
@@ -119,7 +119,7 @@ export function SolicitarEdicoes() {
     const blob = new Blob([solicitacoesParaMarkdown(itens)], { type: 'text/markdown;charset=utf-8' })
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
-    a.download = `solicitacoes-edicao-${new Date().toISOString().slice(0, 10)}.md`
+    a.download = `solicitacoes-edicao-${hojeISO()}.md`
     a.click()
     URL.revokeObjectURL(a.href)
   }

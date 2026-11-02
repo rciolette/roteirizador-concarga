@@ -4,15 +4,15 @@ import { useRouter } from 'next/navigation'
 import { Topbar, Card, CardHeader, Btn, ImportBar, TextInput, TextArea } from '@/components/ui'
 import { ImportarSIATButton } from '@/components/ui/ImportarSIATButton'
 import { DEFAULT_CONFIG } from '@/lib/data'
-import { AppConfig, InstrucaoRota } from '@/types'
+import { AppConfig } from '@/types'
 import { useAppData } from '@/components/providers/AppDataProvider'
 import { useAuth } from '@/components/providers/AuthProvider'
-import { salvarConfig, salvarWebhooks, carregarWebhooks, type WebhookConfig } from '@/lib/config-store'
+import { salvarConfig } from '@/lib/config-store'
 import { cn } from '@/lib/utils'
 import { GradeCidadesTable } from '@/components/ui/GradeCidadesTable'
-import { AgenteRoteirizadorCard } from '@/components/ui/AgenteRoteirizadorCard'
 import { RotasCadastradasTable } from '@/components/ui/RotasCadastradasTable'
 import { LogsAtividadeTable } from '@/components/ui/LogsAtividadeTable'
+import { listarCapacidades, atualizarCapacidade, type CapacidadeVeiculo } from '@/lib/frota'
 import type { Perfil } from '@/lib/auth'
 
 const DIAS = ['seg', 'ter', 'qua', 'qui', 'sex', 'sab'] as const
@@ -70,6 +70,79 @@ interface ConviteItem {
   aceito_em: string | null
 }
 
+/**
+ * Capacidade por tipo de veículo — lê e grava `veiculo_capacidades`, que é a
+ * tabela de onde a grade de notas tira a sugestão de tipo e o cálculo de
+ * ocupação. Antes esta tela editava `configuracoes.pesos`, uma segunda fonte
+ * que nada mais consumia: o operador mudava Truck para 6.000 e a grade seguia
+ * calculando com 8.000 (Raphael, 02/11).
+ */
+function CapacidadesCard() {
+  const [caps,   setCaps]   = useState<CapacidadeVeiculo[]>([])
+  const [salvo,  setSalvo]  = useState('')
+  const [erro,   setErro]   = useState('')
+
+  useEffect(() => {
+    listarCapacidades().then(setCaps).catch(() => setErro('Não foi possível carregar as capacidades'))
+  }, [])
+
+  function editar(tipo: string, campo: 'capacidade_kg' | 'ocupacao_max_percent', valor: string) {
+    setCaps(prev => prev.map(c => c.tipo === tipo ? { ...c, [campo]: Number(valor) } : c))
+  }
+
+  async function gravar(tipo: string) {
+    const c = caps.find(x => x.tipo === tipo)
+    if (!c) return
+    try {
+      await atualizarCapacidade(c.tipo, c.capacidade_kg, c.ocupacao_max_percent)
+      setErro('')
+      setSalvo(tipo)
+      setTimeout(() => setSalvo(s => s === tipo ? '' : s), 2000)
+    } catch {
+      setErro(`Falha ao salvar ${tipo}`)
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <span className="text-xs font-medium">Capacidade por tipo de veículo</span>
+        <span className="text-[11px] text-muted">salva ao sair do campo</span>
+      </CardHeader>
+      <div className="px-4 py-4">
+        <p className="text-[11px] text-muted mb-3">
+          É esta tabela que a grade de notas usa para sugerir o tipo de veículo e calcular a ocupação da carga.
+        </p>
+        {erro && <p className="text-[11px] text-danger mb-2">{erro}</p>}
+        <div className="grid grid-cols-5 gap-3">
+          {caps.map(c => (
+            <div key={c.tipo} className="bg-page border border-[0.5px] border-[var(--border-card)] rounded-lg p-3">
+              <Label>{c.tipo}{salvo === c.tipo && <span className="text-success ml-1">✓</span>}</Label>
+              <input
+                type="number"
+                value={c.capacidade_kg}
+                onChange={e => editar(c.tipo, 'capacidade_kg', e.target.value)}
+                onBlur={() => gravar(c.tipo)}
+                className="w-full border-b border-[var(--border-input)] bg-transparent text-xs text-base outline-none py-1 focus:border-primary transition-colors"
+              />
+              <span className="text-[10px] text-muted mt-1 block">kg máx.</span>
+              <input
+                type="number"
+                value={c.ocupacao_max_percent}
+                onChange={e => editar(c.tipo, 'ocupacao_max_percent', e.target.value)}
+                onBlur={() => gravar(c.tipo)}
+                className="w-full border-b border-[var(--border-input)] bg-transparent text-xs text-base outline-none py-1 mt-2 focus:border-primary transition-colors"
+              />
+              <span className="text-[10px] text-muted mt-1 block">% ocupação máx.</span>
+            </div>
+          ))}
+          {caps.length === 0 && !erro && <p className="text-[11px] text-muted">Carregando...</p>}
+        </div>
+      </div>
+    </Card>
+  )
+}
+
 export default function ConfiguracoesPage() {
   const { nfImportState, importarNFs, dismissNFImport, config: globalConfig, setConfig: setGlobalConfig } = useAppData()
   const { pode, usuario, loading } = useAuth()
@@ -80,7 +153,6 @@ export default function ConfiguracoesPage() {
   const [empresa, setEmpresa] = useState<Empresa>({ razao_social: '', nome_fantasia: '', cnpj: '', endereco: '', cidade: '', uf: '', telefone: '', email: '' })
   const [savingEmpresa, setSavingEmpresa] = useState(false)
   const [msgEmpresa, setMsgEmpresa] = useState('')
-  const [webhooks, setWebhooks] = useState<WebhookConfig>({ gerarRotasWebhookUrl: '' })
   const [saved, setSaved] = useState(false)
   const [hasChanges, setHasChanges] = useState(false)
   const initialRender = useRef(true)
@@ -110,7 +182,6 @@ export default function ConfiguracoesPage() {
   }, [loading, usuario, pode, router])
 
   useEffect(() => {
-    carregarWebhooks().then(setWebhooks).catch(() => {})
     fetch('/api/empresa').then(r => r.json()).then(d => { if (d.empresa) setEmpresa(d.empresa) }).catch(() => {})
   }, [])
 
@@ -156,20 +227,9 @@ export default function ConfiguracoesPage() {
 
   const setOp = (k: keyof AppConfig['operacao'], v: string) =>
     setCfg(p => ({ ...p, operacao: { ...p.operacao, [k]: v } }))
-  const setPeso = (k: keyof AppConfig['pesos'], v: string) =>
-    setCfg(p => ({ ...p, pesos: { ...p.pesos, [k]: Number(v) } }))
 
   function toggleGrade(id: string, dia: typeof DIAS[number]) {
     setCfg(p => ({ ...p, grades: p.grades.map(g => g.id === id ? { ...g, [dia]: !g[dia] } : g) }))
-  }
-  function addInstrucaoRota() {
-    setCfg(p => ({ ...p, instrucoesPorRota: [...p.instrucoesPorRota, { id: Date.now().toString(), codigoRota: '', instrucao: '' }] }))
-  }
-  function removeInstrucaoRota(id: string) {
-    setCfg(p => ({ ...p, instrucoesPorRota: p.instrucoesPorRota.filter(i => i.id !== id) }))
-  }
-  function updateInstrucaoRota(id: string, k: keyof InstrucaoRota, v: string) {
-    setCfg(p => ({ ...p, instrucoesPorRota: p.instrucoesPorRota.map(i => i.id === id ? { ...i, [k]: v } : i) }))
   }
   function handleDiscard() {
     // Volta para a última config CARREGADA (Supabase), não para os valores demo.
@@ -181,7 +241,7 @@ export default function ConfiguracoesPage() {
     setSaved(true); setTimeout(() => setSaved(false), 2000)
   }
   function handleSave() {
-    setGlobalConfig(cfg); salvarConfig(cfg); salvarWebhooks(webhooks)
+    setGlobalConfig(cfg); salvarConfig(cfg)
     setSaved(true); setHasChanges(false); setTimeout(() => setSaved(false), 2000)
   }
 
@@ -280,8 +340,6 @@ export default function ConfiguracoesPage() {
         {/* ── Aba Operação ── */}
         {tab === 'operacao' && (
           <>
-            {/* So renderiza para rciolette@gmail.com (gate duplo: UI + API) */}
-            <AgenteRoteirizadorCard />
             <Card>
               <CardHeader><span className="text-xs font-medium">Horários de operação</span></CardHeader>
               <div className="px-4 py-4">
@@ -558,77 +616,8 @@ export default function ConfiguracoesPage() {
               </div>
             </Card>
 
-            <Card>
-              <CardHeader><span className="text-xs font-medium">Parâmetros de peso por tipo de veículo</span></CardHeader>
-              <div className="px-4 py-4">
-                <div className="grid grid-cols-5 gap-3">
-                  {[
-                    { label: 'Fiorino', key: 'fiorino'     as const },
-                    { label: 'VUC',     key: 'vuc'         as const },
-                    { label: '3/4',     key: 'tresQuartos' as const },
-                    { label: 'Truck',   key: 'truck'       as const },
-                    { label: 'Carreta', key: 'carreta'     as const },
-                  ].map(f => (
-                    <div key={f.key} className="bg-page border border-[0.5px] border-[var(--border-card)] rounded-lg p-3">
-                      <Label>{f.label}</Label>
-                      <input type="number" value={cfg.pesos[f.key]} onChange={e => setPeso(f.key, e.target.value)} className="w-full border-b border-[var(--border-input)] bg-transparent text-xs text-base outline-none py-1 focus:border-primary transition-colors" />
-                      <span className="text-[10px] text-muted mt-1 block">kg máx.</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </Card>
+            <CapacidadesCard />
 
-            <Card>
-              <CardHeader><span className="text-xs font-medium">Instruções globais para o agente de IA</span></CardHeader>
-              <div className="px-4 py-4">
-                <p className="text-[11px] text-muted mb-2.5">Este texto é inserido fixo no system prompt toda vez que o agente gera rotas.</p>
-                <TextArea rows={6} value={cfg.instrucaoGlobal} onChange={v => setCfg(p => ({ ...p, instrucaoGlobal: v }))} />
-              </div>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <span className="text-xs font-medium">Instruções por rota específica</span>
-                <Btn size="sm" onClick={addInstrucaoRota}>+ Adicionar rota</Btn>
-              </CardHeader>
-              <div className="px-4 py-4 flex flex-col gap-2.5">
-                {cfg.instrucoesPorRota.map(ir => (
-                  <div key={ir.id} className="flex gap-2 items-start">
-                    <div className="w-[140px] shrink-0">
-                      <TextInput mono value={ir.codigoRota} onChange={v => updateInstrucaoRota(ir.id, 'codigoRota', v)} placeholder="Código da rota" />
-                    </div>
-                    <div className="flex-1">
-                      <TextArea rows={2} value={ir.instrucao} onChange={v => updateInstrucaoRota(ir.id, 'instrucao', v)} placeholder="Instrução específica para esta rota..." />
-                    </div>
-                    <button onClick={() => removeInstrucaoRota(ir.id)} className="mt-1 bg-transparent border-none cursor-pointer text-muted text-xl leading-none px-1 hover:text-danger transition-colors shrink-0">×</button>
-                  </div>
-                ))}
-                {cfg.instrucoesPorRota.length === 0 && <p className="text-[11px] text-muted py-1">Nenhuma instrução por rota configurada.</p>}
-              </div>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <span className="text-xs font-medium">Integrações — Webhooks n8n</span>
-                <span className="text-[11px] text-muted">editável pelo owner</span>
-              </CardHeader>
-              <div className="px-4 py-4 flex flex-col gap-3">
-                <p className="text-[11px] text-muted">
-                  Alterações aqui são salvas no banco. Para ter efeito imediato no servidor, adicione também{' '}
-                  <code className="font-mono bg-page px-1 rounded">SUPABASE_SERVICE_ROLE_KEY</code> ao{' '}
-                  <code className="font-mono bg-page px-1 rounded">.env.local</code>.
-                </p>
-                {([
-                  { label: 'Webhook — Gerar Rotas (agente IA)', key: 'gerarRotasWebhookUrl' as const },
-                ] as const).map(f => (
-                  <div key={f.key}>
-                    <Label>{f.label}</Label>
-                    <TextInput mono value={webhooks[f.key]} onChange={v => { setWebhooks(p => ({ ...p, [f.key]: v })); setHasChanges(true) }} placeholder="https://n8n.exemplo.com.br/webhook/..." />
-                  </div>
-                ))}
-              </div>
-            </Card>
           </>
         )}
       </div>

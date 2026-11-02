@@ -1,0 +1,12 @@
+{
+  "_nota": "Backup das chaves de `configuracoes` apagadas em 02/11/2026, quando a roteirizacao por IA (engine interno OpenAI + WF-B do n8n) foi aposentada e o fluxo passou a ser 100% manual. Guardado caso seja preciso religar.",
+  "pesos": { "vuc": 1500, "truck": 6000, "carreta": 15000, "fiorino": 700, "tresQuartos": 2500 },
+  "webhooks": { "gerarRotasWebhookUrl": "https://n8n.rcdigitais.com.br/webhook/gerar-rotas" },
+  "instrucoes_ia": { "global": "", "por_rota": {} },
+  "saida_veiculos": { "horario": "03:00" },
+  "horario_geracao": { "inicio": "13:00", "limite": "23:00" },
+  "instrucaoGlobal": "A Concarga opera de segunda a sábado com saída dos veículos às 03h. Ordem de prioridade das entregas: 1) Agendamentos (DATAGE preenchida); 2) SAC e reentregas ativas; 3) Clientes COND Vermelho; 4) Clientes COND Laranja; 5) Varejo por data de chegada. Não ultrapassar 95% da capacidade de peso por veículo. Consolidar NFs do mesmo destinatário no mesmo veículo. Agrupar entregas por região geográfica para minimizar quilometragem. Respeitar a grade de dias de cada cidade. Rotas QUINZENAL alternam semanas — incluir as NFs e sinalizar no campo de alertas para o operador confirmar a semana. Rotas FLAY RETIRA não são roteirizadas: o cliente retira no CD — mover essas NFs para nfsExcluidas com motivo \"retira\". Tempos médios de descarga: CD e Redes 15 minutos, Varejo 8 minutos. Gerar link Google Maps com a sequência otimizada de entregas para cada veículo.",
+  "instrucoesPorRota": [],
+  "agente_roteirizador": { "engine": "interno" },
+  "capacidade_maxima_percent": { "valor": 95 }
+}

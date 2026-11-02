@@ -44,7 +44,6 @@ order by b.NUMNFS`,
     envioMotorista: '20:30',
     saidaVeiculos: '03:00',
   },
-  pesos: { fiorino: 700, vuc: 1500, tresQuartos: 2500, truck: 6000, carreta: 15000 },
   // Grades REAIS da operação Concarga (grade_cidades usa estes nomes).
   grades: [
     { id: 'g1',  nome: 'DIARIO',           seg: true,  ter: true,  qua: true,  qui: true,  sex: true,  sab: true  },
@@ -60,6 +59,4 @@ order by b.NUMNFS`,
     { id: 'g10', nome: 'DEDICADO',         seg: true,  ter: true,  qua: true,  qui: true,  sex: true,  sab: false },
     { id: 'g11', nome: 'FLAY RETIRA',      seg: false, ter: false, qua: false, qui: false, sex: false, sab: false },
   ],
-  instrucaoGlobal: `A Concarga opera de segunda a sábado com saída dos veículos às 03h. Ordem de prioridade das entregas: 1) Agendamentos (DATAGE preenchida); 2) SAC e reentregas ativas; 3) Clientes COND Vermelho; 4) Clientes COND Laranja; 5) Varejo por data de chegada. Não ultrapassar 95% da capacidade de peso por veículo. Consolidar NFs do mesmo destinatário no mesmo veículo. Agrupar entregas por região geográfica para minimizar quilometragem. Respeitar a grade de dias de cada cidade. Rotas QUINZENAL alternam semanas — incluir as NFs e sinalizar no campo de alertas para o operador confirmar a semana. Rotas FLAY RETIRA não são roteirizadas: o cliente retira no CD — mover essas NFs para nfsExcluidas com motivo "retira". Tempos médios de descarga: CD e Redes 15 minutos, Varejo 8 minutos. Gerar link Google Maps com a sequência otimizada de entregas para cada veículo.`,
-  instrucoesPorRota: [],
 }

@@ -16,10 +16,8 @@ export const ROTA_PERMISSAO: Record<string, string | null> = {
 // API routes.
 export const API_PERMISSAO: Record<string, string> = {
   '/api/config':           'webhooks',
-  '/api/config/webhooks':  'webhooks',
-  '/api/gerar-rotas':      'gerar',
-  // '/api/enviar-motorista' foi removido: o webhook não existe no n8n e o
-  // disparo automático ao motorista ainda não está definido (24/08).
+  // Os webhooks do n8n saíram do escopo: a roteirização por IA foi aposentada
+  // (fluxo manual) e o envio ao motorista nunca existiu no n8n (02/11).
   '/api/siat':             'importar',
   '/api/usuarios':         'usuarios',
   '/api/convites':         'usuarios',

@@ -7,7 +7,7 @@ import { getSupabaseBrowser } from '@/lib/supabase-browser'
 import { useAuth } from '@/components/providers/AuthProvider'
 import { useSidebar } from '@/components/providers/SidebarProvider'
 import { useOnboarding } from '@/components/providers/OnboardingProvider'
-import { cn } from '@/lib/utils'
+import { cn, hojeISO } from '@/lib/utils'
 import type { Perfil } from '@/lib/auth'
 
 interface NavItem {
@@ -91,10 +91,16 @@ export default function Sidebar() {
     async function fetchCount() {
       try {
         const sb = getSupabaseBrowser()
+        // Mesmo recorte das telas que o badge aponta: "Rotas do dia" e
+        // "Aprovações" carregam só o dia corrente (AppDataProvider →
+        // carregarRotasSupabase(todayISO())). Sem o filtro de data o badge
+        // somava as rotas aguardando de TODOS os dias e marcava 7 enquanto as
+        // duas telas abriam vazias (Raphael, 02/11).
         const { count } = await sb
           .from('rotas')
           .select('*', { count: 'exact', head: true })
           .eq('status', 'aguardando')
+          .eq('data', hojeISO())
         setAguardandoCount(count ?? 0)
       } catch {
         // fail silently

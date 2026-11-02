@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { Topbar, Card, CardHeader, Btn, StatusPill, TextArea } from '@/components/ui'
 import { Checkbox, BulkBar } from '@/components/ui/SelectionControls'
 import { useAppData } from '@/components/providers/AppDataProvider'
-import { atualizarStatusRota, excluirRota, reprocessarRota } from '@/lib/webhooks'
+import { atualizarStatusRota, excluirRota } from '@/lib/webhooks'
 import { formatPeso, cn } from '@/lib/utils'
 import type { Rota, RouteStatus, NotaFiscal } from '@/types'
 import { MapaRota } from '@/components/ui/MapaRota'
@@ -257,7 +257,6 @@ export default function AprovacoesPage() {
   const { rotas, setRotas } = useAppData()
 
   const [drawerRota,      setDrawerRota]      = useState<Rota | null>(null)
-  const [reprocessing,    setReprocessing]    = useState<Set<string>>(new Set())
   const [log,             setLog]             = useState<LogEntry[]>([])
   const [toast,           setToast]           = useState('')
 
@@ -307,18 +306,6 @@ export default function AprovacoesPage() {
     }
   }
 
-  async function handleReprocessar(rota: Rota) {
-    setReprocessing(prev => new Set(prev).add(rota.id))
-    try {
-      await reprocessarRota(rota.id)
-      showToast(`✓ Reprocessamento solicitado para ${rota.codigoRota}`)
-      addLog('reprocessamento', rota.codigoRota, `Reprocessamento solicitado via webhook IA`)
-    } catch (err) {
-      showToast(`Falha ao reprocessar: ${err instanceof Error ? err.message : 'erro desconhecido'}`)
-    } finally {
-      setReprocessing(prev => { const n = new Set(prev); n.delete(rota.id); return n })
-    }
-  }
 
   // ── Ações em lote ───────────────────────────────────────────────────────────
   async function handleBulkAprovar() {
@@ -459,7 +446,6 @@ export default function AprovacoesPage() {
           ) : (
             <div className="flex flex-col">
               {aguardando.map((rota, i) => {
-                const isReprocessing = reprocessing.has(rota.id)
                 const isSel = selectedAg.has(rota.id)
                 return (
                   <div
@@ -494,14 +480,6 @@ export default function AprovacoesPage() {
                       </div>
                     </div>
                     <div className="flex gap-1.5 shrink-0" onClick={e => e.stopPropagation()}>
-                      <Btn size="sm" disabled={isReprocessing} onClick={() => handleReprocessar(rota)}>
-                        {isReprocessing ? (
-                          <svg className="w-3 h-3 animate-spin-slow" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M8 2a6 6 0 1 0 6 6" strokeLinecap="round"/>
-                          </svg>
-                        ) : '↺'}
-                        {isReprocessing ? 'Processando…' : 'Reprocessar'}
-                      </Btn>
                       <Btn size="sm" variant="danger-soft" onClick={() => updateStatus(rota.id, 'rejeitada')}>Excluir</Btn>
                       <Btn size="sm" variant="success"     onClick={() => updateStatus(rota.id, 'aprovada')}>Aprovar</Btn>
                     </div>

@@ -170,55 +170,5 @@ export interface InstrucaoRota {
 export interface AppConfig {
   sql: SqlConfig
   operacao: OperationConfig
-  pesos: PesoConfig
   grades: GradeRule[]
-  instrucaoGlobal: string
-  instrucoesPorRota: InstrucaoRota[]
-}
-
-export interface RetornoGerarRotas {
-  rotas: {
-    codigoRota: string
-    regiao: string
-    veiculo: string
-    motorista: string
-    celular: string
-    pesoTotal: number
-    ocupacaoPercent: number
-    qtdNotas: number
-    status: 'rascunho'
-    alertas: string[]
-    linkMaps: string
-    notas: {
-      numnfs: number
-      destinatario: string
-      municipio: string
-      bairro: string
-      endereco: string
-      pesoKg: number
-      cond: 'ok' | 'laranja' | 'vermelho'
-      tipoCliente: string
-      agendamento: string
-      reentrega: boolean
-      sac: string | null
-      observacao: string
-    }[]
-  }[]
-  nfsNaoAlocadas: number[]
-  motivoNaoAlocacao: string
-  resumo: {
-    totalNfs: number
-    totalRotas: number
-    totalVeiculosUsados: number
-    pesoTotal: number
-    nfsComAlerta: number
-    geradoEm: string
-  }
-}
-
-export interface GerarRotasInput {
-  observacoes: string
-  veiculosBloqueados: string
-  restricoesExtras: string
-  prioridade: string
 }

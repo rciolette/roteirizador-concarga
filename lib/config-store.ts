@@ -22,10 +22,7 @@ export async function carregarConfig(): Promise<AppConfig> {
     return {
       sql:               DEFAULT_CONFIG.sql,
       operacao:          (map.operacao          as AppConfig['operacao'])          ?? DEFAULT_CONFIG.operacao,
-      pesos:             mergePesos((map.pesos  as AppConfig['pesos'])             ?? DEFAULT_CONFIG.pesos),
       grades:            (map.grades            as AppConfig['grades'])            ?? DEFAULT_CONFIG.grades,
-      instrucaoGlobal:   (map.instrucaoGlobal   as string)                         ?? DEFAULT_CONFIG.instrucaoGlobal,
-      instrucoesPorRota: (map.instrucoesPorRota as AppConfig['instrucoesPorRota']) ?? DEFAULT_CONFIG.instrucoesPorRota,
     }
   } catch {
     return fromLocalStorage()
@@ -50,57 +47,6 @@ export async function salvarConfig(cfg: AppConfig): Promise<void> {
     }
   } catch {
     // Sem rede ou rota não existente — localStorage persiste
-  }
-}
-
-// ── Webhooks ─────────────────────────────────────────────────────────────────
-
-// Só o gerador de rotas ainda passa por webhook do n8n. A importação de NFs foi
-// para `/api/siat` (MSSQL direto, lib/siat-db.ts) e o envio ao motorista foi
-// removido — não existe no n8n e essa etapa do processo não está definida.
-export interface WebhookConfig {
-  gerarRotasWebhookUrl: string
-}
-
-export async function carregarWebhooks(): Promise<WebhookConfig> {
-  try {
-    const { data } = await getSupabaseBrowser()
-      .from('configuracoes')
-      .select('valor')
-      .eq('chave', 'webhooks')
-      .single()
-
-    if (data?.valor) return data.valor as WebhookConfig
-  } catch { /* usa fallback */ }
-
-  return { gerarRotasWebhookUrl: '' }
-}
-
-export async function salvarWebhooks(wh: WebhookConfig): Promise<void> {
-  try {
-    await fetch('/api/config/webhooks', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify(wh),
-    })
-  } catch { /* silencioso */ }
-}
-
-// `resolveWebhookUrl` vive em `lib/config-server.ts`: depende de next/headers e
-// não pode ser importada por este módulo, que roda no cliente.
-
-// ── Helpers de configuração ───────────────────────────────────────────────────
-
-// Garante que valores 0 no Supabase não sobrescrevam os defaults de capacidade.
-// Isso acontece quando o usuário nunca preencheu os pesos manualmente.
-function mergePesos(saved: AppConfig['pesos']): AppConfig['pesos'] {
-  const d = DEFAULT_CONFIG.pesos
-  return {
-    fiorino:     saved.fiorino     || d.fiorino,
-    vuc:         saved.vuc         || d.vuc,
-    tresQuartos: saved.tresQuartos || d.tresQuartos,
-    truck:       saved.truck       || d.truck,
-    carreta:     saved.carreta     || d.carreta,
   }
 }
 

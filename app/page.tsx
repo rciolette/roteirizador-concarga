@@ -14,7 +14,7 @@ const MapaDashboard = dynamic(
     ),
   },
 )
-import { formatPeso } from '@/lib/utils'
+import { formatPeso, hojeISO } from '@/lib/utils'
 import { useAppData } from '@/components/providers/AppDataProvider'
 import type { ClientType } from '@/types'
 
@@ -32,7 +32,7 @@ export default function Page() {
     const rotasAguardando = rotas.filter(r => r.status === 'aguardando').length
     const rotasAprovadas  = rotas.filter(r => r.status === 'aprovada').length
     const rotasEnviadas   = rotas.filter(r => r.status === 'enviada').length
-    const hoje = new Date().toISOString().slice(0, 10)
+    const hoje = hojeISO()
 
     const todasNFs = rotas.flatMap(r => r.notasFiscais)
     const nfsVermelho      = todasNFs.filter(n => n.cond === 'vermelho').length

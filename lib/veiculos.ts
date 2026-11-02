@@ -2,11 +2,12 @@ import { getSupabaseBrowser } from '@/lib/supabase-browser'
 import { fetchAllPages } from '@/lib/supabase-paginate'
 import type { Veiculo } from '@/types'
 import { tipoVeiculoFromSiat, capKgFromSiat } from '@/lib/siat'
+import { hojeISO } from '@/lib/utils'
 
 // Retorna apenas veículos ativos com motorista vinculado, com disponibilidade
 // do dia lida de veiculo_disponibilidade (fonte de verdade).
 export async function listarVeiculos(): Promise<Veiculo[]> {
-  const hoje = new Date().toISOString().slice(0, 10)
+  const hoje = hojeISO()
   const sb   = getSupabaseBrowser()
 
   const [veicRows, dispRows] = await Promise.all([

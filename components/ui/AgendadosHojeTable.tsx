@@ -1,6 +1,6 @@
 'use client'
 import { useMemo, useState } from 'react'
-import { cn } from '@/lib/utils'
+import { cn, hojeISO } from '@/lib/utils'
 import { Card, CardHeader } from '@/components/ui'
 import { useAppData } from '@/components/providers/AppDataProvider'
 import type { NotaFiscal } from '@/types'
@@ -58,7 +58,7 @@ const TABS: { key: Exclude<Situacao, 'nenhuma'>; label: string; hint: string }[]
 
 export function AgendadosHojeTable() {
   const { nfsPendentes } = useAppData()
-  const hoje = new Date().toISOString().slice(0, 10)
+  const hoje = hojeISO()
   const [tab, setTab] = useState<Exclude<Situacao, 'nenhuma'>>('reagendar')
 
   const grupos = useMemo(() => {

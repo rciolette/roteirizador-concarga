@@ -20,6 +20,7 @@ import { DEFAULT_CONFIG } from '@/lib/data'
 import { carregarConfig } from '@/lib/config-store'
 import { useAuth } from '@/components/providers/AuthProvider'
 import { addrKeyNota } from '@/lib/geocode'
+import { hojeISO as todayISO } from '@/lib/utils'
 
 /** Cache local da última importação de NFs (Marcelo, 17/08). */
 const NF_CACHE_KEY = 'concarga_nf_cache_v1'
@@ -35,10 +36,6 @@ async function carregarAtividadeMotoristas(): Promise<MotoristaAtividade[]> {
   } catch {
     return []
   }
-}
-
-function todayISO(): string {
-  return new Date().toISOString().slice(0, 10)
 }
 
 interface NfImportState {

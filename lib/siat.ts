@@ -4,7 +4,7 @@
 // os aliases reais do SQL são repassados diretamente.
 
 import type { Rota, NotaFiscal, Veiculo, Motorista, ClientType, CondStatus } from '@/types'
-import { normalizarCep } from '@/lib/utils'
+import { normalizarCep, hojeISO } from '@/lib/utils'
 
 // ── Campos de NF (aliases do SQL do WF-A) ────────────────────────────────────
 export interface SiatRow {
@@ -110,7 +110,7 @@ export interface SiatSummary {
 //   laranja  — SAC aberto ou reentrega
 //   ok       — demais casos
 export function derivarCond(row: SiatRow): CondStatus {
-  const hoje = new Date().toISOString().slice(0, 10)
+  const hoje = hojeISO()
 
   if (row.DataAgendamento) {
     const agenda = String(row.DataAgendamento).slice(0, 10)

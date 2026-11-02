@@ -4,7 +4,7 @@ import * as XLSX from 'xlsx'
 import Papa from 'papaparse'
 import { Topbar, Card, CardHeader, TextInput, Select, Btn } from '@/components/ui'
 import { Checkbox, BulkBar } from '@/components/ui/SelectionControls'
-import { cn } from '@/lib/utils'
+import { cn, hojeISO } from '@/lib/utils'
 import { exportarCSV, exportarXLSX, veiculosParaLinhas } from '@/lib/export'
 import {
   listarVeiculos,
@@ -379,7 +379,7 @@ export default function FrotaPage() {
       // são criadas/alteradas; as ausentes não são resetadas.
       const itens = await parseArquivoDisponibilidade(file)
       if (itens.length === 0) { showToastV('Arquivo sem placas reconhecidas (colunas: Placa, Disponível Hoje)'); return }
-      const hoje = new Date().toISOString().slice(0, 10)
+      const hoje = hojeISO()
       const res = await importarDisponibilidade(hoje, itens)
       const porPlaca = new Map(itens.map(i => [i.placa, i.disponivel]))
       setVeiculos(prev => prev.map(v => {
@@ -471,7 +471,11 @@ export default function FrotaPage() {
     setSelectedV(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
   }
 
-  const qtdDisponiveis = veiculos.filter(v => v.disponivel_hoje).length
+  // Só veículo ATIVO conta como disponível. Sem esse filtro a tela somava os
+  // 1.338 inativos que o SIAT ainda marca como disponíveis e anunciava "1.440
+  // disponíveis hoje" enquanto o Dashboard mostrava 102 — a frota real
+  // (Raphael, 02/11).
+  const qtdDisponiveis = veiculos.filter(v => v.ativo && v.disponivel_hoje).length
 
   // ── Render ──────────────────────────��───────────────────────────────��───────
   return (

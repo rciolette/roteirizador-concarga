@@ -10,20 +10,20 @@ import { NotasTable } from '@/components/notas/NotasTable'
 import { AgendadosHojeTable } from '@/components/ui/AgendadosHojeTable'
 import { MapaRota } from '@/components/ui/MapaRota'
 import { ImportarSIATButton } from '@/components/ui/ImportarSIATButton'
-import { webhookGerarRotas, mapRetornoGerarRotas, salvarRotasSupabase, salvarNfsNaoAlocadas, atualizarStatusRota, excluirRota, carregarRotasSupabase, aguardarRotasGeradas, Prioridade, MotoristaPayload, VeiculoDisponivel, desvincularNotasDaRota, moverNotasParaRota, definirVeiculoDaRota, resetarDia } from '@/lib/webhooks'
+import { atualizarStatusRota, excluirRota, carregarRotasSupabase, desvincularNotasDaRota, moverNotasParaRota, definirVeiculoDaRota, resetarDia } from '@/lib/webhooks'
 import { gerarLinkMapsUrl } from '@/lib/maps'
 import { baixarAcertoDeCanhoto } from '@/lib/acerto-canhoto'
 import { derivarCond } from '@/lib/siat'
 import { listarCapacidades, type CapacidadeVeiculo } from '@/lib/frota'
 import type { SiatRow } from '@/lib/siat'
 import type { Veiculo } from '@/types'
-import { cn, formatPeso, rotuloVeiculo } from '@/lib/utils'
+import { cn, formatPeso, rotuloVeiculo, hojeISO } from '@/lib/utils'
 import { useCopyToClipboard } from '@/lib/hooks'
 import { useAppData } from '@/components/providers/AppDataProvider'
 import { useAuth } from '@/components/providers/AuthProvider'
 import type { MotoristaAtividade } from '@/lib/siat'
 import { reservasDasRotas, rotaEntregaReservavel } from '@/hooks/useNotasFiscais'
-import { Rota, RouteStatus, RetornoGerarRotas } from '@/types'
+import { Rota, RouteStatus } from '@/types'
 
 // ── Log de sessão ─────────────────────────────────────────────────────────────
 type LogEntry = {
@@ -64,317 +64,6 @@ const STATUS_FILTERS: { label: string; value: StatusFiltro }[] = [
 ]
 
 const EM_ABERTO: RouteStatus[] = ['rascunho', 'aguardando']
-
-// ── Gerar Rotas Dialog ────────────────────────────────────────────────────────
-type GerarRotasFormState = {
-  dataInicio: string
-  dataFim:    string
-  observacoes: string
-  restricoesExtras: string
-  prioridade: string
-}
-
-function normalizaNome(nome: string): string {
-  return nome.trim().toUpperCase().replace(/\s+/g, ' ')
-}
-
-function diasDesde(iso: string | null): number | null {
-  if (!iso) return null
-  const ms = Date.now() - new Date(iso).getTime()
-  return Math.max(0, Math.floor(ms / 86_400_000))
-}
-
-function rotuloAtividade(m: { ultimaSaida: string | null; romaneios: number }): { texto: string; recente: boolean } {
-  const d = diasDesde(m.ultimaSaida)
-  if (d === null)      return { texto: 'sem histórico', recente: false }
-  if (d === 0)         return { texto: 'rodou hoje',    recente: true }
-  if (d === 1)         return { texto: 'ontem',         recente: true }
-  if (d <= 7)          return { texto: `há ${d} dias`,  recente: true }
-  if (d <= 30)         return { texto: `há ${d} dias`,  recente: false }
-  return { texto: `há ${Math.floor(d / 30)} meses`, recente: false }
-}
-
-// Acima disso o prompt do roteirizador cresce a ponto de a geração não fechar
-// dentro do tempo de execução do n8n.
-const LIMITE_FROTA_AVISO = 60
-
-function GerarRotasDialog({ onClose, onConfirm, veiculos, atividade }: {
-  onClose:    () => void
-  onConfirm:  (form: GerarRotasFormState, motoristas: MotoristaPayload[], veiculos: VeiculoDisponivel[]) => void
-  veiculos:   Veiculo[]
-  atividade:  MotoristaAtividade[]
-}) {
-  const hoje = new Date().toISOString().slice(0, 10)
-  const [form, setForm] = useState<GerarRotasFormState>({
-    dataInicio: hoje, dataFim: hoje, observacoes: '', restricoesExtras: '', prioridade: 'padrao',
-  })
-
-  // Atividade recente por motorista (romaneios de expedição no SIAT), usada
-  // como badge e como critério de ordenação da lista unificada.
-  const atividadePorNome = useMemo(() => {
-    const porNome = new Map<string, MotoristaAtividade>()
-    for (const a of atividade) {
-      if (a.nome) porNome.set(normalizaNome(a.nome), a)
-    }
-    return porNome
-  }, [atividade])
-
-  // Nada vem marcado: o operador declara a frota do dia. O SIAT sugere quase
-  // toda a base como "disponível hoje" (>1.400 veículos) enquanto a operação
-  // real usa 40–50 — pré-marcar tudo obrigaria a desmarcar centenas e inflaria
-  // o prompt do roteirizador a ponto de a geração não terminar.
-  //
-  // Layout revisado 15/08 (pedido do Raphael): busca única e UMA lista de
-  // pares veículo+motorista — como andam sempre vinculados, marcar o veículo
-  // é marcar o conjunto.
-  const [veiculosSel, setVeiculosSel] = useState<Set<string>>(new Set())
-  const [busca, setBusca] = useState('')
-  const set = (k: string, v: string) => setForm(p => ({ ...p, [k]: v }))
-
-  const veiDisabled = (v: Veiculo) => v.status === 'manutencao' || v.status === 'indisponivel'
-
-  function toggleVeiculo(v: Veiculo) {
-    setVeiculosSel(prev => {
-      const next = new Set(prev)
-      next.has(v.id) ? next.delete(v.id) : next.add(v.id)
-      return next
-    })
-  }
-
-  const veiculosFiltrados = useMemo(() => {
-    const q = busca.toLowerCase()
-    return veiculos
-      .slice()
-      .sort((a, b) => {
-        // Disponíveis hoje primeiro; entre eles, motorista com atividade mais
-        // recente no SIAT; por fim, placa.
-        const dispDiff = (b.disponivel_hoje ? 1 : 0) - (a.disponivel_hoje ? 1 : 0)
-        if (dispDiff !== 0) return dispDiff
-        const atvA = a.motoristaNome ? atividadePorNome.get(normalizaNome(a.motoristaNome))?.ultimaSaida ?? '' : ''
-        const atvB = b.motoristaNome ? atividadePorNome.get(normalizaNome(b.motoristaNome))?.ultimaSaida ?? '' : ''
-        if (atvA !== atvB) return atvB.localeCompare(atvA)
-        return a.placa.localeCompare(b.placa)
-      })
-      .filter(v =>
-        !q ||
-        v.placa.toLowerCase().includes(q) ||
-        v.modelo.toLowerCase().includes(q) ||
-        (v.motoristaNome ?? '').toLowerCase().includes(q),
-      )
-  }, [veiculos, busca, atividadePorNome])
-
-  // Motoristas únicos entre os veículos marcados (informativo).
-  const motoristasSelecionados = useMemo(() => {
-    const nomes = new Set<string>()
-    for (const v of veiculos) {
-      if (veiculosSel.has(v.id) && v.motoristaNome) nomes.add(normalizaNome(v.motoristaNome))
-    }
-    return nomes.size
-  }, [veiculos, veiculosSel])
-
-  // A marcação do operador é a fonte da verdade da frota do dia — é exatamente
-  // esta lista que o roteirizador recebe e usa para montar as rotas.
-  const veiculosNoPayload = veiculos.filter(v => veiculosSel.has(v.id) && !veiDisabled(v))
-
-  function handleConfirmClick() {
-    if (veiculosNoPayload.length === 0) return
-
-    // Motoristas derivam dos veículos escolhidos: um motorista sem veículo
-    // marcado não tem como rodar.
-    const nomes = new Map<string, MotoristaPayload>()
-    for (const v of veiculosNoPayload) {
-      if (!v.motoristaNome) continue
-      const chave = normalizaNome(v.motoristaNome)
-      if (nomes.has(chave)) continue
-      nomes.set(chave, {
-        nome:     v.motoristaNome,
-        telefone: v.motoristaCelular || undefined,
-        placa:    v.placa,
-        status:   'disponivel' as const,
-      })
-    }
-
-    const veiculosPayload: VeiculoDisponivel[] = veiculosNoPayload
-      .map(v => ({
-        placa:            v.placa,
-        tipo:             v.tipo,
-        capacidadeKg:     v.capacidadeKg,
-        motoristaNome:    v.motoristaNome,
-        motoristaCelular: v.motoristaCelular,
-      }))
-    onConfirm(form, [...nomes.values()], veiculosPayload)
-  }
-
-  return (
-    <div className="fixed inset-0 bg-black/55 flex items-center justify-center z-50">
-      <div className="animate-fade-in bg-surface rounded-xl border border-[0.5px] border-[var(--border-light)] p-6 w-[760px] max-w-[95vw] max-h-[90vh] overflow-y-auto">
-        <div className="text-sm font-medium mb-1">Instrução para o agente de IA</div>
-        <div className="text-[11px] text-muted mb-4">
-          Estas informações serão combinadas com as regras fixas e os dados do SIAT.
-        </div>
-
-        {/* Datas + prioridade numa linha só */}
-        <div className="mb-2.5 grid grid-cols-1 sm:grid-cols-3 gap-2">
-          <div>
-            <label className="block text-[11px] text-muted mb-1">Data início</label>
-            <input
-              type="date"
-              value={form.dataInicio}
-              onChange={e => set('dataInicio', e.target.value)}
-              className="w-full h-8 border border-[0.5px] border-[var(--border-input)] rounded-lg bg-page px-2 text-xs font-sans outline-none"
-            />
-          </div>
-          <div>
-            <label className="block text-[11px] text-muted mb-1">Data fim</label>
-            <input
-              type="date"
-              value={form.dataFim}
-              onChange={e => set('dataFim', e.target.value)}
-              className="w-full h-8 border border-[0.5px] border-[var(--border-input)] rounded-lg bg-page px-2 text-xs font-sans outline-none"
-            />
-          </div>
-          <div>
-            <label className="block text-[11px] text-muted mb-1">Prioridade</label>
-            <Select value={form.prioridade} onChange={v => set('prioridade', v)}>
-              <option value="padrao">Padrão — peso e distância</option>
-              <option value="vermelho">🔴 Prioridade COND vermelho</option>
-              <option value="menos-veiculos">Menos veículos possível</option>
-              <option value="menor-distancia">Menor distância total</option>
-            </Select>
-          </div>
-        </div>
-
-        {/* Observações + restrições lado a lado */}
-        <div className="mb-2.5 grid grid-cols-1 sm:grid-cols-2 gap-2">
-          {[
-            { key: 'observacoes',      label: 'Observações',      ph: 'Instruções gerais para o roteirizador...' },
-            { key: 'restricoesExtras', label: 'Restrições extras', ph: 'Ex: Não entregar no centro de BH hoje' },
-          ].map(f => (
-            <div key={f.key}>
-              <label className="block text-[11px] text-muted mb-1">{f.label}</label>
-              <TextArea
-                value={(form as Record<string, string>)[f.key]}
-                onChange={v => set(f.key, v)}
-                placeholder={f.ph}
-                rows={2}
-              />
-            </div>
-          ))}
-        </div>
-
-        {/* ── Frota do dia — lista unificada veículo + motorista ── */}
-        <div className="mt-4 pt-3 border-t border-[0.5px] border-[var(--border-faint)]">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-[11px] text-muted font-medium">Frota do dia</span>
-            <span className={cn('text-[10px] font-medium', veiculosSel.size === 0 ? 'text-warn' : 'text-subtle')}>
-              {veiculosSel.size} veículo{veiculosSel.size === 1 ? '' : 's'}
-              {motoristasSelecionados > 0 && ` · ${motoristasSelecionados} motorista${motoristasSelecionados === 1 ? '' : 's'}`}
-            </span>
-          </div>
-          <div className="text-[10px] text-subtle mb-2">
-            Marque os conjuntos veículo + motorista que realmente saem hoje — só eles vão
-            para o roteirizador. Disponíveis hoje e motoristas com atividade recente aparecem primeiro.
-          </div>
-          <div className="mb-2 flex gap-2 items-center">
-            <div className="flex-1">
-              <TextInput value={busca} onChange={setBusca} placeholder="Buscar por placa, modelo ou motorista..." />
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                const ids = veiculosFiltrados.filter(v => !veiDisabled(v)).map(v => v.id)
-                setVeiculosSel(prev => new Set([...prev, ...ids]))
-              }}
-              disabled={!busca}
-              className="text-[10px] px-2 h-8 rounded-lg border border-[0.5px] border-[var(--border-input)] text-muted hover:bg-cream dark:hover:bg-hover disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
-              title={busca ? 'Marca todos os resultados da busca' : 'Busque para marcar em lote'}
-            >
-              Marcar filtrados
-            </button>
-            <button
-              type="button"
-              onClick={() => setVeiculosSel(new Set())}
-              disabled={veiculosSel.size === 0}
-              className="text-[10px] px-2 h-8 rounded-lg border border-[0.5px] border-[var(--border-input)] text-muted hover:bg-cream dark:hover:bg-hover disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
-            >
-              Limpar
-            </button>
-          </div>
-          {veiculos.length === 0 ? (
-            <div className="text-[11px] text-muted py-2">
-              Nenhum veículo marcado como disponível hoje. Marque a disponibilidade na tela <strong>Frota</strong> para que apareçam aqui.
-            </div>
-          ) : veiculosFiltrados.length === 0 ? (
-            <div className="text-[11px] text-muted py-2">Nenhum resultado para &ldquo;{busca}&rdquo;.</div>
-          ) : (
-            <div className="flex flex-col gap-0.5 max-h-[300px] overflow-y-auto pr-0.5">
-              {veiculosFiltrados.map(v => {
-                const disabled = veiDisabled(v)
-                const atv = v.motoristaNome
-                  ? atividadePorNome.get(normalizaNome(v.motoristaNome))
-                  : undefined
-                const rotulo = atv ? rotuloAtividade({ ultimaSaida: atv.ultimaSaida, romaneios: atv.romaneiosPeriodo }) : null
-                return (
-                  <label key={v.id} className={cn(
-                    'flex items-center gap-2 px-2 py-1.5 rounded-lg select-none transition-colors',
-                    disabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-cream dark:hover:bg-hover cursor-pointer',
-                    veiculosSel.has(v.id) && 'bg-primary-bg/50 dark:bg-primary/10',
-                  )}>
-                    <input
-                      type="checkbox"
-                      checked={veiculosSel.has(v.id)}
-                      disabled={disabled}
-                      onChange={() => !disabled && toggleVeiculo(v)}
-                      className="w-3.5 h-3.5 shrink-0 accent-primary"
-                    />
-                    <span className="text-[11px] font-medium font-mono shrink-0 w-[68px]">{v.placa}</span>
-                    <span className="text-[11px] font-medium truncate flex-1">
-                      {v.motoristaNome ?? <span className="italic text-subtle font-normal">sem motorista</span>}
-                    </span>
-                    {rotulo?.recente && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0 bg-success-bg text-success-dark">
-                        {rotulo.texto}
-                      </span>
-                    )}
-                    <span className="text-[10px] text-muted truncate max-w-[110px] shrink-0 hidden sm:inline">{v.modelo}</span>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-page border border-[0.5px] border-[var(--border-input)] text-subtle shrink-0">{v.tipo}</span>
-                    <span className="text-[10px] text-muted shrink-0 w-[42px] text-right">{formatPeso(v.capacidadeKg)}</span>
-                    {v.disponivel_hoje
-                      ? <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0 bg-teal-bg text-teal-dark">Disp. hoje</span>
-                      : <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0 bg-warn-bg text-warn">Ativo</span>
-                    }
-                  </label>
-                )
-              })}
-            </div>
-          )}
-        </div>
-
-        {veiculosSel.size > LIMITE_FROTA_AVISO && (
-          <div className="mt-4 text-[11px] bg-warn-bg text-warn rounded-lg px-3 py-2">
-            {veiculosSel.size} veículos selecionados. Acima de ~{LIMITE_FROTA_AVISO} a
-            roteirização fica lenta e pode não concluir — marque só a frota que sai hoje.
-          </div>
-        )}
-
-        <div className="flex gap-2 justify-end items-center mt-5">
-          {veiculosSel.size === 0 && (
-            <span className="text-[11px] text-muted mr-auto">
-              Selecione ao menos um veículo para gerar rotas.
-            </span>
-          )}
-          <Btn onClick={onClose}>Cancelar</Btn>
-          <Btn variant="primary" onClick={handleConfirmClick} disabled={veiculosSel.size === 0}>
-            <svg className="w-[13px] h-[13px]" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 2"/>
-            </svg>
-            Gerar rotas com {veiculosNoPayload.length} veículo{veiculosNoPayload.length === 1 ? '' : 's'}
-          </Btn>
-        </div>
-      </div>
-    </div>
-  )
-}
 
 // Link do Maps: ver lib/maps.ts — respeita a sequência de entrega e consolida
 // NFs do mesmo endereço numa única parada.
@@ -871,7 +560,7 @@ function ExportMenuRotas({ rotas, onErro }: { rotas: import('@/types').Rota[]; o
     document.addEventListener('mousedown', h)
     return () => document.removeEventListener('mousedown', h)
   }, [open])
-  const hoje = new Date().toISOString().slice(0, 10)
+  const hoje = hojeISO()
   // Espec, item 9: só rotas APROVADAS (enviadas opcionais), uma linha por rota,
   // NFs concatenadas; bloqueia se houver NF/veículo duplicado.
   async function doExport(fmt: 'csv' | 'xlsx') {
@@ -1202,9 +891,6 @@ export default function RotasPage() {
     if (!usuario) return
     refreshVeiculos()
   }, [usuario]) // eslint-disable-line react-hooks/exhaustive-deps
-  const [showDialog,     setShowDialog]     = useState(false)
-  const [generating,     setGenerating]     = useState(false)
-  const [progresso,      setProgresso]      = useState('')
   const [toast,          setToast]          = useState('')
   const [log,            setLog]            = useState<LogEntry[]>([])
   const [pendingConfirm, setPendingConfirm] = useState<{ action: ConfirmAction; execute: () => void } | null>(null)
@@ -1391,7 +1077,7 @@ export default function RotasPage() {
       },
       execute: async () => {
         try {
-          const hoje = new Date().toISOString().slice(0, 10)
+          const hoje = hojeISO()
           const n = await resetarDia(hoje, usuario?.email ?? undefined)
           setRoutes(prev => prev.filter(r => r.status === 'aprovada' || r.status === 'enviada'))
           await refresh()
@@ -1443,113 +1129,6 @@ export default function RotasPage() {
     })
   }
 
-  async function handleConfirm(form: GerarRotasFormState, motoristasPayload: MotoristaPayload[], veiculosDisponiveis: VeiculoDisponivel[]) {
-    setShowDialog(false)
-    setGenerating(true)
-
-    try {
-      const hoje = new Date().toISOString().slice(0, 10)
-
-      // O WF-B monta a frota consultando o Supabase por conta própria e só
-      // respeita exclusões. Mandar apenas as listas escolhidas não bastava — a
-      // seleção era descartada. Enviamos o complemento: tudo que estava
-      // disponível hoje e o operador tirou da seleção.
-      const disponiveisHoje = veiculos.filter(v => v.disponivel_hoje && v.status === 'disponivel')
-      const placasEscolhidas = new Set(veiculosDisponiveis.map(v => v.placa))
-      const nomesEscolhidos  = new Set(motoristasPayload.map(m => m.nome))
-
-      const veiculosBloqueados = disponiveisHoje
-        .filter(v => !placasEscolhidas.has(v.placa))
-        .map(v => v.placa)
-
-      const motoristasAusentes = [...new Set(
-        disponiveisHoje
-          .map(v => v.motoristaNome)
-          .filter((n): n is string => !!n && !nomesEscolhidos.has(n))
-      )]
-
-      const dataRota = form.dataInicio || hoje
-
-      // Fotografa o que já existe para reconhecer as rotas novas depois. O WF-B
-      // grava direto no Supabase, então é por diferença que sabemos que terminou.
-      let idsAntes = new Set<string>()
-      try {
-        idsAntes = new Set((await carregarRotasSupabase(dataRota)).map(r => r.id))
-      } catch {
-        // Sem a foto inicial o polling ainda funciona: as rotas do estado atual
-        // servem de referência.
-        idsAntes = new Set(routes.map(r => r.id))
-      }
-
-      setProgresso('Enviando NFs e frota ao roteirizador...')
-
-      const raw = await webhookGerarRotas({
-        dataInicio:          form.dataInicio || hoje,
-        dataFim:             form.dataFim    || hoje,
-        observacoes:         form.observacoes,
-        motoristas:          motoristasPayload,
-        veiculosDisponiveis,
-        veiculosBloqueados,
-        motoristasAusentes,
-        restricoesExtras:    form.restricoesExtras,
-        prioridade:          form.prioridade as Prioridade,
-        instrucaoGlobal:     config.instrucaoGlobal,
-        instrucoesPorRota:   config.instrucoesPorRota.map(i => ({ codigoRota: i.codigoRota, instrucao: i.instrucao })),
-        pesos:               config.pesos,
-        grades:              config.grades.map(g => ({ nome: g.nome, seg: g.seg, ter: g.ter, qua: g.qua, qui: g.qui, sex: g.sex, sab: g.sab })),
-        horarios:            config.operacao,
-        notasFiscais:        nfRowsParaRoteirizar.length > 0 ? nfRowsParaRoteirizar : undefined,
-      })
-
-      let rotasSalvas: Rota[]
-
-      if (raw.aceito) {
-        // Assíncrono: o WF-B confirmou o recebimento e vai gravar as rotas no
-        // Supabase. Acompanhamos por polling — a roteirização leva alguns
-        // minutos e não cabe no tempo de uma requisição HTTP.
-        setProgresso('Roteirizando... isso leva alguns minutos')
-        rotasSalvas = await aguardarRotasGeradas(dataRota, idsAntes, {
-          onTick: (seg, encontradas) => {
-            setProgresso(encontradas > 0
-              ? `${encontradas} rotas gravadas · finalizando (${seg}s)`
-              : `Roteirizando... ${seg}s`)
-          },
-        })
-      } else {
-        // Síncrono legado: o WF-B devolveu as rotas prontas e não persistiu.
-        const novas = mapRetornoGerarRotas(raw as unknown as RetornoGerarRotas)
-        try {
-          rotasSalvas = await salvarRotasSupabase(novas, dataRota)
-        } catch {
-          rotasSalvas = novas  // visíveis, mas sem persistência
-        }
-
-        const legado = raw as unknown as RetornoGerarRotas
-        if (legado.nfsNaoAlocadas?.length > 0) {
-          salvarNfsNaoAlocadas(legado.nfsNaoAlocadas, dataRota, legado.motivoNaoAlocacao).catch(() => {})
-          setTimeout(() => {
-            showToast(`Atenção: ${legado.nfsNaoAlocadas.length} NFs não alocadas — ${legado.motivoNaoAlocacao}`)
-          }, 4200)
-        }
-      }
-
-      setRoutes(prev => {
-        const ids = new Set(prev.map(r => r.id))
-        return [...prev, ...rotasSalvas.filter(r => !ids.has(r.id))]
-      })
-      showToast(`✓ IA gerou ${rotasSalvas.length} rotas — aguardando aprovação`)
-      setFilter('aguardando')
-      addLog('geracao', '—', `IA gerou ${rotasSalvas.length} rotas — aguardando aprovação`)
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'erro desconhecido'
-      showToast(`Falha ao gerar rotas: ${msg}`)
-      addLog('geracao', '—', `Falha na geração por IA: ${msg}`)
-    } finally {
-      setGenerating(false)
-      setProgresso('')
-    }
-  }
-
   const toastOk = toast.startsWith('✓')
 
   return (
@@ -1577,16 +1156,6 @@ export default function RotasPage() {
           {/* Sem popup e sem filtro (Raphael, 14/10): importa todas as pendentes. */}
           <ImportarSIATButton onClick={() => importarNFs()} running={nfImportState.running} label="Importar NFs" loadingLabel="Importando..." />
 
-          {generating ? (
-            <Btn variant="primary" disabled>
-              <svg className="w-3 h-3 animate-spin-slow" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M8 2a6 6 0 1 0 6 6" strokeLinecap="round"/>
-              </svg>
-              Gerando rotas...
-            </Btn>
-          ) : (
-            <Btn variant="primary" onClick={() => setShowDialog(true)}>+ Gerar rotas</Btn>
-          )}
         </Topbar>
       </div>
 
@@ -1679,19 +1248,6 @@ export default function RotasPage() {
           </div>
         )}
 
-        {generating && (
-          <div className="animate-fade-in bg-primary-bg border border-[0.5px] border-[#B5D4F4] dark:border-[#1A3A5C] rounded-lg px-4 py-3 flex items-center gap-3">
-            <svg className="w-4 h-4 text-primary animate-spin-slow" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M8 2a6 6 0 1 0 6 6" strokeLinecap="round"/>
-            </svg>
-            <div>
-              <div className="text-xs font-medium text-primary-dark">Agente de IA processando as rotas...</div>
-              <div className="text-[11px] text-primary mt-0.5">
-                {progresso || 'Aplicando regras GRADE/COND · alocando nos veículos'}
-              </div>
-            </div>
-          </div>
-        )}
 
         <InconsistenciasImportacao rotas={routes} importadas={nfsPendentes} />
 
@@ -1805,7 +1361,7 @@ export default function RotasPage() {
                 const count  = tab === 'srota'
                   ? sRotaNfs.length
                   : tab === 'agendados'
-                    ? nfRows.filter(r => r.DataAgendamento && String(r.DataAgendamento).slice(0, 10) <= new Date().toISOString().slice(0, 10)).length
+                    ? nfRows.filter(r => r.DataAgendamento && String(r.DataAgendamento).slice(0, 10) <= hojeISO()).length
                     : tab === 'em_uso' ? nfsEmUso : 0
                 return (
                   <button
@@ -1866,7 +1422,6 @@ export default function RotasPage() {
         )}
       </div>
 
-      {showDialog && <GerarRotasDialog onClose={() => setShowDialog(false)} onConfirm={handleConfirm} veiculos={veiculos} atividade={motoristasAtividade} />}
 
       {pendingConfirm && (
         <ConfirmDialog

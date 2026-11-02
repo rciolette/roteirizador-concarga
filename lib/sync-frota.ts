@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { queryVeiculosDisponiveis } from '@/lib/siat-db'
 import type { SiatRow } from '@/lib/siat'
+import { hojeISO } from '@/lib/utils'
 
 function getAdminSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -40,7 +41,7 @@ export async function seedDisponibilidadeHoje(
   adminClient?: ReturnType<typeof getAdminSupabase>,
 ): Promise<number> {
   const admin = adminClient ?? getAdminSupabase()
-  const hoje = new Date().toISOString().slice(0, 10)
+  const hoje = hojeISO()
 
   const placasDisp = rows
     .filter(r => r.Placa && situacaoEhDisponivel(r.Situacao))

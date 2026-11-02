@@ -40,3 +40,21 @@ export function formatarCep(cep: string | null | undefined): string {
   const n = normalizarCep(cep)
   return n ? `${n.slice(0, 5)}-${n.slice(5)}` : ''
 }
+
+/**
+ * Data de HOJE na operação, no fuso de Brasília, como `YYYY-MM-DD`.
+ *
+ * Nunca use `new Date().toISOString().slice(0, 10)` para isso: aquilo devolve a
+ * data em UTC e, como o Brasil está em UTC−3, a partir das 21h o painel passava
+ * a considerar o dia seguinte — dentro da janela de operação, que vai até 23h.
+ * O efeito era o painel "virar o dia" sozinho à noite: as rotas montadas
+ * sumiam da tela, o badge zerava e a frota do dia aparecia vazia
+ * (Raphael, 02/11).
+ *
+ * O fuso é fixo em America/Sao_Paulo de propósito: a data operacional é a da
+ * Concarga, não a do computador de quem abre o painel.
+ */
+export function hojeISO(): string {
+  // 'en-CA' formata como YYYY-MM-DD, que é o formato que o banco usa.
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date())
+}

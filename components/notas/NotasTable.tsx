@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import dynamic from 'next/dynamic'
-import { cn } from '@/lib/utils'
+import { cn, hojeISO } from '@/lib/utils'
 import { useNotasFiscais, filtrosPadrao, type PageSize, type NotasFiltros, type FonteNotas } from '@/hooks/useNotasFiscais'
 import { Segmentador, PainelSegmentadores } from '@/components/ui/Segmentadores'
 import { useColunasRedimensionaveis, type ColunaDef } from '@/hooks/useColunasRedimensionaveis'
@@ -534,7 +534,7 @@ export function NotasTable({ fonte = 'livres' }: { fonte?: FonteNotas }) {
     try {
       const codigo = codigoRota
       const regiao = filtros.regiao[0] || selecionadas.find(n => n.regiao)?.regiao || ''
-      const hoje   = new Date().toISOString().slice(0, 10)
+      const hoje   = hojeISO()
       await salvarRotaManual({ data: hoje, codigo, regiao, veiculoId: veiculoSelValido, notas: selecionadas, usuario: usuario?.email ?? undefined })
       // As NFs salvas saem do universo livre ao recarregar as rotas (reserva no banco).
       setNfsDesmarcadasBulk(selecionadas.map(n => n.numnfs), false)

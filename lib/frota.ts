@@ -2,6 +2,7 @@ import { getSupabaseBrowser } from '@/lib/supabase-browser'
 import { fetchAllPages } from '@/lib/supabase-paginate'
 import { tipoVeiculoFromSiat } from '@/lib/siat'
 import type { Veiculo, Motorista } from '@/types'
+import { hojeISO } from '@/lib/utils'
 
 export interface MotoristaDaFrota {
   id: string
@@ -90,7 +91,7 @@ export async function listarMotoristas(): Promise<MotoristaDaFrota[]> {
 
 export async function listarVeiculos(): Promise<VeiculoDaFrota[]> {
   const sb = getSupabaseBrowser()
-  const hoje = new Date().toISOString().slice(0, 10)
+  const hoje = hojeISO()
 
   const [rows, dispRows] = await Promise.all([
     fetchAllPages<Record<string, unknown>>(
@@ -264,7 +265,7 @@ export async function atualizarAtivoVeiculo(id: string, ativo: boolean): Promise
 // Grava em veiculo_disponibilidade (fonte de verdade) e sincroniza cache em veiculos.
 export async function atualizarDisponivelHoje(id: string, disponivel: boolean): Promise<void> {
   const sb = getSupabaseBrowser()
-  const hoje = new Date().toISOString().slice(0, 10)
+  const hoje = hojeISO()
 
   if (disponivel) {
     const { error } = await sb.from('veiculo_disponibilidade').upsert(
@@ -290,7 +291,7 @@ export async function atualizarDisponivelHoje(id: string, disponivel: boolean): 
 // Apaga todos os registros de veiculo_disponibilidade de hoje e reseta o cache.
 export async function resetarDisponivelHoje(): Promise<void> {
   const sb = getSupabaseBrowser()
-  const hoje = new Date().toISOString().slice(0, 10)
+  const hoje = hojeISO()
 
   const { error: err1 } = await sb.from('veiculo_disponibilidade').delete().eq('data', hoje)
   if (err1) throw err1
@@ -302,7 +303,7 @@ export async function resetarDisponivelHoje(): Promise<void> {
 export async function marcarDisponiveisHoje(ids: string[]): Promise<void> {
   if (ids.length === 0) return
   const sb = getSupabaseBrowser()
-  const hoje = new Date().toISOString().slice(0, 10)
+  const hoje = hojeISO()
   const now = new Date().toISOString()
 
   const payload = ids.map(id => ({
@@ -320,7 +321,7 @@ export async function marcarDisponiveisHoje(ids: string[]): Promise<void> {
 export async function desmarcarDisponiveisHoje(ids: string[]): Promise<void> {
   if (ids.length === 0) return
   const sb = getSupabaseBrowser()
-  const hoje = new Date().toISOString().slice(0, 10)
+  const hoje = hojeISO()
 
   const { error: err1 } = await sb.from('veiculo_disponibilidade')
     .delete()

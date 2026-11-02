@@ -17,10 +17,7 @@ export async function POST(req: Request) {
 
   const rows = [
     { chave: 'operacao',          valor: cfg.operacao },
-    { chave: 'pesos',             valor: cfg.pesos },
     { chave: 'grades',            valor: cfg.grades },
-    { chave: 'instrucaoGlobal',   valor: cfg.instrucaoGlobal },
-    { chave: 'instrucoesPorRota', valor: cfg.instrucoesPorRota },
   ]
 
   const { error } = await sb

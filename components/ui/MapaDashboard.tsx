@@ -11,7 +11,7 @@ import {
 import { useAppData } from '@/components/providers/AppDataProvider'
 import type { Rota, NotaFiscal } from '@/types'
 import { Card, CardHeader } from '@/components/ui'
-import { cn } from '@/lib/utils'
+import { cn, hojeISO as todayISO } from '@/lib/utils'
 import { geocodeMany, addrKeyNota, type LatLng } from '@/lib/geocode'
 
 const API_KEY   = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? ''
@@ -52,10 +52,6 @@ interface PinPendente {
 }
 
 type PinInfo = PinRota | PinPendente
-
-function todayISO(): string {
-  return new Date().toISOString().slice(0, 10)
-}
 
 export function MapaDashboard() {
   const { rotas, loadingRotas } = useAppData()
