@@ -31,6 +31,8 @@ empresa (ROI Ventures), com outro banco e outros fluxos:
 
 ## Regras obrigatórias
 - Sempre consultar o Supabase antes de criar novas tabelas ou colunas
+- Data de "hoje" sempre por `hojeISO()` (`lib/utils.ts`), nunca `toISOString()`
+- Capacidade de veículo vem de `veiculo_capacidades`, nunca de `configuracoes.pesos`
 - Nunca fazer push direto — sempre aguardar confirmação do Raphael
 - Nunca alterar arquivos de configuração (.env.local, vercel.json) sem confirmar
 - TypeScript sem erros antes de qualquer commit
@@ -43,13 +45,19 @@ empresa (ROI Ventures), com outro banco e outros fluxos:
 - notas_fiscais (rota_id, n_nfs, destinatario, municipio, peso_kg, cond)
 - nfs_nao_alocadas, ocorrencias_whatsapp, historico_rotas, configuracoes, grade_cidades
 
-## Webhooks n8n
-- WF-A: https://n8n.rcdigitais.com.br/webhook/Execute-SQL-SIAT (consulta NFs)
-- WF-B: https://n8n.rcdigitais.com.br/webhook/gerar-rotas (gerador IA)
-- WF-C: https://n8n.rcdigitais.com.br/webhook/n8n_chatbot_concarga (agente WhatsApp)
+## Webhooks n8n — o app NÃO usa mais nenhum
 
-## Workflow n8n On Schedule Trigger
-- WF-05: sync SIAT → Supabase
+Aposentados em 02/11/2026 (commit `26438de5`), quando a roteirização passou a ser
+manual. Ficam aqui só como histórico:
+
+- ~~WF-A `Execute-SQL-SIAT`~~ → hoje é `/api/siat`, MSSQL direto (`lib/siat-db.ts`)
+- ~~WF-B `gerar-rotas`~~ → a geração por IA foi removida; o operador monta a carga
+- ~~WF-05 (schedule) sync SIAT → Supabase~~ → hoje é Vercel Cron (`vercel.json`, 06:10)
+- WF-C `n8n_chatbot_concarga` (agente WhatsApp) — **segue existindo fora do app**,
+  alimentando `ocorrencias_whatsapp`; o painel não o chama
+
+Não criar webhook novo sem combinar com o Raphael: o caminho atual é código no
+próprio app.
 
 ## Comportamento esperado do agente
 1. Sempre ler os arquivos relevantes antes de modificar

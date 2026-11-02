@@ -52,6 +52,25 @@ Vindos do WhatsApp em 02/10 e das conversas de 14/10:
   no período".
 - **QUINZENAL de segunda a sábado**; DIÁRIO incluindo sábado.
 
+## Revisão de entrega — 02/11/2026
+
+Revisão completa dos 60 dias em `docs/revisao-entrega-2026-11.md`. Todos os
+pedidos acima conferidos como entregues; a paridade com a planilha
+`ROTAS_13.02.xlsm` fechou 10 de 10.
+
+Decisão do Raphael no mesmo dia: a **roteirização por IA foi aposentada** — sem
+engine OpenAI e sem n8n. A carga é montada manualmente, que já era como o
+Marcelo vinha usando. Saíram da tela o botão "+ Gerar rotas", o diálogo de
+geração e o botão "Reprocessar".
+
+Quatro inconsistências corrigidas na mesma passada: o badge que marcava 7 com a
+tela vazia, a capacidade de veículo que tinha dois valores diferentes, o
+"disponíveis hoje" que contava 1.440 (1.338 eram veículos inativos) e a data de
+"hoje" que virava o dia às 21h por usar UTC.
+
+**Continua pendente:** o link do Maps não chega sozinho ao motorista — o
+operador copia e manda à mão, porque o webhook de envio nunca existiu.
+
 ## Dúvidas em aberto com o Marcelo
 
 1. Placas dos motoristas que não casaram com veículo ativo: MOISES VINICIUS,
